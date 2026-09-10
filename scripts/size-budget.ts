@@ -88,7 +88,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
-  './core': 210,
+  //
+  // Raised again, from 210, by the same structured-reference spelling as `/xlsb` and `/csv`, which
+  // put this entry four tenths over.
+  './core': 211,
   './xlsx': 554,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
@@ -98,7 +101,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 295, by the same VBA byte-splicing change as `/core`, which put this entry
   // 0.7 KB over. The new figure restores the headroom against today's measurement.
-  './xlsb': 299,
+  //
+  // Raised again, from 299, when a table's totals row began spelling its structured reference by
+  // Excel's escaping rules. The rule sits in its own module so no entry carries the modern-function
+  // list for it, yet its few hundred bytes still put this entry a tenth over.
+  './xlsb': 300,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
@@ -107,7 +114,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 216, when a worksheet model assignment began rehearsing on a scratch sheet. The
   // entry sat at exactly its budget, and those few lines in `core/worksheet.ts` put it a tenth over;
   // the new figure restores a kilobyte of headroom against today's measurement.
-  './csv': 219,
+  //
+  // Raised again, from 219, by the same structured-reference spelling as `/xlsb`, which put this
+  // entry two tenths over.
+  './csv': 220,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //

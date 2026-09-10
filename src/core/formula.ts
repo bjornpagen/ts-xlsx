@@ -69,7 +69,8 @@ const PREFIX = /_xlfn\.|_xlpm\./g;
 
 // Advance past the opaque region opened at `index`: a double-quoted string literal or a single-quoted
 // sheet name, both honouring the doubled-quote escape (`""`, `''`), or a bracketed structured
-// reference, which may nest (`Table[[#Data],[Col]]`). Returns the index just past the region, or
+// reference, which may nest (`Table[[#Data],[Col]]`) and escapes a bracket inside a column name with a
+// leading `'` (`T[[a'[b]]`). Returns the index just past the region, or
 // `index` unchanged when no opaque region opens there. Inside any of the three a comma, paren, function
 // name, or cell reference is inert, so every pass over a formula skips them through this one function.
 function skipOpaque(formula: string, index: number): number {
@@ -94,6 +95,12 @@ function skipOpaque(formula: string, index: number): number {
     let j = index;
     while (j < n) {
       const ch = formula[j];
+      // An escaped character is part of the name, whatever it is: counted as a bracket, an escaped
+      // `[` left the region open to the end of the formula and an escaped `]` could close it early.
+      if (ch === "'") {
+        j += 2;
+        continue;
+      }
       if (ch === '[') depth += 1;
       else if (ch === ']') {
         depth -= 1;

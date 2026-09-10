@@ -10,6 +10,16 @@ import {
   unmangleFunctions,
 } from './formula.ts';
 
+// Counted as a bracket, an escaped `[` left the structured reference open to the end of the formula,
+// so a modern function after it went unprefixed and Excel could not evaluate it.
+test('an escaped bracket inside a structured reference neither closes nor extends its opaque region', () => {
+  assert.equal(mangleFunctions("T[[a']b]]"), "T[[a']b]]");
+  assert.equal(
+    mangleFunctions("SUBTOTAL(109,T[[a'[b]])+FILTER(x)"),
+    "SUBTOTAL(109,T[[a'[b]])+_xlfn.FILTER(x)",
+  );
+});
+
 test('a modern function called by its plain name gains the _xlfn. prefix', () => {
   assert.equal(mangleFunctions('FILTER(B1:D1,B2:D2=1)'), '_xlfn.FILTER(B1:D1,B2:D2=1)');
   assert.equal(mangleFunctions('XLOOKUP(1,B:B,C:C)'), '_xlfn.XLOOKUP(1,B:B,C:C)');

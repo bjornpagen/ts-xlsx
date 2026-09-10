@@ -629,6 +629,29 @@ test('addTable materializes the totals row: label cells and SUBTOTAL formula cel
   );
 });
 
+// The totals SUBTOTAL interpolated the column name bare, so `Price [USD]` wrote
+// `SUBTOTAL(109,T[Price [USD]])` and `it's #1` wrote `SUBTOTAL(109,T[it's #1])`: malformed formulas.
+test('a totals SUBTOTAL spells a column name with special characters the way Excel does', () => {
+  const cases: [string, string][] = [
+    ['Price [USD]', "T[[Price '[USD']]]"],
+    ["it's #1", "T[[it''s '#1]]"],
+    ['a@b', "T[[a'@b]]"],
+    ['Total $', 'T[[Total $]]'],
+    ['Unit Price', 'T[Unit Price]'],
+  ];
+  for (const [name, reference] of cases) {
+    const sheet = new Worksheet('S', 1);
+    sheet.addTable({
+      name: 'T',
+      ref: 'A1',
+      columns: [{name, totalsRowFunction: 'sum'}],
+      rowCount: 1,
+      totalsRow: true,
+    });
+    assert.deepEqual(sheet.getCell('A3').value, {formula: `SUBTOTAL(109,${reference})`}, name);
+  }
+});
+
 test('addTable leaves a totals column with no built-in aggregate blank', () => {
   const sheet = new Worksheet('S', 1);
   sheet.addTable({

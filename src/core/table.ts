@@ -23,6 +23,7 @@ import {type ClonePlan, cloneWith} from './clone.ts';
 import {type AxisSplice, isDeletedSpan, shiftIndex} from './grid-shift.ts';
 import type {AssertNever} from './internal.ts';
 import {MAX_TABLE_NAME_LENGTH, TABLE_NAME_PATTERN} from './limits.ts';
+import {structuredColumnReference} from './structured-reference.ts';
 import type {CellStyle} from './style.ts';
 import type {CellValue} from './value.ts';
 
@@ -463,7 +464,7 @@ export class Table {
         const code = TOTALS_ROW_SUBTOTAL_CODE[column.totalsRowFunction];
         if (code !== undefined) {
           grid.writeCell(bottom, col, {
-            formula: `SUBTOTAL(${code},${this.name}[${column.name}])`,
+            formula: `SUBTOTAL(${code},${structuredColumnReference(this.name, column.name)})`,
           });
         } else if (column.totalsRowFunction === 'custom' && column.totalsRowFormula !== undefined) {
           // A `custom` total is the column's own stored formula, not a SUBTOTAL. Excel stores it

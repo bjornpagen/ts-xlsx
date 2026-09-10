@@ -154,6 +154,13 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   set, which nothing checked: `{error: '</v></c><evil/>'}`, smuggled past the type, closed the cell and
   wrote an element of its own. A code outside `ERROR_CODES` is now refused with `AuthoringError`.
 
+- **A table's totals row wrote a malformed formula for a column name with special characters.** The
+  `SUBTOTAL` a totals cell materialises interpolated the column name bare, so `Price [USD]` wrote
+  `SUBTOTAL(109,T[Price [USD]])` and `it's #1` wrote `SUBTOTAL(109,T[it's #1])`. The reference is now
+  spelled by Microsoft's structured-reference rules: double brackets for a name with a special
+  character, and `'` before `[`, `]`, `#`, `'` and `@`. Formula scanning also honours that escape, so an
+  escaped bracket no longer hides the rest of a formula from `_xlfn.` prefixing.
+
 
 ## [3.1.0] — 2026-09-04
 
