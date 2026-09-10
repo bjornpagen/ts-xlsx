@@ -53,7 +53,9 @@ tidiness:
   new one is invisible to `dist/` without further wiring. One rule holds it together: an
   accessor here fails loudly on a part that is not there. A helper that answers a missing
   part with an empty string makes every negative assertion built on it pass for the wrong
-  reason.
+  reason. The rule reaches below parts: an element looked up inside one goes through
+  `elementIn`, and a patch that changes nothing fails, since both are the same empty
+  string arriving by another route.
 - **The regression corpus, `test/corpus/`.** Black-box and implementation-blind (see
   above): cases reach the implementation *only* through the adapter and must never import a
   src internal, because that blindness is the whole reason the corpus outlived the rewrite.

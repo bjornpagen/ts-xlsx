@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
-
 import {Workbook} from '../../core/workbook.ts';
-import {optionalPartText, partText, roundtrip} from './package.test-support.ts';
+import {
+  optionalPartText,
+  partText,
+  patchParts,
+  roundtrip,
+  sheetXml,
+} from './package.test-support.ts';
 import {parseSharedStrings} from './read-shared-strings.ts';
 import {readXlsx} from './read.ts';
 import {writeXlsx} from './write.ts';
@@ -154,23 +158,17 @@ test('each <si> starts clean, so a rich entry does not leak into the plain one a
 });
 
 test('a t="s" cell pointing at a foreign rich <si> reads back as rich text', () => {
-  // Author a plain package, then graft a rich shared-strings pool and a t="s" cell onto it: the
-  // markup Excel writes but our writer only produces on round-trip.
-  const base = new Workbook();
-  base.addWorksheet('S');
-  const files = unzipSync(writeXlsx(base));
-  files['xl/sharedStrings.xml'] = strToU8(
-    '<?xml version="1.0"?>' +
+  // Author a package whose A1 is a t="s" cell naming entry 0, then swap in a rich pool: the markup
+  // Excel writes but our writer only produces on round-trip.
+  const patched = patchParts(writeXlsx(bookWithStrings('plain'), {useSharedStrings: true}), {
+    'xl/sharedStrings.xml': () =>
+      '<?xml version="1.0"?>' +
       '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1" uniqueCount="1">' +
       '<si><r><rPr><i/></rPr><t>emph</t></r><r><t>rest</t></r></si></sst>',
-  );
-  const sheetXml = strFromU8(files['xl/worksheets/sheet1.xml'] ?? new Uint8Array()).replace(
-    '<sheetData/>',
-    '<sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData>',
-  );
-  files['xl/worksheets/sheet1.xml'] = strToU8(sheetXml);
+  });
+  assert.match(sheetXml(patched), /<c r="A1" t="s"><v>0<\/v><\/c>/, 'A1 names entry 0');
 
-  const value = readXlsx(zipSync(files)).getWorksheet('S')?.getCell('A1').value;
+  const value = readXlsx(patched).getWorksheet('S')?.getCell('A1').value;
   assert.ok(value && typeof value === 'object' && 'richText' in value);
   assert.deepEqual(value.richText, [{text: 'emph', font: {italic: true}}, {text: 'rest'}]);
 });

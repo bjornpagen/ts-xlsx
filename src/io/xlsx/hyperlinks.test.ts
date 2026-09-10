@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {strToU8, zipSync} from 'fflate';
-
 import {isHyperlinkValue} from '../../core/value.ts';
 import {Workbook} from '../../core/workbook.ts';
-import {optionalPartIn, partIn, partsWritten, roundtrip} from './package.test-support.ts';
+import {
+  elementIn,
+  foreignPackage,
+  optionalPartIn,
+  partIn,
+  partsWritten,
+  roundtrip,
+  SHEET1,
+} from './package.test-support.ts';
 import {readXlsx} from './read.ts';
 
 function hyperlinkOf(workbook: Workbook, sheet: string, ref: string) {
@@ -55,7 +61,7 @@ test('an internal "#"-target is written as a location with no external relations
 
   const parts = partsWritten(wb);
   const sheetXml = partIn(parts, 'xl/worksheets/sheet1.xml');
-  const link = sheetXml.match(/<hyperlink\b[^>]*\/?>/)?.[0] ?? '';
+  const link = elementIn(sheetXml, /<hyperlink\b[^>]*\/?>/);
   assert.match(link, /location="[^"]*Target[^"]*A1[^"]*"/, 'the internal target rides in location');
   assert.doesNotMatch(link, /r:id=/, 'an internal link uses no relationship id');
   // An internal link must not produce a sheet rels part carrying an External relationship. Which is
@@ -80,10 +86,11 @@ test('an external link produces exactly one External relationship of hyperlink t
 
   const parts = partsWritten(wb);
   const rels = partIn(parts, 'xl/worksheets/_rels/sheet1.xml.rels');
-  const external = [...rels.matchAll(/<Relationship\b[^>]*TargetMode="External"[^>]*\/>/g)];
-  assert.equal(external.length, 1);
-  assert.match(external[0]?.[0] ?? '', /Type="[^"]*\/hyperlink"/);
-  assert.match(external[0]?.[0] ?? '', /Target="https:\/\/example\.com"/);
+  const external = /<Relationship\b[^>]*TargetMode="External"[^>]*\/>/g;
+  assert.equal([...rels.matchAll(external)].length, 1);
+  const link = elementIn(rels, external);
+  assert.match(link, /Type="[^"]*\/hyperlink"/);
+  assert.match(link, /Target="https:\/\/example\.com"/);
 });
 
 test('the <hyperlinks> element sits after <mergeCells> and before <pageMargins>', () => {
@@ -107,22 +114,13 @@ test('the <hyperlinks> element sits after <mergeCells> and before <pageMargins>'
 test('the reader rejoins a foreign file’s location fragment onto the relationship target', () => {
   // A foreign producer stores an external URL's fragment in the hyperlink's `location`, apart from
   // the bare relationship Target: the reader must rejoin them into the whole URL.
-  const sheetXml =
-    '<?xml version="1.0"?><worksheet xmlns:r="x"><sheetData>' +
-    '<row r="1"><c r="A1" t="inlineStr"><is><t>link</t></is></c></row>' +
-    '</sheetData><hyperlinks><hyperlink ref="A1" r:id="rId1" location="myhash"/></hyperlinks></worksheet>';
-  const archive = zipSync({
-    '[Content_Types].xml': strToU8('<Types/>'),
-    'xl/workbook.xml': strToU8(
-      '<workbook><sheets><sheet name="S" r:id="rId1"/></sheets></workbook>',
-    ),
-    'xl/_rels/workbook.xml.rels': strToU8(
-      '<Relationships><Relationship Id="rId1" Type="x/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
-    ),
-    'xl/worksheets/sheet1.xml': strToU8(sheetXml),
-    'xl/worksheets/_rels/sheet1.xml.rels': strToU8(
+  const archive = foreignPackage({
+    [SHEET1]:
+      '<?xml version="1.0"?><worksheet xmlns:r="x"><sheetData>' +
+      '<row r="1"><c r="A1" t="inlineStr"><is><t>link</t></is></c></row>' +
+      '</sheetData><hyperlinks><hyperlink ref="A1" r:id="rId1" location="myhash"/></hyperlinks></worksheet>',
+    'xl/worksheets/_rels/sheet1.xml.rels':
       '<Relationships><Relationship Id="rId1" Type="x/hyperlink" Target="http://localhost/" TargetMode="External"/></Relationships>',
-    ),
   });
 
   const back = hyperlinkOf(readXlsx(archive), 'S', 'A1');
@@ -156,19 +154,11 @@ test('a hyperlink relationship id does not collide with a table on the same shee
 test('a hyperlink spanning a range anchors on its top-left cell instead of crashing', () => {
   // Excel writes a multi-cell hyperlink as `ref="D1:H1"`; the reader must fold it onto the range's
   // top-left cell (D1) rather than asking the sheet for a range address it cannot resolve.
-  const sheetXml =
-    '<?xml version="1.0"?><worksheet xmlns:r="x"><sheetData>' +
-    '<row r="1"><c r="D1" t="inlineStr"><is><t>go</t></is></c></row>' +
-    '</sheetData><hyperlinks><hyperlink ref="D1:H1" location="Sheet1!A1"/></hyperlinks></worksheet>';
-  const archive = zipSync({
-    '[Content_Types].xml': strToU8('<Types/>'),
-    'xl/workbook.xml': strToU8(
-      '<workbook><sheets><sheet name="S" r:id="rId1"/></sheets></workbook>',
-    ),
-    'xl/_rels/workbook.xml.rels': strToU8(
-      '<Relationships><Relationship Id="rId1" Type="x/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
-    ),
-    'xl/worksheets/sheet1.xml': strToU8(sheetXml),
+  const archive = foreignPackage({
+    [SHEET1]:
+      '<?xml version="1.0"?><worksheet xmlns:r="x"><sheetData>' +
+      '<row r="1"><c r="D1" t="inlineStr"><is><t>go</t></is></c></row>' +
+      '</sheetData><hyperlinks><hyperlink ref="D1:H1" location="Sheet1!A1"/></hyperlinks></worksheet>',
   });
 
   const back = hyperlinkOf(readXlsx(archive), 'S', 'D1');

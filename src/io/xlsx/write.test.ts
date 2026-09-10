@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
+import {strFromU8, strToU8, unzipSync} from 'fflate';
 
 import {INTERNAL, NAMED_STYLE_ID} from '../../core/internal.ts';
 import {Workbook} from '../../core/workbook.ts';
-import {partIn, partsWritten as partsOf, roundtrip} from './package.test-support.ts';
+import {
+  captureIn,
+  partIn,
+  partsWritten as partsOf,
+  patchParts,
+  roundtrip,
+  SHEET1,
+} from './package.test-support.ts';
 import {STYLES_PART} from './part-names.ts';
 import {readXlsx} from './read.ts';
 import {buildPackageParts, writeXlsx, writeXlsxAsync} from './write.ts';
@@ -520,7 +527,7 @@ test('setting a subset of margins emits all six pageMargins attributes', () => {
   s.pageMargins.left = 0.1;
   s.pageMargins.right = 0.1;
   const xml = partIn(partsOf(wb), 'xl/worksheets/sheet1.xml');
-  const tag = /<pageMargins ([^/]*)\/>/.exec(xml)?.[1] ?? '';
+  const tag = captureIn(xml, /<pageMargins ([^/]*)\/>/);
   for (const side of ['left', 'right', 'top', 'bottom', 'header', 'footer']) {
     assert.match(tag, new RegExp(`\\b${side}="[0-9.]+"`), `missing ${side}`);
   }
@@ -558,7 +565,7 @@ test('print-option toggles are emitted and survive a write→read round-trip', (
   s.printOptions.headings = true;
 
   const xml = partIn(partsOf(wb), 'xl/worksheets/sheet1.xml');
-  const tag = /<printOptions ([^/]*)\/>/.exec(xml)?.[1] ?? '';
+  const tag = captureIn(xml, /<printOptions ([^/]*)\/>/);
   assert.match(tag, /horizontalCentered="1"/);
   assert.match(tag, /gridLines="1"/);
   assert.match(tag, /headings="1"/);
@@ -1114,15 +1121,15 @@ test('a filter column addressing a column outside the range is dropped on read, 
   // Hand-forge an out-of-range <filterColumn colId="5"> onto the worksheet part (the kind of thing
   // a corrupt producer emits) and re-zip. Load-repair must keep the range and drop the bad column,
   // never throwing (the strict setter that authors go through would reject the same colId).
-  const parts = unzipSync(writeXlsx(wb));
-  parts['xl/worksheets/sheet1.xml'] = strToU8(
-    strFromU8(parts['xl/worksheets/sheet1.xml'] as Uint8Array).replace(
-      '<autoFilter ref="A1:B4"/>',
-      '<autoFilter ref="A1:B4"><filterColumn colId="5"><filters><filter val="z"/></filters></filterColumn></autoFilter>',
-    ),
-  );
+  const patched = patchParts(writeXlsx(wb), {
+    [SHEET1]: (xml) =>
+      xml.replace(
+        '<autoFilter ref="A1:B4"/>',
+        '<autoFilter ref="A1:B4"><filterColumn colId="5"><filters><filter val="z"/></filters></filterColumn></autoFilter>',
+      ),
+  });
 
-  const sheet = readXlsx(zipSync(parts)).getWorksheet('S');
+  const sheet = readXlsx(patched).getWorksheet('S');
   assert.ok(sheet !== undefined);
   assert.deepEqual(
     sheet.autoFilter,
@@ -1230,14 +1237,14 @@ test('column-break <brk> elements land on the column-break model, not the row-br
   const wb = new Workbook();
   const sheet = wb.addWorksheet('S');
   sheet.getCell('A1').value = 'x';
-  const patched = writeXlsx(wb);
-  const files = unzipSync(patched);
-  const sheetXml = strFromU8(files['xl/worksheets/sheet1.xml']!).replace(
-    '</worksheet>',
-    '<colBreaks count="1" manualBreakCount="1"><brk id="2" max="1048575" man="1"/></colBreaks></worksheet>',
-  );
-  files['xl/worksheets/sheet1.xml'] = strToU8(sheetXml);
-  const back = readXlsx(zipSync(files)).getWorksheet('S');
+  const patched = patchParts(writeXlsx(wb), {
+    [SHEET1]: (xml) =>
+      xml.replace(
+        '</worksheet>',
+        '<colBreaks count="1" manualBreakCount="1"><brk id="2" max="1048575" man="1"/></colBreaks></worksheet>',
+      ),
+  });
+  const back = readXlsx(patched).getWorksheet('S');
   assert.deepEqual(back?.rowBreaks, [], 'a column break must not land on the row-break model');
   assert.deepEqual(
     back?.columnBreaks,

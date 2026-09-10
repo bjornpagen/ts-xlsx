@@ -1,51 +1,25 @@
 import {strict as assert} from 'node:assert';
 import {test} from 'node:test';
 
-import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
-
+import {
+  msRelationship,
+  partBytes,
+  partMatching,
+  partsOf,
+  partText,
+  relationship,
+  relationshipsPart as rels,
+  SHEET1,
+  typedContentTypes as contentTypes,
+  typedForeignPackage,
+  typedWorksheet as worksheet,
+} from './package.test-support.ts';
 import {readXlsx} from './read.ts';
 import {writeXlsx} from './write.ts';
 
-// A minimal OPC package skeleton shared by the scenarios below: content types, the root and workbook
-// relationships, and a single-sheet workbook. Each test overlays the worksheet, its rels, and the
-// unmodeled parts (a shape drawing, a header/footer VML + image) that exercise the passthrough.
-function packageParts(overlay: Record<string, string | Uint8Array>): Record<string, Uint8Array> {
-  const base: Record<string, string | Uint8Array> = {
-    '_rels/.rels':
-      '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
-      '</Relationships>',
-    'xl/workbook.xml':
-      '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
-      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-      '<sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>',
-    'xl/_rels/workbook.xml.rels':
-      '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
-      '</Relationships>',
-  };
-  const files: Record<string, Uint8Array> = {};
-  for (const [name, data] of Object.entries({...base, ...overlay})) {
-    files[name] = typeof data === 'string' ? strToU8(data) : data;
-  }
-  return files;
-}
-
-const contentTypes = (extra: string): string =>
-  '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
-  '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
-  '<Default Extension="xml" ContentType="application/xml"/>' +
-  extra +
-  '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
-  '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
-  '</Types>';
-
-const worksheet = (tail: string): string =>
-  '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
-  'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-  '<sheetData/>' +
-  tail +
-  '</worksheet>';
+// Each scenario overlays the worksheet, its rels, and the unmodeled parts (a shape drawing, a
+// header/footer VML + image) that exercise the passthrough onto a package whose relationships carry
+// their real types, since the type is what marks a part for preservation.
 
 const SHAPE_DRAWING =
   '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" ' +
@@ -87,42 +61,22 @@ const HF_VML =
   '<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">' +
   '<v:shape id="RH" type="#_x0000_t75"><v:imagedata o:relid="rId1" o:title="pic"/></v:shape></xml>';
 
-const rels = (entries: string): string =>
-  '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-  entries +
-  '</Relationships>';
+const WORKBOOK_RELS = 'xl/_rels/workbook.xml.rels';
+const SHEET1_RELS = 'xl/worksheets/_rels/sheet1.xml.rels';
 
-const relationship = (id: string, type: string, target: string): string =>
-  `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"/>`;
-
-// A slicer / slicer-cache relationship carries a Microsoft-namespaced Type; only its suffix
-// (`/slicer`, `/slicerCache`) is what marks it for preservation.
-const msRelationship = (id: string, type: string, target: string): string =>
-  `<Relationship Id="${id}" Type="http://schemas.microsoft.com/office/2007/relationships/${type}" Target="${target}"/>`;
-
-function partNames(bytes: Uint8Array): string[] {
-  return Object.keys(unzipSync(bytes));
-}
-
-function partText(bytes: Uint8Array, rx: RegExp): string {
-  const files = unzipSync(bytes);
-  const name = Object.keys(files).find((n) => rx.test(n));
-  return name ? strFromU8(files[name] as Uint8Array) : '';
+function partNames(pkg: Uint8Array): string[] {
+  return Object.keys(partsOf(pkg));
 }
 
 test('a worksheet drawing holding only a vector shape survives read→write', () => {
-  const src = zipSync(
-    packageParts({
-      '[Content_Types].xml': contentTypes(
-        '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>',
-      ),
-      'xl/worksheets/sheet1.xml': worksheet('<drawing r:id="rId1"/>'),
-      'xl/worksheets/_rels/sheet1.xml.rels': rels(
-        relationship('rId1', 'drawing', '../drawings/drawing1.xml'),
-      ),
-      'xl/drawings/drawing1.xml': SHAPE_DRAWING,
-    }),
-  );
+  const src = typedForeignPackage({
+    '[Content_Types].xml': contentTypes(
+      '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>',
+    ),
+    [SHEET1]: worksheet('<drawing r:id="rId1"/>'),
+    [SHEET1_RELS]: rels(relationship('rId1', 'drawing', '../drawings/drawing1.xml')),
+    'xl/drawings/drawing1.xml': SHAPE_DRAWING,
+  });
 
   const out = writeXlsx(readXlsx(src));
 
@@ -131,18 +85,18 @@ test('a worksheet drawing holding only a vector shape survives read→write', ()
     'the drawing part survives',
   );
   assert.match(
-    partText(out, /worksheets\/sheet1\.xml$/),
+    partText(out, SHEET1),
     /<drawing r:id="[^"]+"\/>/,
     'the worksheet still references it',
   );
   assert.match(
-    partText(out, /drawings\/drawing1\.xml$/),
+    partText(out, 'xl/drawings/drawing1.xml'),
     /<xdr:sp\b/,
     'the vector shape survives inside',
   );
   // The rewritten package must re-read without error, and re-writing it must keep preserving the shape.
   assert.match(
-    partText(writeXlsx(readXlsx(out)), /drawings\/drawing1\.xml$/),
+    partText(writeXlsx(readXlsx(out)), 'xl/drawings/drawing1.xml'),
     /<xdr:sp\b/,
     'idempotent across a second round-trip',
   );
@@ -150,36 +104,32 @@ test('a worksheet drawing holding only a vector shape survives read→write', ()
 
 test('a drawing holding both a picture and a chart preserves the chart across read→write', () => {
   const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
-  const src = zipSync(
-    packageParts({
-      '[Content_Types].xml': contentTypes(
-        '<Default Extension="png" ContentType="image/png"/>' +
-          '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' +
-          '<Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>',
-      ),
-      'xl/worksheets/sheet1.xml': worksheet('<drawing r:id="rId1"/>'),
-      'xl/worksheets/_rels/sheet1.xml.rels': rels(
-        relationship('rId1', 'drawing', '../drawings/drawing1.xml'),
-      ),
-      'xl/drawings/drawing1.xml': MIXED_DRAWING,
-      'xl/drawings/_rels/drawing1.xml.rels': rels(
-        relationship('rId1', 'image', '../media/image1.png') +
-          relationship('rId2', 'chart', '../charts/chart1.xml'),
-      ),
-      'xl/media/image1.png': png,
-      'xl/charts/chart1.xml': CHART,
-    }),
-  );
+  const src = typedForeignPackage({
+    '[Content_Types].xml': contentTypes(
+      '<Default Extension="png" ContentType="image/png"/>' +
+        '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' +
+        '<Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>',
+    ),
+    [SHEET1]: worksheet('<drawing r:id="rId1"/>'),
+    [SHEET1_RELS]: rels(relationship('rId1', 'drawing', '../drawings/drawing1.xml')),
+    'xl/drawings/drawing1.xml': MIXED_DRAWING,
+    'xl/drawings/_rels/drawing1.xml.rels': rels(
+      relationship('rId1', 'image', '../media/image1.png') +
+        relationship('rId2', 'chart', '../charts/chart1.xml'),
+    ),
+    'xl/media/image1.png': png,
+    'xl/charts/chart1.xml': CHART,
+  });
 
   const out = writeXlsx(readXlsx(src));
   const names = partNames(out);
 
   assert.match(
-    partText(out, /worksheets\/sheet1\.xml$/),
+    partText(out, SHEET1),
     /<drawing r:id="[^"]+"\/>/,
     'the worksheet still references the drawing',
   );
-  const drawing = partText(out, /drawings\/drawing\d+\.xml$/);
+  const drawing = partMatching(out, /^xl\/drawings\/drawing\d+\.xml$/);
   assert.match(drawing, /<xdr:graphicFrame\b/, 'the chart anchor survives inside the drawing');
   assert.match(drawing, /<xdr:pic\b/, 'the picture anchor survives alongside it, not dropped');
   assert.ok(
@@ -199,28 +149,24 @@ test('a drawing holding both a picture and a chart preserves the chart across re
 
 test('a header/footer image (legacyDrawingHF VML + media) and its &G token survive read→write', () => {
   const image = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
-  const src = zipSync(
-    packageParts({
-      '[Content_Types].xml': contentTypes(
-        '<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>' +
-          '<Default Extension="jpeg" ContentType="image/jpeg"/>',
-      ),
-      'xl/worksheets/sheet1.xml': worksheet(
-        '<headerFooter><oddHeader>&amp;R&amp;G</oddHeader></headerFooter><legacyDrawingHF r:id="rId1"/>',
-      ),
-      'xl/worksheets/_rels/sheet1.xml.rels': rels(
-        relationship('rId1', 'vmlDrawing', '../drawings/vmlDrawing1.vml'),
-      ),
-      'xl/drawings/vmlDrawing1.vml': HF_VML,
-      'xl/drawings/_rels/vmlDrawing1.vml.rels': rels(
-        relationship('rId1', 'image', '../media/image1.jpeg'),
-      ),
-      'xl/media/image1.jpeg': image,
-    }),
-  );
+  const src = typedForeignPackage({
+    '[Content_Types].xml': contentTypes(
+      '<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>' +
+        '<Default Extension="jpeg" ContentType="image/jpeg"/>',
+    ),
+    [SHEET1]: worksheet(
+      '<headerFooter><oddHeader>&amp;R&amp;G</oddHeader></headerFooter><legacyDrawingHF r:id="rId1"/>',
+    ),
+    [SHEET1_RELS]: rels(relationship('rId1', 'vmlDrawing', '../drawings/vmlDrawing1.vml')),
+    'xl/drawings/vmlDrawing1.vml': HF_VML,
+    'xl/drawings/_rels/vmlDrawing1.vml.rels': rels(
+      relationship('rId1', 'image', '../media/image1.jpeg'),
+    ),
+    'xl/media/image1.jpeg': image,
+  });
 
   const out = writeXlsx(readXlsx(src));
-  const ws = partText(out, /worksheets\/sheet1\.xml$/);
+  const ws = partText(out, SHEET1);
 
   assert.match(ws, /<legacyDrawingHF r:id="[^"]+"\/>/, 'the legacyDrawingHF reference survives');
   assert.match(ws, /&amp;R&amp;G/, 'the &G header/footer picture token survives');
@@ -234,7 +180,7 @@ test('a header/footer image (legacyDrawingHF VML + media) and its &G token survi
   );
   // The VML's image relationship must re-resolve to the media part's new path.
   assert.match(
-    partText(out, /drawings\/_rels\/vmlDrawing\d+\.vml\.rels$/),
+    partMatching(out, /^xl\/drawings\/_rels\/vmlDrawing\d+\.vml\.rels$/),
     /Target="\.\.\/media\/image\d+\.jpeg"/,
     'the VML relinks its image',
   );
@@ -246,36 +192,34 @@ test('a preserved header/footer VML is numbered clear of a modeled anchored imag
   // must renumber the preserved media past the modeled one rather than clobbering it.
   const modeledPng = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 9, 9]);
   const hfJpeg = Uint8Array.from([0xff, 0xd8, 0xff, 5, 6]);
-  const src = zipSync(
-    packageParts({
-      '[Content_Types].xml': contentTypes(
-        '<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>' +
-          '<Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/>' +
-          '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>',
-      ),
-      'xl/worksheets/sheet1.xml': worksheet('<drawing r:id="rId1"/><legacyDrawingHF r:id="rId2"/>'),
-      'xl/worksheets/_rels/sheet1.xml.rels': rels(
-        relationship('rId1', 'drawing', '../drawings/drawing1.xml') +
-          relationship('rId2', 'vmlDrawing', '../drawings/vmlDrawing1.vml'),
-      ),
-      'xl/drawings/drawing1.xml':
-        '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" ' +
-        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:oneCellAnchor>' +
-        '<xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>' +
-        '<xdr:ext cx="100" cy="100"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="1" name="p"/><xdr:cNvPicPr/></xdr:nvPicPr>' +
-        '<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId1"/></xdr:blipFill>' +
-        '<xdr:spPr/></xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>',
-      'xl/drawings/_rels/drawing1.xml.rels': rels(
-        relationship('rId1', 'image', '../media/image1.png'),
-      ),
-      'xl/media/image1.png': modeledPng,
-      'xl/drawings/vmlDrawing1.vml': HF_VML,
-      'xl/drawings/_rels/vmlDrawing1.vml.rels': rels(
-        relationship('rId1', 'image', '../media/image1.jpeg'),
-      ),
-      'xl/media/image1.jpeg': hfJpeg,
-    }),
-  );
+  const src = typedForeignPackage({
+    '[Content_Types].xml': contentTypes(
+      '<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>' +
+        '<Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/>' +
+        '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>',
+    ),
+    [SHEET1]: worksheet('<drawing r:id="rId1"/><legacyDrawingHF r:id="rId2"/>'),
+    [SHEET1_RELS]: rels(
+      relationship('rId1', 'drawing', '../drawings/drawing1.xml') +
+        relationship('rId2', 'vmlDrawing', '../drawings/vmlDrawing1.vml'),
+    ),
+    'xl/drawings/drawing1.xml':
+      '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" ' +
+      'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:oneCellAnchor>' +
+      '<xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>' +
+      '<xdr:ext cx="100" cy="100"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="1" name="p"/><xdr:cNvPicPr/></xdr:nvPicPr>' +
+      '<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId1"/></xdr:blipFill>' +
+      '<xdr:spPr/></xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>',
+    'xl/drawings/_rels/drawing1.xml.rels': rels(
+      relationship('rId1', 'image', '../media/image1.png'),
+    ),
+    'xl/media/image1.png': modeledPng,
+    'xl/drawings/vmlDrawing1.vml': HF_VML,
+    'xl/drawings/_rels/vmlDrawing1.vml.rels': rels(
+      relationship('rId1', 'image', '../media/image1.jpeg'),
+    ),
+    'xl/media/image1.jpeg': hfJpeg,
+  });
 
   const out = writeXlsx(readXlsx(src));
   const names = partNames(out);
@@ -290,7 +234,7 @@ test('a preserved header/footer VML is numbered clear of a modeled anchored imag
     'the header/footer VML survives',
   );
   assert.match(
-    partText(out, /worksheets\/sheet1\.xml$/),
+    partText(out, SHEET1),
     /<legacyDrawingHF r:id="[^"]+"\/>/,
     'the legacyDrawingHF reference survives',
   );
@@ -305,35 +249,30 @@ const workbookWithPivotCache =
   '<pivotCaches><pivotCache cacheId="42" r:id="rId2"/></pivotCaches></workbook>';
 
 test('a pivot table and its pivot cache survive read→write, cacheId wiring intact', () => {
-  const src = zipSync(
-    packageParts({
-      '[Content_Types].xml': contentTypes(
-        '<Override PartName="/xl/pivotTables/pivotTable1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml"/>' +
-          '<Override PartName="/xl/pivotCache/pivotCacheDefinition1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml"/>' +
-          '<Override PartName="/xl/pivotCache/pivotCacheRecords1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml"/>',
-      ),
-      'xl/workbook.xml': workbookWithPivotCache,
-      'xl/_rels/workbook.xml.rels':
-        '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-        relationship('rId1', 'worksheet', 'worksheets/sheet1.xml') +
-        relationship('rId2', 'pivotCacheDefinition', 'pivotCache/pivotCacheDefinition1.xml') +
-        '</Relationships>',
-      // The pivot table is discovered through a sheet relationship: there is no worksheet child.
-      'xl/worksheets/sheet1.xml': worksheet(''),
-      'xl/worksheets/_rels/sheet1.xml.rels': rels(
-        relationship('rId1', 'pivotTable', '../pivotTables/pivotTable1.xml'),
-      ),
-      'xl/pivotTables/pivotTable1.xml': '<pivotTableDefinition cacheId="42"/>',
-      'xl/pivotTables/_rels/pivotTable1.xml.rels': rels(
-        relationship('rId1', 'pivotCacheDefinition', '../pivotCache/pivotCacheDefinition1.xml'),
-      ),
-      'xl/pivotCache/pivotCacheDefinition1.xml': '<pivotCacheDefinition/>',
-      'xl/pivotCache/_rels/pivotCacheDefinition1.xml.rels': rels(
-        relationship('rId1', 'pivotCacheRecords', 'pivotCacheRecords1.xml'),
-      ),
-      'xl/pivotCache/pivotCacheRecords1.xml': '<pivotCacheRecords/>',
-    }),
-  );
+  const src = typedForeignPackage({
+    '[Content_Types].xml': contentTypes(
+      '<Override PartName="/xl/pivotTables/pivotTable1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml"/>' +
+        '<Override PartName="/xl/pivotCache/pivotCacheDefinition1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml"/>' +
+        '<Override PartName="/xl/pivotCache/pivotCacheRecords1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml"/>',
+    ),
+    'xl/workbook.xml': workbookWithPivotCache,
+    [WORKBOOK_RELS]: rels(
+      relationship('rId1', 'worksheet', 'worksheets/sheet1.xml') +
+        relationship('rId2', 'pivotCacheDefinition', 'pivotCache/pivotCacheDefinition1.xml'),
+    ),
+    // The pivot table is discovered through a sheet relationship: there is no worksheet child.
+    [SHEET1]: worksheet(),
+    [SHEET1_RELS]: rels(relationship('rId1', 'pivotTable', '../pivotTables/pivotTable1.xml')),
+    'xl/pivotTables/pivotTable1.xml': '<pivotTableDefinition cacheId="42"/>',
+    'xl/pivotTables/_rels/pivotTable1.xml.rels': rels(
+      relationship('rId1', 'pivotCacheDefinition', '../pivotCache/pivotCacheDefinition1.xml'),
+    ),
+    'xl/pivotCache/pivotCacheDefinition1.xml': '<pivotCacheDefinition/>',
+    'xl/pivotCache/_rels/pivotCacheDefinition1.xml.rels': rels(
+      relationship('rId1', 'pivotCacheRecords', 'pivotCacheRecords1.xml'),
+    ),
+    'xl/pivotCache/pivotCacheRecords1.xml': '<pivotCacheRecords/>',
+  });
 
   const out = writeXlsx(readXlsx(src));
   const names = partNames(out);
@@ -345,20 +284,19 @@ test('a pivot table and its pivot cache survive read→write, cacheId wiring int
     'both the pivot cache definition and its records survive',
   );
   assert.match(
-    partText(out, /worksheets\/_rels\/sheet1\.xml\.rels$/),
+    partText(out, SHEET1_RELS),
     /pivotTable/,
     'the sheet still references the pivot table',
   );
 
   // The <pivotCaches> registration is re-emitted with its cacheId, wired to the workbook relationship
   // that reaches the (surviving) cache definition, so a pivot table can resolve its cache on reopen.
-  const wb = partText(out, /xl\/workbook\.xml$/);
+  const wb = partText(out, 'xl/workbook.xml');
   const cache = /<pivotCache cacheId="42" r:id="(rId\d+)"\/>/.exec(wb);
   assert.ok(cache, `workbook registers the pivot cache with its cacheId; got ${wb}`);
-  const wbRels = partText(out, /_rels\/workbook\.xml\.rels$/);
   assert.match(
-    wbRels,
-    new RegExp(`Id="${cache?.[1]}"[^>]*Target="pivotCache/pivotCacheDefinition1\\.xml"`),
+    partText(out, WORKBOOK_RELS),
+    new RegExp(`Id="${cache[1]}"[^>]*Target="pivotCache/pivotCacheDefinition1\\.xml"`),
     'the pivotCaches relationship id resolves to the cache definition',
   );
 
@@ -380,40 +318,35 @@ test('a pivot table and its pivot cache survive read→write, cacheId wiring int
 // vbaProject part's own rels, so the closure walk carries it through. It shares the `.bin` extension
 // with `vbaProject.bin` but has a DIFFERENT content type: the case a single per-extension `<Default>`
 // mis-types unless the writer emits a per-part `<Override>` for the odd one out.
-const msVbaRelationship = (id: string, type: string, target: string): string =>
-  `<Relationship Id="${id}" Type="http://schemas.microsoft.com/office/2006/relationships/${type}" Target="${target}"/>`;
-
 test('a signed VBA project keeps distinct content types for vbaProject.bin and its signature', () => {
   const vbaBytes = Uint8Array.from([0xd0, 0xcf, 0x11, 0xe0, 1, 2, 3]);
   const sigBytes = Uint8Array.from([0xde, 0xad, 0xbe, 0xef, 4, 5]);
-  const src = zipSync(
-    packageParts({
-      '[Content_Types].xml': contentTypes(
-        '<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/>' +
-          '<Override PartName="/xl/vbaProjectSignature.bin" ContentType="application/vnd.ms-office.vbaProjectSignature"/>',
-      ),
-      'xl/_rels/workbook.xml.rels':
-        '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-        relationship('rId1', 'worksheet', 'worksheets/sheet1.xml') +
-        msVbaRelationship('rId2', 'vbaProject', 'vbaProject.bin') +
-        '</Relationships>',
-      'xl/worksheets/sheet1.xml': worksheet(''),
-      'xl/vbaProject.bin': vbaBytes,
-      'xl/_rels/vbaProject.bin.rels': rels(
-        msVbaRelationship('rId1', 'vbaProjectSignature', 'vbaProjectSignature.bin'),
-      ),
-      'xl/vbaProjectSignature.bin': sigBytes,
-    }),
-  );
+  const src = typedForeignPackage({
+    '[Content_Types].xml': contentTypes(
+      '<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/>' +
+        '<Override PartName="/xl/vbaProjectSignature.bin" ContentType="application/vnd.ms-office.vbaProjectSignature"/>',
+    ),
+    [WORKBOOK_RELS]: rels(
+      relationship('rId1', 'worksheet', 'worksheets/sheet1.xml') +
+        msRelationship('rId2', '2006/relationships/vbaProject', 'vbaProject.bin'),
+    ),
+    'xl/vbaProject.bin': vbaBytes,
+    'xl/_rels/vbaProject.bin.rels': rels(
+      msRelationship('rId1', '2006/relationships/vbaProjectSignature', 'vbaProjectSignature.bin'),
+    ),
+    'xl/vbaProjectSignature.bin': sigBytes,
+  });
 
   const out = writeXlsx(readXlsx(src));
 
-  // Both binary parts survive byte-for-byte.
-  const files = unzipSync(out);
-  assert.deepEqual(files['xl/vbaProject.bin'], vbaBytes, 'the VBA project blob survives');
-  assert.deepEqual(files['xl/vbaProjectSignature.bin'], sigBytes, 'the signature blob survives');
+  assert.deepEqual(partBytes(out, 'xl/vbaProject.bin'), vbaBytes, 'the VBA project blob survives');
+  assert.deepEqual(
+    partBytes(out, 'xl/vbaProjectSignature.bin'),
+    sigBytes,
+    'the signature blob survives',
+  );
 
-  const ct = partText(out, /\[Content_Types\]\.xml$/);
+  const ct = partText(out, '[Content_Types].xml');
   // The signature part must keep its own content type: a lone `.bin` Default would mis-type it as a
   // second vbaProject, which Excel reads as a corrupt/duplicate project rather than a signature.
   assert.match(
@@ -426,64 +359,52 @@ test('a signed VBA project keeps distinct content types for vbaProject.bin and i
   assert.match(ct, /ContentType="application\/vnd\.ms-office\.vbaProject"/);
 
   // Idempotent: the corrected typing survives a second round-trip.
-  const ct2 = partText(writeXlsx(readXlsx(out)), /\[Content_Types\]\.xml$/);
+  const ct2 = partText(writeXlsx(readXlsx(out)), '[Content_Types].xml');
   assert.match(ct2, /application\/vnd\.ms-office\.vbaProjectSignature/);
 });
 
 test('slicer and slicer-cache parts survive read→write', () => {
-  const src = zipSync(
-    packageParts({
-      '[Content_Types].xml': contentTypes(
-        '<Override PartName="/xl/slicers/slicer1.xml" ContentType="application/vnd.ms-excel.slicer+xml"/>' +
-          '<Override PartName="/xl/slicerCaches/slicerCache1.xml" ContentType="application/vnd.ms-excel.slicerCache+xml"/>',
-      ),
-      'xl/_rels/workbook.xml.rels':
-        '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-        relationship('rId1', 'worksheet', 'worksheets/sheet1.xml') +
-        msRelationship('rId2', 'slicerCache', 'slicerCaches/slicerCache1.xml') +
-        '</Relationships>',
-      'xl/worksheets/sheet1.xml': worksheet(''),
-      'xl/worksheets/_rels/sheet1.xml.rels': rels(
-        msRelationship('rId1', 'slicer', '../slicers/slicer1.xml'),
-      ),
-      'xl/slicers/slicer1.xml': '<slicers/>',
-      'xl/slicerCaches/slicerCache1.xml': '<slicerCacheDefinition/>',
-    }),
-  );
+  const src = typedForeignPackage({
+    '[Content_Types].xml': contentTypes(
+      '<Override PartName="/xl/slicers/slicer1.xml" ContentType="application/vnd.ms-excel.slicer+xml"/>' +
+        '<Override PartName="/xl/slicerCaches/slicerCache1.xml" ContentType="application/vnd.ms-excel.slicerCache+xml"/>',
+    ),
+    [WORKBOOK_RELS]: rels(
+      relationship('rId1', 'worksheet', 'worksheets/sheet1.xml') +
+        msRelationship('rId2', '2007/relationships/slicerCache', 'slicerCaches/slicerCache1.xml'),
+    ),
+    [SHEET1_RELS]: rels(
+      msRelationship('rId1', '2007/relationships/slicer', '../slicers/slicer1.xml'),
+    ),
+    'xl/slicers/slicer1.xml': '<slicers/>',
+    'xl/slicerCaches/slicerCache1.xml': '<slicerCacheDefinition/>',
+  });
 
   const out = writeXlsx(readXlsx(src));
   const names = partNames(out);
 
   assert.ok(names.includes('xl/slicers/slicer1.xml'), 'the slicer part survives');
   assert.ok(names.includes('xl/slicerCaches/slicerCache1.xml'), 'the slicer cache part survives');
+  assert.match(partText(out, SHEET1_RELS), /\/slicer"/, 'the sheet still references the slicer');
   assert.match(
-    partText(out, /worksheets\/_rels\/sheet1\.xml\.rels$/),
-    /\/slicer"/,
-    'the sheet still references the slicer',
-  );
-  assert.match(
-    partText(out, /_rels\/workbook\.xml\.rels$/),
+    partText(out, WORKBOOK_RELS),
     /slicerCaches\/slicerCache1\.xml/,
     'the workbook still references the slicer cache',
   );
 
   // Parts surviving is not enough: Excel only rediscovers a slicer through its x14 wiring, which
   // references the relationship ids the writer reassigns, so the ext blocks must name the *new* ids.
-  const slicerRelId = partText(out, /worksheets\/_rels\/sheet1\.xml\.rels$/).match(
-    /Id="(rId\d+)"[^>]*\/slicer"/,
-  )?.[1];
+  const slicerRelId = partText(out, SHEET1_RELS).match(/Id="(rId\d+)"[^>]*\/slicer"/)?.[1];
   assert.ok(slicerRelId, 'the re-emitted slicer rel has an id');
   assert.match(
-    partText(out, /worksheets\/sheet1\.xml$/),
+    partText(out, SHEET1),
     new RegExp(`<x14:slicerList><x14:slicer r:id="${slicerRelId}"/></x14:slicerList>`),
     'the sheet body reactivates the slicer through a slicerList extension wired to its rel',
   );
-  const cacheRelId = partText(out, /_rels\/workbook\.xml\.rels$/).match(
-    /Id="(rId\d+)"[^>]*\/slicerCache"/,
-  )?.[1];
+  const cacheRelId = partText(out, WORKBOOK_RELS).match(/Id="(rId\d+)"[^>]*\/slicerCache"/)?.[1];
   assert.ok(cacheRelId, 'the re-emitted slicer-cache rel has an id');
   assert.match(
-    partText(out, /xl\/workbook\.xml$/),
+    partText(out, 'xl/workbook.xml'),
     new RegExp(`<x14:slicerCaches><x14:slicerCache r:id="${cacheRelId}"/></x14:slicerCaches>`),
     'the workbook registers the slicer cache in its x14 slicerCaches extension',
   );
@@ -504,21 +425,16 @@ const CUSTOM_UI_2009 =
   '<button id="b14" label="Run" onAction="MyMacro"/></group></tab></tabs></ribbon></customUI>';
 
 test('customUI ribbon parts referenced from the package root rels survive read→write', () => {
-  const src = zipSync(
-    packageParts({
-      '_rels/.rels':
-        '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
-        '<Relationship Id="rId4" Type="http://schemas.microsoft.com/office/2006/relationships/ui/extensibility" Target="customUI/customUI.xml"/>' +
-        '<Relationship Id="rId5" Type="http://schemas.microsoft.com/office/2007/relationships/ui/extensibility" Target="customUI/customUI14.xml"/>' +
-        '</Relationships>',
-      '[Content_Types].xml': contentTypes(''),
-      'xl/worksheets/sheet1.xml': worksheet(''),
-      'xl/worksheets/_rels/sheet1.xml.rels': rels(''),
-      'customUI/customUI.xml': CUSTOM_UI_2007,
-      'customUI/customUI14.xml': CUSTOM_UI_2009,
-    }),
-  );
+  const src = typedForeignPackage({
+    '_rels/.rels': rels(
+      relationship('rId1', 'officeDocument', 'xl/workbook.xml') +
+        msRelationship('rId4', '2006/relationships/ui/extensibility', 'customUI/customUI.xml') +
+        msRelationship('rId5', '2007/relationships/ui/extensibility', 'customUI/customUI14.xml'),
+    ),
+    [SHEET1_RELS]: rels(''),
+    'customUI/customUI.xml': CUSTOM_UI_2007,
+    'customUI/customUI14.xml': CUSTOM_UI_2009,
+  });
 
   const out = writeXlsx(readXlsx(src));
   const names = partNames(out);
@@ -526,19 +442,19 @@ test('customUI ribbon parts referenced from the package root rels survive read�
   assert.ok(names.includes('customUI/customUI.xml'), 'the 2007 ribbon part survives');
   assert.ok(names.includes('customUI/customUI14.xml'), 'the 2009 ribbon part survives');
   assert.match(
-    partText(out, /customUI\/customUI\.xml$/),
+    partText(out, 'customUI/customUI.xml'),
     /onAction="LegacyMacro"/,
     'the 2007 ribbon body survives intact',
   );
   assert.match(
-    partText(out, /customUI\/customUI14\.xml$/),
+    partText(out, 'customUI/customUI14.xml'),
     /onAction="MyMacro"/,
     'the 2009 ribbon body survives intact',
   );
 
   // Surviving as bytes is not enough: Excel only loads the ribbon through the root-rels
   // relationships, so both must be re-declared there with their Microsoft-namespaced types.
-  const rootRels = partText(out, /^_rels\/\.rels$/);
+  const rootRels = partText(out, '_rels/.rels');
   assert.match(
     rootRels,
     /office\/2006\/relationships\/ui\/extensibility/,
@@ -562,7 +478,7 @@ test('customUI ribbon parts referenced from the package root rels survive read�
 
   // Re-reading the rewritten package and writing it again must keep preserving both.
   assert.match(
-    partText(writeXlsx(readXlsx(out)), /customUI\/customUI14\.xml$/),
+    partText(writeXlsx(readXlsx(out)), 'customUI/customUI14.xml'),
     /onAction="MyMacro"/,
     'idempotent across a second round-trip',
   );

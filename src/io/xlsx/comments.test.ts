@@ -13,7 +13,14 @@ import {
   vmlDrawingXml,
 } from './comments.ts';
 import {liveCells} from './hyperlinks.ts';
-import {partsOf, partsWritten, partText, roundtrip, sheetXml} from './package.test-support.ts';
+import {
+  captureIn,
+  partsOf,
+  partsWritten,
+  partText,
+  roundtrip,
+  sheetXml,
+} from './package.test-support.ts';
 import {writeXlsx} from './write.ts';
 
 test('a cell note survives the write/read round-trip', () => {
@@ -84,7 +91,7 @@ test('a note textbox auto-fits its text so a multi-line note is not clipped', ()
   const ws = wb.addWorksheet('S');
   ws.getCell('B2').note = 'line one\nline two\nline three';
   const vml = partText(writeXlsx(wb), 'xl/drawings/vmlDrawing1.vml');
-  const style = (vml.match(/<v:textbox\b[^>]*\bstyle="([^"]*)"/) ?? [])[1] ?? '';
+  const style = captureIn(vml, /<v:textbox\b[^>]*\bstyle="([^"]*)"/, 'the textbox style');
   assert.match(style, /mso-fit-shape-to-text:t/, 'the textbox grows to fit its content');
 });
 

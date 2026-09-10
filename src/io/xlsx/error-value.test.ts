@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
-
 import {ERROR_CODES, isErrorValue} from '../../core/value.ts';
 import {Workbook} from '../../core/workbook.ts';
-import {roundtrip, sheetXml} from './package.test-support.ts';
+import {patchParts, roundtrip, SHEET1, sheetXml} from './package.test-support.ts';
 import {readXlsx} from './read.ts';
 import {writeXlsx} from './write.ts';
 
@@ -64,13 +62,10 @@ test('a foreign t="e" cell carrying a non-canonical code reads back as a plain s
   const wb = new Workbook();
   wb.addWorksheet('S').getCell('A1').value = {error: '#REF!'};
 
-  const files = unzipSync(writeXlsx(wb));
-  const patched = strFromU8(files['xl/worksheets/sheet1.xml'] as Uint8Array).replace(
-    '<v>#REF!</v>',
-    '<v>#UNKNOWN!</v>',
-  );
-  files['xl/worksheets/sheet1.xml'] = strToU8(patched);
+  const patched = patchParts(writeXlsx(wb), {
+    [SHEET1]: (xml) => xml.replace('<v>#REF!</v>', '<v>#UNKNOWN!</v>'),
+  });
 
-  const back = readXlsx(zipSync(files)).getWorksheet('S')?.getCell('A1').value;
+  const back = readXlsx(patched).getWorksheet('S')?.getCell('A1').value;
   assert.equal(back, '#UNKNOWN!', 'an unrecognised error literal falls back to its raw text');
 });

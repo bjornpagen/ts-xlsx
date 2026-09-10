@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {strToU8, zipSync} from 'fflate';
-
 import {isDataTableFormulaValue} from '../../core/value.ts';
 import {Workbook} from '../../core/workbook.ts';
-import {roundtrip, sheetXml} from './package.test-support.ts';
+import {
+  elementIn,
+  foreignPackage,
+  foreignSheet,
+  roundtrip,
+  SHEET1,
+  sheetXml,
+} from './package.test-support.ts';
 import {readXlsx} from './read.ts';
 import {writeXlsx} from './write.ts';
 
@@ -20,7 +25,7 @@ test('a data-table formula writes its t="dataTable" declaration with input cells
     result: 99,
   };
 
-  const cell = sheetXml(writeXlsx(wb)).match(/<c r="B2"[\s\S]*?<\/c>/)?.[0] ?? '';
+  const cell = elementIn(sheetXml(writeXlsx(wb)), /<c r="B2"[\s\S]*?<\/c>/);
   assert.match(cell, /<f t="dataTable"/, 'the formula is emitted as the data-table kind');
   assert.match(cell, /ref="B2:B5"/, 'the data-table range is emitted');
   assert.match(cell, /dtr="1"/, 'the row-input flag is emitted');
@@ -89,19 +94,10 @@ test('a column-input data table round-trips with no row-orientation flag', () =>
 test('a ref-less t="dataTable" declaration is tolerated, not read as a data table', () => {
   // The declaration is meaningless without its range; a hostile or corrupt sheet can still emit one.
   // The reader must not surface a data-table value from it: the cell decodes as its plain payload.
-  const sheetXml =
-    '<?xml version="1.0"?><worksheet><sheetData>' +
-    '<row r="2"><c r="B2"><f t="dataTable" dt2D="0" dtr="1" r1="A1"/><v>7</v></c></row>' +
-    '</sheetData></worksheet>';
-  const archive = zipSync({
-    '[Content_Types].xml': strToU8('<Types/>'),
-    'xl/workbook.xml': strToU8(
-      '<workbook><sheets><sheet name="S" r:id="rId1"/></sheets></workbook>',
+  const archive = foreignPackage({
+    [SHEET1]: foreignSheet(
+      '<row r="2"><c r="B2"><f t="dataTable" dt2D="0" dtr="1" r1="A1"/><v>7</v></c></row>',
     ),
-    'xl/_rels/workbook.xml.rels': strToU8(
-      '<Relationships><Relationship Id="rId1" Type="x/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
-    ),
-    'xl/worksheets/sheet1.xml': strToU8(sheetXml),
   });
 
   const value = readXlsx(archive).getWorksheet('S')?.getCell('B2').value ?? null;

@@ -4,8 +4,7 @@ import path from 'node:path';
 import {test} from 'node:test';
 import {fileURLToPath} from 'node:url';
 
-import {unzipSync} from 'fflate';
-
+import {partBytes} from '../xlsx/package.test-support.ts';
 import {parseStyleTable} from './read-styles.ts';
 
 // The BIFF12 half of the label check in `../xlsx/read-styles.test.ts`: a `BrtStyle`'s name and
@@ -23,7 +22,7 @@ const FIXTURE = path.resolve(
 );
 
 test("a BrtStyle's label reaches the style table, name and builtinId both", () => {
-  const styles = unzipSync(readFileSync(FIXTURE))['xl/styles.bin'];
+  const styles = partBytes(readFileSync(FIXTURE), 'xl/styles.bin');
   const {namedStyles} = parseStyleTable(styles);
   assert.deepEqual(
     namedStyles.map((style) => [style.name, style.builtinId]),

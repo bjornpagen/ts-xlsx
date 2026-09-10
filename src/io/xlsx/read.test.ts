@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {strToU8, unzipSync, zipSync} from 'fflate';
+import {strToU8, zipSync} from 'fflate';
 
+import {isDateFormat} from '../../core/date.ts';
 import type {Fill} from '../../core/style.ts';
 import {isFormulaValue} from '../../core/value.ts';
 import {DEFAULT_WORKBOOK_VIEW, Workbook, type WorkbookView} from '../../core/workbook.ts';
@@ -13,9 +14,12 @@ import {conditionalFormattingPass} from './conditional-formatting.ts';
 import {dataValidationPass, extendedDataValidationPass} from './data-validation.ts';
 import {sheetHyperlinkPass} from './hyperlinks.ts';
 import {
+  captureIn,
+  elementIn,
   foreignPackage,
   foreignSheet,
   optionalPartText,
+  partBytes,
   partText,
   patchParts,
   roundtrip,
@@ -686,7 +690,7 @@ test('a cell carrying exactly the default font interns back to font id 0: no red
   };
 
   const styles = partText(writeXlsx(wb), 'xl/styles.xml');
-  const fontsBlock = styles.match(/<fonts\b[^>]*>[\s\S]*?<\/fonts>/)?.[0] ?? '';
+  const fontsBlock = elementIn(styles, /<fonts\b[^>]*>[\s\S]*?<\/fonts>/);
   assert.equal(
     (fontsBlock.match(/<font\b/g) ?? []).length,
     1,
@@ -990,11 +994,22 @@ test('a bare Date is written under a date number format so it reads back as a da
   const wb = new Workbook();
   wb.addWorksheet('S').getCell('A1').value = new Date('2020-03-04T00:00:00.000Z');
 
-  const xml = sheetXml(writeXlsx(wb));
-  assert.ok(
-    !/t="/.test(xml.match(/<c r="A1"[^>]*>/)?.[0] ?? ''),
-    'a date serial is a plain number cell, no t=',
+  const pkg = writeXlsx(wb);
+  const cell = elementIn(sheetXml(pkg), /<c r="A1"[^>]*>/);
+  assert.doesNotMatch(cell, /t="/, 'a date serial is a plain number cell, no t=');
+
+  const styles = partText(pkg, 'xl/styles.xml');
+  const xfIndex = Number(captureIn(cell, /\bs="(\d+)"/, 'the cell style index'));
+  const cellXfs = elementIn(styles, /<cellXfs\b[\s\S]*?<\/cellXfs>/);
+  const xf = [...cellXfs.matchAll(/<xf\b[^>]*>/g)][xfIndex]?.[0];
+  assert.ok(xf, `the cell names xf ${xfIndex}, which cellXfs must hold`);
+  const numFmtId = captureIn(xf, /\bnumFmtId="(\d+)"/, 'the xf number format');
+  const formatCode = captureIn(
+    styles,
+    new RegExp(`<numFmt numFmtId="${numFmtId}" formatCode="([^"]*)"`),
+    `the format code for numFmtId ${numFmtId}`,
   );
+  assert.ok(isDateFormat(formatCode), `${formatCode} is a date format`);
 });
 
 test('an explicit date numFmt on a Date cell survives verbatim, not swapped for the default', () => {
@@ -1246,9 +1261,10 @@ test('a printer-settings blob wires up the r:id, the .bin part, its rel, and a c
   // The blob is the only reason the element exists, so <pageSetup> emits carrying just the r:id.
   assert.match(sheetXml(pkg), /<pageSetup r:id="rId1"\/>/);
 
-  const printerSettings = unzipSync(pkg)['xl/printerSettings/printerSettings1.bin'];
-  assert.ok(printerSettings, 'the binary part is written');
-  assert.deepEqual(printerSettings, new Uint8Array([1, 2, 3]));
+  assert.deepEqual(
+    partBytes(pkg, 'xl/printerSettings/printerSettings1.bin'),
+    new Uint8Array([1, 2, 3]),
+  );
 
   const rels = partText(pkg, 'xl/worksheets/_rels/sheet1.xml.rels');
   assert.match(rels, /Id="rId1"[^>]*Target="\.\.\/printerSettings\/printerSettings1\.bin"/);
@@ -1407,7 +1423,7 @@ test('an unknown attribute on <workbookProtection> is dropped, not echoed back o
 // The `<fonts>` table of a written package, as one string.
 function fontsBlockOf(workbook: Workbook): string {
   const styles = partText(writeXlsx(workbook), 'xl/styles.xml');
-  return styles.match(/<fonts\b[^>]*>[\s\S]*?<\/fonts>/)?.[0] ?? '';
+  return elementIn(styles, /<fonts\b[^>]*>[\s\S]*?<\/fonts>/);
 }
 
 test("an authored theme's body face reaches font 0, so it reaches every unstyled cell", () => {

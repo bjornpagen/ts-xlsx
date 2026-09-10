@@ -6,25 +6,10 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import type {CommentThread} from './comment-thread.ts';
+import {threadAt} from './comment-thread.test-support.ts';
 import type {CellValue} from './value.ts';
 import {Workbook} from './workbook.ts';
 import type {Worksheet} from './worksheet.ts';
-
-// A distinct id per thread, in the only spelling the format accepts: brace-wrapped, upper-case,
-// `8-4-4-4-12` hex. The authoring path rejects a readable placeholder.
-let nextThread = 0;
-const threadAt = (ref: string): CommentThread => ({
-  ref,
-  resolved: false,
-  comments: [
-    {
-      id: `{${String(++nextThread).padStart(8, '0')}-0000-4000-8000-000000000000}`,
-      text: `about ${ref}`,
-      mentions: [],
-    },
-  ],
-});
 
 // A sheet carrying one of each range-bound overlay over the same block, so a single splice exercises
 // all four and any that fails to move stands out beside the three that did.

@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {strToU8, zipSync} from 'fflate';
-
 import {MAX_ROW} from '../../core/address.ts';
 import {isFormulaValue} from '../../core/value.ts';
 import {Workbook} from '../../core/workbook.ts';
+import {foreignPackage, foreignSheet, SHEET1} from './package.test-support.ts';
 import {readSheetRows, readWorkbookStream, type StreamedRow} from './read-rows.ts';
 import {readXlsx} from './read.ts';
 import {writeXlsx} from './write.ts';
@@ -146,19 +145,8 @@ test('a missing sheet selector is an error, not silent emptiness', () => {
 test('an inline string cell decodes through the streaming SAX path', () => {
   // writeXlsx pools strings into sharedStrings, so hand-build an inlineStr sheet to prove the
   // `<is><t>` path the streaming reader must also handle.
-  const sheetXml =
-    '<?xml version="1.0"?><worksheet><sheetData>' +
-    '<row r="1"><c r="A1" t="inlineStr"><is><t>hi there</t></is></c></row>' +
-    '</sheetData></worksheet>';
-  const archive = zipSync({
-    '[Content_Types].xml': strToU8('<Types/>'),
-    'xl/workbook.xml': strToU8(
-      '<workbook><sheets><sheet name="S" r:id="rId1"/></sheets></workbook>',
-    ),
-    'xl/_rels/workbook.xml.rels': strToU8(
-      '<Relationships><Relationship Id="rId1" Type="x/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
-    ),
-    'xl/worksheets/sheet1.xml': strToU8(sheetXml),
+  const archive = foreignPackage({
+    [SHEET1]: foreignSheet('<row r="1"><c r="A1" t="inlineStr"><is><t>hi there</t></is></c></row>'),
   });
 
   assert.equal(rows(archive)[0]?.cells[0]?.value, 'hi there');
@@ -168,21 +156,12 @@ test('a row past the last row is dropped, as the buffered reader drops it', () =
   // The two readers have to agree on what an out-of-grid `<r>` means. The buffered one drops the
   // row (clamping would move its formatting onto 1048576); this one must not hand the consumer a
   // `number` that names no cell, and must retain nothing for the row it refuses.
-  const sheetXml =
-    '<?xml version="1.0"?><worksheet><sheetData>' +
-    '<row r="1"><c r="A1" t="inlineStr"><is><t>in grid</t></is></c></row>' +
-    `<row r="${MAX_ROW + 1}"><c r="A${MAX_ROW + 1}" t="inlineStr"><is><t>past it</t></is></c></row>` +
-    '<row r="2"><c r="A2" t="inlineStr"><is><t>after</t></is></c></row>' +
-    '</sheetData></worksheet>';
-  const archive = zipSync({
-    '[Content_Types].xml': strToU8('<Types/>'),
-    'xl/workbook.xml': strToU8(
-      '<workbook><sheets><sheet name="S" r:id="rId1"/></sheets></workbook>',
+  const archive = foreignPackage({
+    [SHEET1]: foreignSheet(
+      '<row r="1"><c r="A1" t="inlineStr"><is><t>in grid</t></is></c></row>' +
+        `<row r="${MAX_ROW + 1}"><c r="A${MAX_ROW + 1}" t="inlineStr"><is><t>past it</t></is></c></row>` +
+        '<row r="2"><c r="A2" t="inlineStr"><is><t>after</t></is></c></row>',
     ),
-    'xl/_rels/workbook.xml.rels': strToU8(
-      '<Relationships><Relationship Id="rId1" Type="x/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
-    ),
-    'xl/worksheets/sheet1.xml': strToU8(sheetXml),
   });
 
   const streamed = rows(archive);
@@ -203,30 +182,22 @@ test('a stylesheet at an unconventional path is still found, so a date stays a d
   // stylesheet resolved conventional-path-first reads as no styles at all -- which changes a cell's
   // *type*, because the date test reads `numFmt` off the resolved style to tell 45000 from a date.
   // Nothing about the resulting workbook is malformed, so only a check like this one catches it.
-  const archive = zipSync({
-    '[Content_Types].xml': strToU8('<Types/>'),
-    'xl/workbook.xml': strToU8(
-      '<workbook><sheets><sheet name="S" r:id="rId1"/></sheets></workbook>',
-    ),
-    'xl/_rels/workbook.xml.rels': strToU8(
+  const archive = foreignPackage({
+    'xl/_rels/workbook.xml.rels':
       '<Relationships>' +
-        '<Relationship Id="rId1" Type="x/worksheet" Target="worksheets/sheet1.xml"/>' +
-        '<Relationship Id="rId2" Type="x/styles" Target="theStyles.xml"/>' +
-        '</Relationships>',
-    ),
+      '<Relationship Id="rId1" Type="x/worksheet" Target="worksheets/sheet1.xml"/>' +
+      '<Relationship Id="rId2" Type="x/styles" Target="theStyles.xml"/>' +
+      '</Relationships>',
     // Number format 14 is the built-in short date, so `s="1"` is what makes the serial a date.
-    'xl/theStyles.xml': strToU8(
+    'xl/theStyles.xml':
       '<styleSheet><cellXfs count="2"><xf numFmtId="0"/>' +
-        '<xf numFmtId="14" applyNumberFormat="1"/></cellXfs></styleSheet>',
-    ),
+      '<xf numFmtId="14" applyNumberFormat="1"/></cellXfs></styleSheet>',
     // A stylesheet also sits at the conventional path, and it is not this workbook's: the two
     // resolution orders give different answers only when both parts exist, which is the case a
     // package that renames one of them and leaves the other behind actually presents.
-    'xl/styles.xml': strToU8('<styleSheet><cellXfs count="0"/></styleSheet>'),
-    'xl/worksheets/sheet1.xml': strToU8(
-      '<?xml version="1.0"?><worksheet><sheetData>' +
-        '<row r="1"><c r="A1" s="1"><v>45000</v></c><c r="B1"><v>45000</v></c></row>' +
-        '</sheetData></worksheet>',
+    'xl/styles.xml': '<styleSheet><cellXfs count="0"/></styleSheet>',
+    [SHEET1]: foreignSheet(
+      '<row r="1"><c r="A1" s="1"><v>45000</v></c><c r="B1"><v>45000</v></c></row>',
     ),
   });
 

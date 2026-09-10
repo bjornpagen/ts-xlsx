@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
 
 import {Workbook} from '../../core/workbook.ts';
+import {AuthoringError} from '../../errors.ts';
 import {readXlsx} from './read.ts';
 import {type WriteOptions, writeXlsx} from './write.ts';
 
@@ -60,9 +61,49 @@ export function partsWritten(workbook: Workbook): Record<string, string> {
 
 /** One named part's text. Fails the test, naming the part, when it is absent. */
 export function partText(pkg: Uint8Array, name: string): string {
+  return strFromU8(partBytes(pkg, name));
+}
+
+/** One named part's bytes, for a binary part. Fails the test, naming the part, when it is absent. */
+export function partBytes(pkg: Uint8Array, name: string): Uint8Array {
   const bytes = filesOf(pkg)[name];
   assert.ok(bytes, `expected part ${name}`);
-  return strFromU8(bytes);
+  return bytes;
+}
+
+/**
+ * The text of the one part whose path matches `pattern`, for a part the writer numbers. Fails the test
+ * when no part matches, and when several do: a lookup that silently took the first of two would be
+ * asserting on whichever one the zip happened to list first.
+ */
+export function partMatching(pkg: Uint8Array, pattern: RegExp): string {
+  const names = Object.keys(filesOf(pkg)).filter((name) => pattern.test(name));
+  const [name] = names;
+  assert.ok(
+    name !== undefined && names.length === 1,
+    `expected exactly one part matching ${String(pattern)}; got ${names.join(', ')}`,
+  );
+  return partText(pkg, name);
+}
+
+/**
+ * The first match of `pattern` in some markup. Fails the test, naming the pattern, when there is none.
+ *
+ * Parts reached this rule and elements did not. The spelling it replaces, `xml.match(re)?.[0] ?? ''`,
+ * turns a missing element into an empty string, and every `doesNotMatch` asserted on that string then
+ * passes for the wrong reason.
+ */
+export function elementIn(xml: string, pattern: RegExp, label?: string): string {
+  const match = xml.match(pattern);
+  assert.ok(match, `expected ${label ?? String(pattern)} in the markup`);
+  return match[0];
+}
+
+/** {@link elementIn} for the first capture group, when the test wants an attribute list or a value. */
+export function captureIn(xml: string, pattern: RegExp, label?: string): string {
+  const captured = xml.match(pattern)?.[1];
+  assert.ok(captured !== undefined, `expected ${label ?? String(pattern)} in the markup`);
+  return captured;
 }
 
 /**
@@ -117,6 +158,9 @@ export function roundtrip(workbook: Workbook, options?: WriteOptions): Workbook 
  * failure this module exists to remove: the first spelling throws a `TypeError` naming nothing when
  * the writer renames a part, and the second silently patches an empty string, after which every
  * negative assertion built on the result passes for the wrong reason.
+ *
+ * An edit that changes nothing fails too. A `replace` whose search string the writer stopped emitting
+ * is a no-op, and the test goes on reading the unpatched package while claiming to read a hostile one.
  */
 export function patchParts(
   pkg: Uint8Array,
@@ -124,9 +168,10 @@ export function patchParts(
 ): Uint8Array {
   const files = {...filesOf(pkg)};
   for (const [name, edit] of Object.entries(edits)) {
-    const bytes = files[name];
-    assert.ok(bytes, `expected part ${name}`);
-    files[name] = strToU8(edit(strFromU8(bytes)));
+    const before = strFromU8(partBytes(pkg, name));
+    const after = edit(before);
+    assert.notEqual(after, before, `edit to ${name} changed nothing`);
+    files[name] = strToU8(after);
   }
   return zipSync(files);
 }
@@ -140,11 +185,31 @@ export function patchParts(
  * all rather than passing by reading nothing.
  */
 export function readPatched(parts: Record<string, string>): Workbook {
-  const base = new Workbook();
-  base.addWorksheet('S').getCell('A1').value = 1;
-  const files = unzipSync(writeXlsx(base));
+  const files = unzipSync(writeXlsx(sheeted()));
   for (const [name, xml] of Object.entries(parts)) files[name] = strToU8(xml);
   return readXlsx(zipSync(files));
+}
+
+/** A one-sheet workbook with `A1` set: the least a workbook needs before the writer reaches anything. */
+export function sheeted(): Workbook {
+  const workbook = new Workbook();
+  workbook.addWorksheet('S').getCell('A1').value = 1;
+  return workbook;
+}
+
+/** Assert that writing {@link sheeted} after `mutate` is refused as an authoring mistake. */
+export function refuses(mutate: (workbook: Workbook) => void): void {
+  const workbook = sheeted();
+  mutate(workbook);
+  assert.throws(() => writeXlsx(workbook), AuthoringError);
+}
+
+function zipParts(parts: Record<string, string | Uint8Array | undefined>): Uint8Array {
+  const files: Record<string, Uint8Array> = {};
+  for (const [path, data] of Object.entries(parts)) {
+    if (data !== undefined) files[path] = typeof data === 'string' ? strToU8(data) : data;
+  }
+  return zipSync(files);
 }
 
 // The three parts every hand-authored foreign package needs, plus the content-type declaration a
@@ -182,15 +247,82 @@ const FOREIGN_PACKAGE_DEFAULTS: Record<string, string> = {
  * is how a case says "and no content types at all". Returns the zipped bytes, since that is what
  * every caller wants: a package to hand to the reader.
  */
-export function foreignPackage(parts: Record<string, string | undefined> = {}): Uint8Array {
-  const files: Record<string, Uint8Array> = {};
-  for (const [path, xml] of Object.entries({...FOREIGN_PACKAGE_DEFAULTS, ...parts})) {
-    if (xml !== undefined) files[path] = strToU8(xml);
-  }
-  return zipSync(files);
+export function foreignPackage(
+  parts: Record<string, string | Uint8Array | undefined> = {},
+): Uint8Array {
+  return zipParts({...FOREIGN_PACKAGE_DEFAULTS, ...parts});
 }
 
 /** A worksheet part around hand-authored `<row>` markup: the override a reader case makes most. */
 export function foreignSheet(rows: string): string {
   return `<?xml version="1.0"?><worksheet><sheetData>${rows}</sheetData></worksheet>`;
+}
+
+const RELATIONSHIPS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+const OFFICE_RELATIONSHIP = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+/** A `.rels` part around {@link relationship} entries. */
+export function relationshipsPart(entries: string): string {
+  return `<?xml version="1.0"?><Relationships xmlns="${RELATIONSHIPS_NS}">${entries}</Relationships>`;
+}
+
+/** One relationship whose type is an ECMA-376 one, named by its last segment (`drawing`, `image`). */
+export function relationship(id: string, type: string, target: string): string {
+  return `<Relationship Id="${id}" Type="${OFFICE_RELATIONSHIP}/${type}" Target="${target}"/>`;
+}
+
+/**
+ * One relationship whose type is Microsoft-namespaced, named by the path after the namespace root
+ * (`2007/relationships/slicer`). Only the suffix marks a slicer or a VBA project for preservation, so
+ * the year is the caller's to spell.
+ */
+export function msRelationship(id: string, type: string, target: string): string {
+  return `<Relationship Id="${id}" Type="http://schemas.microsoft.com/office/${type}" Target="${target}"/>`;
+}
+
+/** A content-types part declaring the workbook and first worksheet, with `extra` entries between. */
+export function typedContentTypes(extra = ''): string {
+  return (
+    '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    extra +
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+    '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+    '</Types>'
+  );
+}
+
+/** A namespaced worksheet part with an empty `<sheetData>` and `tail` after it. */
+export function typedWorksheet(tail = ''): string {
+  return (
+    '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+    `xmlns:r="${OFFICE_RELATIONSHIP}"><sheetData/>${tail}</worksheet>`
+  );
+}
+
+/**
+ * {@link foreignPackage} with every relationship typed as a real one, namespaces declared, and the
+ * package root's relationships present.
+ *
+ * The placeholder `Type="x"` is fine for a reader that follows `r:id`s. It is not fine for anything
+ * that decides by type, which is what preservation does: an unmodelled part rides through because its
+ * relationship says drawing, chart or slicer. Overrides work the same way, by path, with `undefined`
+ * dropping a default, and a binary part may be given as bytes.
+ */
+export function typedForeignPackage(
+  parts: Record<string, string | Uint8Array | undefined> = {},
+): Uint8Array {
+  return zipParts({
+    '[Content_Types].xml': typedContentTypes(),
+    '_rels/.rels': relationshipsPart(relationship('rId1', 'officeDocument', 'xl/workbook.xml')),
+    'xl/workbook.xml':
+      '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+      `xmlns:r="${OFFICE_RELATIONSHIP}"><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    'xl/_rels/workbook.xml.rels': relationshipsPart(
+      relationship('rId1', 'worksheet', 'worksheets/sheet1.xml'),
+    ),
+    [SHEET1]: typedWorksheet(),
+    ...parts,
+  });
 }

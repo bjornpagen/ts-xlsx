@@ -11,26 +11,19 @@ import {test} from 'node:test';
 
 import {zipSync} from 'fflate';
 
-import {Workbook} from '../../core/workbook.ts';
-import {AuthoringError} from '../../errors.ts';
-import {partIn, partsWritten as partsOf, roundtrip, sheetXml} from './package.test-support.ts';
+import {
+  partIn,
+  partsWritten as partsOf,
+  refuses,
+  roundtrip,
+  sheeted,
+  sheetXml,
+} from './package.test-support.ts';
 import {readXlsx} from './read.ts';
 import {writeXlsx} from './write.ts';
 
 // The shape of the attack: a value that closes the attribute and the element behind it.
 const ESCAPE = 'x"/><x/><y a="';
-
-function sheeted(): Workbook {
-  const workbook = new Workbook();
-  workbook.addWorksheet('S').getCell('A1').value = 1;
-  return workbook;
-}
-
-function refuses(mutate: (workbook: Workbook) => void): void {
-  const workbook = sheeted();
-  mutate(workbook);
-  assert.throws(() => writeXlsx(workbook), AuthoringError);
-}
 
 test('<pageSetup> refuses a foreign orientation or page order', () => {
   refuses((wb) => {

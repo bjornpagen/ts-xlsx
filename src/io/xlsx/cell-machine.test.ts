@@ -9,11 +9,9 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
-
 import {isFormulaValue} from '../../core/value.ts';
 import {Workbook} from '../../core/workbook.ts';
-import {sheetXml} from './package.test-support.ts';
+import {patchParts, SHEET1, sheetXml} from './package.test-support.ts';
 import {readSheetRows} from './read-rows.ts';
 import {readXlsx} from './read.ts';
 import {writeXlsx} from './write.ts';
@@ -130,13 +128,11 @@ test('a formula whose cached <v> is unparseable keeps its formula and caches not
 // Replace the whole `<sheetData>` body of the first worksheet part with one authored row.
 function patchSheetBody(data: Uint8Array, cells: string): Uint8Array {
   // Round-tripping through the reader would re-pool the strings, so the bytes are edited directly.
-  const files = unzipSync(data);
-  const path = 'xl/worksheets/sheet1.xml';
-  files[path] = strToU8(
-    strFromU8(files[path]!).replace(
-      /<sheetData>[\s\S]*?<\/sheetData>/,
-      `<sheetData><row r="1">${cells}</row></sheetData>`,
-    ),
-  );
-  return zipSync(files);
+  return patchParts(data, {
+    [SHEET1]: (xml) =>
+      xml.replace(
+        /<sheetData>[\s\S]*?<\/sheetData>/,
+        `<sheetData><row r="1">${cells}</row></sheetData>`,
+      ),
+  });
 }

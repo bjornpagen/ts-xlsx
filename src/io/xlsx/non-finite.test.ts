@@ -9,25 +9,11 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {type DefinedName, Workbook} from '../../core/workbook.ts';
-import {AuthoringError} from '../../errors.ts';
-import {partIn, partsWritten} from './package.test-support.ts';
+import type {DefinedName} from '../../core/workbook.ts';
+import {partIn, partsWritten, refuses, sheeted} from './package.test-support.ts';
 import {writeXlsx} from './write.ts';
 
 const UNWRITABLE = [Number.NaN, Infinity, -Infinity] as const;
-
-// A workbook needs a sheet with content before any of this is reached.
-function sheeted(): Workbook {
-  const workbook = new Workbook();
-  workbook.addWorksheet('S').getCell('A1').value = 1;
-  return workbook;
-}
-
-function refuses(mutate: (workbook: Workbook) => void): void {
-  const workbook = sheeted();
-  mutate(workbook);
-  assert.throws(() => writeXlsx(workbook), AuthoringError);
-}
 
 test('<pageSetup> refuses a non-finite scaling attribute', () => {
   for (const value of UNWRITABLE) {

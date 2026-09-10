@@ -3,7 +3,14 @@ import {test} from 'node:test';
 
 import type {CfValueObjectType} from '../../core/conditional-formatting.ts';
 import {Workbook} from '../../core/workbook.ts';
-import {partText, readPatched, roundtrip, SHEET1, sheetXml} from './package.test-support.ts';
+import {
+  elementIn,
+  partText,
+  readPatched,
+  roundtrip,
+  SHEET1,
+  sheetXml,
+} from './package.test-support.ts';
 import {readXlsx} from './read.ts';
 import {writeXlsx} from './write.ts';
 
@@ -25,7 +32,7 @@ test('a dataBar rule emits a well-formed block with two cfvo anchors and a bar c
     ],
   });
   const xml = sheetXml(writeXlsx(workbook));
-  const block = xml.match(/<conditionalFormatting[\s\S]*?<\/conditionalFormatting>/)?.[0] ?? '';
+  const block = elementIn(xml, /<conditionalFormatting[\s\S]*?<\/conditionalFormatting>/);
 
   assert.equal([...xml.matchAll(/<conditionalFormatting\b/g)].length, 1, 'one block');
   assert.match(block, /<dataBar>/);
@@ -63,7 +70,7 @@ test('a minimal dataBar (no cfvo, no colour) gains Excel default min/max anchors
   workbook
     .addWorksheet('S')
     .addConditionalFormatting({ref: 'A1:A3', rules: [{type: 'dataBar', priority: 1}]});
-  const block = sheetXml(writeXlsx(workbook)).match(/<dataBar[\s\S]*?<\/dataBar>/)?.[0] ?? '';
+  const block = elementIn(sheetXml(writeXlsx(workbook)), /<dataBar[\s\S]*?<\/dataBar>/);
 
   assert.equal(
     [...block.matchAll(/<cfvo\b/g)].length,
@@ -399,7 +406,7 @@ test('an iconSet rule emits its icon family and one cfvo per threshold', () => {
       },
     ],
   });
-  const block = sheetXml(writeXlsx(workbook)).match(/<iconSet[\s\S]*?<\/iconSet>/)?.[0] ?? '';
+  const block = elementIn(sheetXml(writeXlsx(workbook)), /<iconSet[\s\S]*?<\/iconSet>/);
 
   assert.match(block, /<iconSet iconSet="3TrafficLights1">/);
   assert.equal([...block.matchAll(/<cfvo\b/g)].length, 3, 'all three thresholds present');
@@ -440,7 +447,7 @@ test('an iconSet with no named family emits the element without an empty iconSet
     ref: 'A1:A3',
     rules: [{type: 'iconSet', priority: 1, cfvo: [{type: 'min'}, {type: 'max'}]}],
   });
-  const block = sheetXml(writeXlsx(workbook)).match(/<iconSet[\s\S]*?<\/iconSet>/)?.[0] ?? '';
+  const block = elementIn(sheetXml(writeXlsx(workbook)), /<iconSet[\s\S]*?<\/iconSet>/);
 
   assert.match(block, /^<iconSet>/, 'an absent family names no attribute at all');
   assert.doesNotMatch(block, /iconSet=""/);

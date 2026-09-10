@@ -286,8 +286,9 @@ test('commit to a valid filename writes a re-openable package to disk', async ()
   // Under the repo's own `.tmp/`, and a fresh directory rather than a name built from the process
   // id. A pid collides between two concurrent checkouts, and a throw before the `finally` leaves the
   // file in the system temp directory for good; `.tmp/` is git-ignored, inspectable, and swept.
-  const target = join(scratchDir('stream-commit'), 'out.xlsx');
+  const dir = scratchDir('stream-commit');
   try {
+    const target = join(dir, 'out.xlsx');
     const writer = new WorkbookStreamWriter({filename: target});
     writer.addWorksheet('S').addRow(['a']).commit();
     await writer.commit();
@@ -296,21 +297,26 @@ test('commit to a valid filename writes a re-openable package to disk', async ()
     assert.ok(reread);
     assert.equal(reread.getCell('A1').value, 'a');
   } finally {
-    rmSync(target, {force: true});
+    rmSync(dir, {recursive: true, force: true});
   }
 });
 
 test('commit to an unopenable filename rejects with the underlying I/O error rather than hanging', async () => {
   // A path whose parent directory does not exist cannot be opened for writing; the write stream errors
   // on a later tick and commit must surface it.
-  const badPath = join(scratchDir('stream-bad'), 'no-such-dir', `${'x'.repeat(300)}.xlsx`);
-  const writer = new WorkbookStreamWriter({filename: badPath});
-  writer.addWorksheet('S').addRow(['a']).commit();
+  const dir = scratchDir('stream-bad');
+  try {
+    const badPath = join(dir, 'no-such-dir', `${'x'.repeat(300)}.xlsx`);
+    const writer = new WorkbookStreamWriter({filename: badPath});
+    writer.addWorksheet('S').addRow(['a']).commit();
 
-  await assert.rejects(writer.commit(), (err: NodeJS.ErrnoException) => {
-    assert.match(String(err.code ?? err.message), /ENOENT|ENAMETOOLONG/);
-    return true;
-  });
+    await assert.rejects(writer.commit(), (err: NodeJS.ErrnoException) => {
+      assert.match(String(err.code ?? err.message), /ENOENT|ENAMETOOLONG/);
+      return true;
+    });
+  } finally {
+    rmSync(dir, {recursive: true, force: true});
+  }
 });
 
 test('supplying both a stream and a filename is rejected at construction', () => {

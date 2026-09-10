@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
-
 import {Workbook} from '../../core/workbook.ts';
-import {partText, roundtrip} from './package.test-support.ts';
+import {partText, patchParts, roundtrip} from './package.test-support.ts';
 import {readXlsx} from './read.ts';
 import {writeXlsx} from './write.ts';
 
@@ -109,9 +107,9 @@ test('a foreign name stored with _xlfn. reads back to its plain function name', 
   const wb = new Workbook();
   wb.addWorksheet('S').getCell('A1').value = 1;
   wb.defineName({name: 'Pick', refersTo: 'XLOOKUP(1,S!$A:$A,S!$B:$B)'});
-  const files = unzipSync(writeXlsx(wb));
-  assert.match(strFromU8(files['xl/workbook.xml'] as Uint8Array), /_xlfn\.XLOOKUP/);
-  const back = readXlsx(zipSync(files));
+  const pkg = writeXlsx(wb);
+  assert.match(partText(pkg, 'xl/workbook.xml'), /_xlfn\.XLOOKUP/);
+  const back = readXlsx(pkg);
   assert.equal(back.definedNames[0]?.refersTo, 'XLOOKUP(1,S!$A:$A,S!$B:$B)');
 });
 
@@ -129,13 +127,10 @@ test('a localSheetId pointing past the loaded sheets reads back as a global name
   const wb = new Workbook();
   wb.addWorksheet('S').getCell('A1').value = 1;
   wb.defineName({name: 'N', refersTo: 'S!$A$1'});
-  const files = unzipSync(writeXlsx(wb));
-  files['xl/workbook.xml'] = strToU8(
-    strFromU8(files['xl/workbook.xml'] as Uint8Array).replace(
-      '<definedName name="N">',
-      '<definedName name="N" localSheetId="9">',
-    ),
-  );
-  const back = readXlsx(zipSync(files));
+  const patched = patchParts(writeXlsx(wb), {
+    'xl/workbook.xml': (xml) =>
+      xml.replace('<definedName name="N">', '<definedName name="N" localSheetId="9">'),
+  });
+  const back = readXlsx(patched);
   assert.deepEqual([...back.definedNames], [{name: 'N', refersTo: 'S!$A$1'}]);
 });

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
+import {threadAt} from './comment-thread.test-support.ts';
 import type {CommentThread, Person} from './comment-thread.ts';
 import {INTERNAL} from './internal.ts';
 import {Workbook} from './workbook.ts';
@@ -19,21 +20,6 @@ const GRACE_MENTIONED: Person = {
   userId: 'S::grace@example.com::00000000-0000-0000-0000-000000000000',
   providerId: 'PeoplePicker',
 };
-
-// A distinct id per thread, in the only spelling the format accepts: brace-wrapped, upper-case, `8-4-4-4-12`
-// hex. A readable placeholder like `{HEAD-B2}` is not a legal id and the authoring path rejects it.
-let nextThread = 0;
-const threadAt = (ref: string): CommentThread => ({
-  ref,
-  resolved: false,
-  comments: [
-    {
-      id: `{${String(++nextThread).padStart(8, '0')}-0000-4000-8000-000000000000}`,
-      text: `about ${ref}`,
-      mentions: [],
-    },
-  ],
-});
 
 test('the person registry keeps both entries of one human, since only the id identifies one', () => {
   const wb = new Workbook();
