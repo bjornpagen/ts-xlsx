@@ -161,6 +161,13 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   character, and `'` before `[`, `]`, `#`, `'` and `@`. Formula scanning also honours that escape, so an
   escaped bracket no longer hides the rest of a formula from `_xlfn.` prefixing.
 
+- **An authored theme colour was stored as spelled, so it resolved to garbage.** `setTheme` checked a
+  colour and then kept the raw string: `#FF0000` read back from `themeColors` as `#FF0000` and
+  `resolveColor({theme: 4})` returned `FF#FF0000` (`FFNANNANNAN` with a tint), and `80FF0000` resolved
+  to ten digits. `themeColors` and `themeOverrides` now return six uppercase hexadecimal digits
+  whatever the authored spelling or the theme part's casing, and `resolveColor` resolves a
+  caller-built scheme slot that is not six hex digits to `undefined`.
+
 
 ## [3.1.0] — 2026-09-04
 

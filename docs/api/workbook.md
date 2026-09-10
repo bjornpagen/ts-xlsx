@@ -504,7 +504,8 @@ regenerating them would replace a designer's work with the Office default. For t
 slot left unauthored keeps the source's own encoding, including the `<a:sysClr>` form Excel uses
 for `dk1`/`lt1` so they follow the viewer's window colours.
 
-**Throws:** [`AuthoringError`](./errors.md#authoringerror) if a colour is not 6 or 8 hexadecimal digits.
+**Throws:** `SyntaxError` if a colour is not 6 or 8 hexadecimal digits, with or without a leading `#`.
+Every colour is read before any is stored, so a refused call changes nothing.
 
 #### `Workbook.themeColors`
 
@@ -517,6 +518,9 @@ The colour scheme every `theme="n"` reference in this workbook resolves against:
 
 Note the slot *order*: `theme="0"` is `lt1` and `theme="1"` is `dk1`, which is not the order the
 slots appear in the theme part. See [`THEME_COLOR_SLOTS`](./theme.md#themecolorslots).
+
+Every slot reads back as six uppercase hexadecimal digits, whichever spelling [`setTheme`](./workbook.md#workbooksettheme) was
+given or the theme part used.
 
 #### `Workbook.themeFonts`
 
@@ -598,7 +602,8 @@ none were, in which case the source theme (or the writer's default) rides throug
 
 A serializer composes these *over* the existing part rather than generating one from scratch, so
 a preserved theme keeps its format scheme, its unauthored slots' exact encoding, and the
-relationships it carries.
+relationships it carries. Its colours are already reduced to the six uppercase hexadecimal digits
+a slot holds.
 
 #### `Workbook.resolveColor`
 

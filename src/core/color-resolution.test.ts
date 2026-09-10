@@ -9,6 +9,16 @@ import {
 } from './color-resolution.ts';
 import {DEFAULT_THEME_COLOR_SCHEME, THEME_COLOR_SLOTS} from './theme.ts';
 
+// A scheme is public input to `resolveColor`, so a slot that is not six hex digits must resolve to
+// nothing: prefixing the opaque alpha onto it made `FF#FF0000` and the ten-digit `FF80FF0000`.
+test('a theme slot that is not six hex digits resolves to nothing', () => {
+  for (const accent1 of ['nothex', '#FF0000', '80FF0000', 'FF000']) {
+    assert.equal(resolveColor({theme: 4}, {theme: {accent1}}), undefined, accent1);
+    assert.equal(resolveColor({theme: 4, tint: 0.4}, {theme: {accent1}}), undefined, accent1);
+  }
+  assert.equal(resolveColor({theme: 4}, {theme: {accent1: 'ff0000'}}), 'FFFF0000');
+});
+
 test('an explicit argb resolves to itself, keeping its declared alpha', () => {
   assert.equal(resolveColor({argb: 'FF336699'}), 'FF336699');
   assert.equal(resolveColor({argb: '80336699'}), '80336699');

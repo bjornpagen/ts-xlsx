@@ -105,6 +105,11 @@ export interface ThemeOverrides {
   readonly fonts?: ThemeFontScheme | undefined;
 }
 
+/** Whether a value is the bare 6-hex RGB a theme colour slot holds, in either casing. */
+export function isThemeRgb(value: string): boolean {
+  return /^[0-9A-Fa-f]{6}$/.test(value);
+}
+
 /** Reduce an authored theme colour to the bare 6-hex RGB DrawingML wants.
  *
  * A theme colour is a bare 6-hex RGB: DrawingML has no alpha channel on `<a:srgbClr val>`. The two
@@ -125,7 +130,7 @@ export function normalizeThemeColor(value: string): string {
   const argb = parseArgb(value);
   if (argb === undefined) {
     throw new SyntaxError(
-      `invalid theme colour ${quoted(value)}: expected 6 hexadecimal digits (RRGGBB)`,
+      `invalid theme colour ${quoted(value)}: expected RRGGBB or AARRGGBB hexadecimal digits, optionally after '#'`,
     );
   }
   // DrawingML's `<a:srgbClr val>` has no alpha channel, so the two leading digits `parseArgb` adds

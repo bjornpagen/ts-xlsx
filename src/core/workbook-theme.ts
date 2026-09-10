@@ -81,10 +81,17 @@ export class WorkbookTheme {
   }
 
   author(overrides: ThemeOverrides): void {
-    // Validated eagerly rather than at write time: a colour the writer would reject surfaces far
-    // from the call that supplied it, and by then the caller has moved on.
-    for (const value of Object.values(overrides.colors ?? {})) normalizeThemeColor(value);
-    Object.assign(this.#authored.colors, overrides.colors ?? {});
+    // Normalised eagerly rather than at write time: a colour the writer would reject surfaces far
+    // from the call that supplied it, and a slot stored as spelled reached `themeColors` and colour
+    // resolution raw, where `#FF0000` resolved to `FF#FF0000`. Every colour is read before any is
+    // stored, so a refused call leaves the scheme as it was.
+    const colors = Object.fromEntries(
+      Object.entries(overrides.colors ?? {}).map(([slot, value]) => [
+        slot,
+        normalizeThemeColor(value),
+      ]),
+    );
+    Object.assign(this.#authored.colors, colors);
     this.#authored.fonts = {...this.#authored.fonts, ...overrides.fonts};
   }
 

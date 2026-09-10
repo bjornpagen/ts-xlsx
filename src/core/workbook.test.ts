@@ -286,6 +286,36 @@ test('a colour resolved through the theme follows a later setTheme', () => {
   assert.equal(wb.resolveColor({theme: 4}), 'FF112233', 'theme="4" is accent1');
 });
 
+// setTheme validated a colour and then stored it as spelled, so `#FF0000` read back raw from
+// themeColors and resolved to `FF#FF0000`, and `80FF0000` resolved to a ten-digit colour.
+test('an authored theme colour is stored in the one spelling a slot holds', () => {
+  const wb = new Workbook();
+  wb.setTheme({colors: {accent1: '#FF0000', accent2: '80336699', accent3: 'aabbcc'}});
+  assert.equal(wb.themeColors.accent1, 'FF0000');
+  assert.equal(wb.themeColors.accent2, '336699');
+  assert.equal(wb.themeColors.accent3, 'AABBCC');
+  assert.deepEqual(wb.themeOverrides?.colors, {
+    accent1: 'FF0000',
+    accent2: '336699',
+    accent3: 'AABBCC',
+  });
+  assert.equal(wb.resolveColor({theme: 4}), 'FFFF0000');
+  assert.equal(wb.resolveColor({theme: 5}), 'FF336699');
+  assert.match(wb.resolveColor({theme: 4, tint: 0.4}) ?? '', /^FF[0-9A-F]{6}$/);
+});
+
+test('setTheme refuses a colour it cannot read, natively and without storing any of the call', () => {
+  const wb = new Workbook();
+  // Native, not the library's taxonomy: one string that does not parse. An `XlsxError` subclass is
+  // not a `SyntaxError`, so a later re-wrap reddens this rather than changing what a caller catches.
+  assert.throws(
+    () => wb.setTheme({colors: {accent1: '112233', accent2: 'rebeccapurple'}}),
+    (error: unknown) => error instanceof SyntaxError,
+  );
+  assert.equal(wb.themeColors.accent1, '4472C4', 'the readable colour beside it was not stored');
+  assert.equal(wb.themeOverrides, undefined);
+});
+
 test('activeTabIndex resolves a tab against the sheets that exist', () => {
   const wb = new Workbook();
   for (const name of ['One', 'Two', 'Three']) wb.addWorksheet(name);

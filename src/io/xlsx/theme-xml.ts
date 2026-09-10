@@ -17,7 +17,7 @@ import type {AssertNever} from '../../core/internal.ts';
 import {
   DEFAULT_THEME_COLOR_SCHEME,
   isThemeColorSlot,
-  normalizeThemeColor,
+  isThemeRgb,
   type ThemeColorScheme,
   type ThemeColorSlot,
   type ThemeFontScheme,
@@ -90,7 +90,7 @@ function readThemeScheme(themeXml: string): ThemeScheme {
           // the concrete value the authoring application last resolved that name to, and is the only
           // thing here a consumer without the same OS theme can use.
           const value = local === 'sysClr' ? attrs.lastClr : attrs.val;
-          if (value !== undefined && /^[0-9a-fA-F]{6}$/.test(value)) colors[slot] = value;
+          if (value !== undefined && isThemeRgb(value)) colors[slot] = value.toUpperCase();
           elements[slot] = emptyElement(name, attrs);
           slot = undefined;
         }
@@ -224,7 +224,7 @@ export function applyThemeOverrides(baseXml: string, overrides: ThemeOverrides):
         const authored = colors[slot];
         const inner =
           authored !== undefined
-            ? `<${prefix}srgbClr val="${normalizeThemeColor(authored)}"/>`
+            ? `<${prefix}srgbClr val="${authored}"/>`
             : (sourceElements[slot] ??
               `<${prefix}srgbClr val="${DEFAULT_THEME_COLOR_SCHEME[slot]}"/>`);
         return `<${prefix}${slot}>${inner}</${prefix}${slot}>`;

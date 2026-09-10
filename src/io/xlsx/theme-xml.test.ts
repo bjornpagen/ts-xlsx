@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {XlsxError} from '../../errors.ts';
 import {
   applyThemeOverrides,
   DEFAULT_THEME_XML,
@@ -61,27 +60,12 @@ test('a typeface carrying an entity reads back decoded, matching what the writer
 });
 
 test('applyThemeOverrides replaces only the slots the caller named', () => {
-  const xml = applyThemeOverrides(DEFAULT_THEME_XML, {colors: {accent1: '#BB2649'}});
+  const xml = applyThemeOverrides(DEFAULT_THEME_XML, {colors: {accent1: 'BB2649'}});
   assert.ok(xml.includes('<a:accent1><a:srgbClr val="BB2649"/></a:accent1>'));
   assert.ok(xml.includes('<a:accent2><a:srgbClr val="ED7D31"/></a:accent2>'), 'the rest stand');
   // dk1/lt1 are sysClr in the source; re-serialising them as srgbClr would pin them to one machine.
   assert.ok(xml.includes('<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>'));
   assert.ok(xml.includes('<a:fmtScheme'), 'and the format scheme is untouched');
-});
-
-test('applyThemeOverrides refuses a colour that is not a hex triplet', () => {
-  // Native, not the library's taxonomy: one string that does not parse. Asserted both ways so a
-  // later well-meaning re-wrap reddens the suite instead of quietly changing what a caller catches.
-  assert.throws(
-    () => applyThemeOverrides(DEFAULT_THEME_XML, {colors: {accent1: 'rebeccapurple'}}),
-    {
-      name: 'SyntaxError',
-    },
-  );
-  assert.throws(
-    () => applyThemeOverrides(DEFAULT_THEME_XML, {colors: {accent1: 'rebeccapurple'}}),
-    (error: unknown) => !(error instanceof XlsxError),
-  );
 });
 
 test('an authored typeface is escaped into the attribute, every character of it', () => {
@@ -126,7 +110,7 @@ test('a </clrScheme> inside a comment does not end the block the override replac
     '<a:dk1><a:srgbClr val="111111"/></a:dk1>' +
     '</a:clrScheme>' +
     '</a:theme>';
-  const xml = applyThemeOverrides(source, {colors: {accent1: '#BB2649'}});
+  const xml = applyThemeOverrides(source, {colors: {accent1: 'BB2649'}});
   assert.equal(xml.match(/<a:dk1>/g)?.length, 1, 'the real dk1 was replaced, not duplicated');
   assert.ok(!xml.includes('was </a:clrScheme> before'), 'the comment went with the block body');
   assert.ok(xml.includes('<a:accent1><a:srgbClr val="BB2649"/></a:accent1>'));
@@ -164,6 +148,6 @@ test('a DrawingML prefix carrying regex metacharacters is matched literally', ()
     '<a.b:theme xmlns:a.b="http://schemas.openxmlformats.org/drawingml/2006/main">' +
     '<a.b:clrScheme name="X"><a.b:dk1><a.b:srgbClr val="111111"/></a.b:dk1></a.b:clrScheme>' +
     '</a.b:theme>';
-  const xml = applyThemeOverrides(source, {colors: {accent1: '#BB2649'}});
+  const xml = applyThemeOverrides(source, {colors: {accent1: 'BB2649'}});
   assert.ok(xml.includes('<a.b:accent1><a.b:srgbClr val="BB2649"/></a.b:accent1>'));
 });

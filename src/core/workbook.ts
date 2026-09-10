@@ -512,7 +512,8 @@ export class Workbook {
    * slot left unauthored keeps the source's own encoding, including the `<a:sysClr>` form Excel uses
    * for `dk1`/`lt1` so they follow the viewer's window colours.
    *
-   * @throws {AuthoringError} if a colour is not 6 or 8 hexadecimal digits.
+   * @throws {SyntaxError} if a colour is not 6 or 8 hexadecimal digits, with or without a leading `#`.
+   *   Every colour is read before any is stored, so a refused call changes nothing.
    */
   setTheme(overrides: ThemeOverrides): void {
     this.#theme.author(overrides);
@@ -524,6 +525,9 @@ export class Workbook {
    *
    * Note the slot *order*: `theme="0"` is `lt1` and `theme="1"` is `dk1`, which is not the order the
    * slots appear in the theme part. See {@link THEME_COLOR_SLOTS}.
+   *
+   * Every slot reads back as six uppercase hexadecimal digits, whichever spelling {@link setTheme} was
+   * given or the theme part used.
    */
   get themeColors(): ThemeColorScheme {
     return this.#theme.colors;
@@ -640,7 +644,8 @@ export class Workbook {
    *
    * A serializer composes these *over* the existing part rather than generating one from scratch, so
    * a preserved theme keeps its format scheme, its unauthored slots' exact encoding, and the
-   * relationships it carries.
+   * relationships it carries. Its colours are already reduced to the six uppercase hexadecimal digits
+   * a slot holds.
    */
   get themeOverrides(): ThemeOverrides | undefined {
     return this.#theme.overrides;

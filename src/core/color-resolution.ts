@@ -12,7 +12,12 @@
 
 import {hex} from '../hex.ts';
 import {type Color, parseArgb} from './style.ts';
-import {DEFAULT_THEME_COLOR_SCHEME, THEME_COLOR_SLOTS, type ThemeColorScheme} from './theme.ts';
+import {
+  DEFAULT_THEME_COLOR_SCHEME,
+  isThemeRgb,
+  THEME_COLOR_SLOTS,
+  type ThemeColorScheme,
+} from './theme.ts';
 
 /**
  * The built-in indexed colour palette (ECMA-376 §18.8.27), by index. Entries 0–7 duplicate 8–15, a
@@ -98,7 +103,10 @@ function resolveBase(color: Color, context: ColorResolutionContext): string | un
     const slot = THEME_COLOR_SLOTS[color.theme];
     if (slot === undefined) return undefined;
     const value = (context.theme ?? DEFAULT_THEME_COLOR_SCHEME)[slot];
-    return value === undefined ? undefined : `FF${value.toUpperCase()}`;
+    // A caller-built scheme reaches here unchecked, so the slot is read by the theme reader's grammar
+    // rather than trusted: prefixing the opaque alpha onto `#FF0000` or an 8-hex value made `FF#FF0000`
+    // and a ten-digit colour.
+    return value !== undefined && isThemeRgb(value) ? `FF${value.toUpperCase()}` : undefined;
   }
   if (color.indexed !== undefined) {
     if (SYSTEM_INDEXED_COLORS.has(color.indexed)) return undefined;
