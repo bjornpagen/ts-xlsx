@@ -260,22 +260,25 @@ export function pageSetupXml(pageSetup: PageSetup, printerSettingsRelId: string 
   return attrs === '' ? '' : `<pageSetup${attrs}/>`;
 }
 
-// Manual page breaks (`<rowBreaks>`/`<colBreaks>`): one `<brk>` per row/column the layout splits
-// before. Excel records both the running total (`count`) and the manual subset (`manualBreakCount`);
-// every break the model carries is a manual, author-set one, so the two counts coincide. `max` bounds
-// the break across the other axis (Excel writes the last row/column index); a break without one is
-// emitted bare. Row and column breaks share this shape, differing only in the wrapping element.
+// Page breaks (`<rowBreaks>`/`<colBreaks>`): one `<brk>` per break, attributes in CT_Break's order.
+// Excel records the running total (`count`) and the manual subset (`manualBreakCount`), and the second
+// counts only breaks carrying `man`. A break a file declared automatic is written back without it; one
+// authored with no `man` at all is manual, since a caller pushing `{id: 3}` asked for a break and Excel
+// stores no other kind. Row and column breaks share this shape, differing only in the wrapping element.
 export function pageBreaksXml(
   breaks: readonly PageBreak[],
   element: 'rowBreaks' | 'colBreaks',
 ): string {
   if (breaks.length === 0) return '';
+  const manual = breaks.filter((brk) => brk.man !== false).length;
   const brks = breaks
-    .map((brk) => {
-      return `<brk${numAttr('id', brk.id)}${numAttr('max', brk.max)} man="1"/>`;
-    })
+    .map(
+      (brk) =>
+        `<brk${numAttr('id', brk.id)}${numAttr('min', brk.min)}${numAttr('max', brk.max)}` +
+        `${brk.man === false ? '' : ' man="1"'}/>`,
+    )
     .join('');
-  return `<${element} count="${breaks.length}" manualBreakCount="${breaks.length}">${brks}</${element}>`;
+  return `<${element} count="${breaks.length}" manualBreakCount="${manual}">${brks}</${element}>`;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -355,10 +358,16 @@ export class PageBreakAccumulator {
     if (this.#target === null) return;
     const id = numInteger(attrs.id, 1);
     if (id === undefined) return;
-    const brk: {id: number; max?: number; man?: boolean} = {id};
+    // `man` is recorded either way: a break the file left automatic has to stay automatic on write,
+    // which an absent flag could not tell from a caller who never said.
+    const brk: {id: number; min?: number; max?: number; man: boolean} = {
+      id,
+      man: boolStrict(attrs.man),
+    };
+    const min = numInteger(attrs.min, 0);
+    if (min !== undefined) brk.min = min;
     const max = numInteger(attrs.max, 0);
     if (max !== undefined) brk.max = max;
-    if (boolStrict(attrs.man)) brk.man = true;
     this.#target.push(brk);
   }
 }

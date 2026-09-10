@@ -116,7 +116,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // larger file does not is its import statements and its export keywords, which came to about
   // 2.4 KB across the four. Paying that for four seams is the trade this project takes; noticing it
   // is what the tripwire is for.
-  './node': 413,
+  //
+  // Raised again, from 413, when page breaks joined the splice participants and kept their manual
+  // flag through a save. The model this entry writes carries `core/grid-edits.ts`, and the new step
+  // put it 0.7 KB over; the new figure restores the headroom against today's measurement.
+  './node': 415,
   // Raised from 50 when the MS-OVBA encoder stopped rescanning its whole back-window for every
   // output byte. The hash chain that replaced the rescan is the cost, and it buys a time bound on a
   // path an untrusted `.xlsm` reaches through `removeVbaModule`; the CFB and `dir` guards landed

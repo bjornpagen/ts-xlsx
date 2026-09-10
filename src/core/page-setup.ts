@@ -146,17 +146,26 @@ export type EveryPrintOptionFlagIsDeclared = AssertNever<
 >;
 
 /**
- * A manual page break (`<brk>`). For a row break, `id` is the row the layout splits *before*; for a
- * column break it is the column. `max` bounds the break's extent across the other axis (Excel writes
- * the last row/column index) and `man` marks it author-set rather than automatic. The model preserves
- * whatever the source carried so a round-trip reproduces the break's span exactly.
+ * A page break (`<brk>`). It falls after line `id` and before line `id + 1`, rows for a row break and
+ * columns for a column break, which is how Excel counts it: a break Excel shows above row 20 is saved
+ * as `id="19"`. `min` and `max` bound its extent across the other axis, zero-based, and Excel writes
+ * only the whole axis (`max` 16383 for a row break). `man` marks an author-set break rather than one
+ * a producer recorded as automatic. The model keeps whatever the source carried.
+ *
+ * A row or column splice moves a break with the line after it and drops the break when that line is
+ * deleted, which is what Excel Desktop does: driven over COM, a manual break above row 10 moved above
+ * row 11 when a row was inserted at row 1, and went away when row 11 was then deleted, and a column
+ * break moved the same way. The extent is not moved, because the only one Excel writes is the whole
+ * axis, and a splice should leave that whole rather than shorten it by the lines it removed.
  */
 export interface PageBreak {
-  /** The row (or column) the break precedes. */
+  /** The last row (or column) before the break. */
   readonly id: number;
-  /** The break's far extent across the other axis, if the source declared one. */
+  /** The break's near extent across the other axis, zero-based, if the source declared one. */
+  readonly min?: number;
+  /** The break's far extent across the other axis, zero-based, if the source declared one. */
   readonly max?: number;
-  /** `true` when the break is manual (author-set); Excel-authored breaks always are. */
+  /** Whether the break is manual. A break without it is written as a manual one: Excel stores no other kind. */
   readonly man?: boolean;
 }
 

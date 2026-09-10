@@ -118,6 +118,15 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   re-read put an empty link on `D1`. A hyperlink's `range` and a data table's `ref`, `r1` and `r2` now
   move with the cell, as a shared-formula clone's master address already did.
 
+- **An automatic page break was saved as a manual one, and page breaks stayed put through a splice.**
+  The writer marked every `<brk>` `man="1"` and counted all of them as manual, and the reader dropped
+  `min`, so a producer's automatic breaks hardened into author-set ones on the first save. Breaks now
+  keep `man` and `min`, and a break authored without `man` is still written as manual. `rowBreaks` and
+  `columnBreaks` also sat outside the row and column splices, so inserting a row above a break left it
+  on the old line; a break now moves with the line after it and goes when that line is deleted, as
+  Excel does. The `PageBreak` documentation said a break precedes line `id`, where Excel counts `id`
+  as the last line before the break (a break above row 20 is `id: 19`); it now says so.
+
 
 ## [3.1.0] — 2026-09-04
 

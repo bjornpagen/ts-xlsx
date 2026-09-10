@@ -78,6 +78,30 @@ test("a data table's filled range and input cells move with inserts above and to
   });
 });
 
+// A page break falls between line `id` and the line after it, and Excel moves it with that later line:
+// a break above row 10 moved above row 11 when a row was inserted at row 1, and went when row 11 was
+// deleted. Breaks sat outside the splice, so a printout split in the wrong place after any insert.
+test('a page break moves with the line after it, and goes when that line is deleted', () => {
+  const sheet = new Workbook().addWorksheet('S');
+  sheet.getCell('A10').value = 'section 2';
+  sheet.rowBreaks.push({id: 9, max: 16383, man: true});
+  sheet.columnBreaks.push({id: 4, max: 1048575, man: true});
+
+  sheet.insertRow(1, []);
+  sheet.insertColumn(1, []);
+  assert.equal(sheet.getCell('B11').value, 'section 2');
+  assert.deepEqual(sheet.rowBreaks, [{id: 10, max: 16383, man: true}]);
+  assert.deepEqual(sheet.columnBreaks, [{id: 5, max: 1048575, man: true}]);
+
+  sheet.spliceRows(11, 1);
+  assert.deepEqual(sheet.rowBreaks, []);
+  assert.deepEqual(
+    sheet.columnBreaks,
+    [{id: 5, max: 1048575, man: true}],
+    'a row delete leaves the column breaks where they are',
+  );
+});
+
 test('an insert above carries every range-bound overlay down with the cells it covers', () => {
   const sheet = anchoredSheet();
   sheet.insertRow(1, ['hdr']);

@@ -20,7 +20,7 @@ import {
   writeXlsx,
 } from './runtime.ts';
 import {buildFrom, normalizeStreamValue, ONE_PX_PNG, printAreaRefersTo} from './spec-model.ts';
-import {reloadPatched} from './xml-probes.ts';
+import {attrsOf, reloadPatched} from './xml-probes.ts';
 
 export const grid = {
   cellColRowTypes(ref = 'B3') {
@@ -590,6 +590,44 @@ export const grid = {
     const loadedBreaks = modelBreaks(loaded);
     const rewrittenBreaks = modelBreaks(roundtrip(loaded));
     return {sourceBreaks, loadedBreaks, rewrittenBreaks};
+  },
+
+  // Patch a written sheet with one manual row break and one automatic row break carrying a `min`, read
+  // it, and write it again → { read, rewritten }: `read` is the model's breaks as plain objects, and
+  // `rewritten` is the second write's `<rowBreaks>` `{count, manualBreakCount}` beside each `<brk>`'s
+  // `{id, min, max, man}` attributes, an absent attribute reported as null.
+  pageBreakKindsReport() {
+    const wb = new Workbook();
+    wb.addWorksheet('S').getCell('A1').value = 'x';
+    const breaks =
+      '<rowBreaks count="2" manualBreakCount="1">' +
+      '<brk id="3" max="16383" man="1"/><brk id="7" min="2" max="16383"/></rowBreaks>';
+    const read = reloadPatched(writeXlsx(wb), {
+      'xl/worksheets/sheet1.xml': (xml) => xml.replace('</worksheet>', `${breaks}</worksheet>`),
+    });
+    const section =
+      (partMapOf(writeXlsx(read))['xl/worksheets/sheet1.xml'] ?? '').match(
+        /<rowBreaks\b[^>]*>[\s\S]*?<\/rowBreaks>/,
+      )?.[0] ?? '<rowBreaks>';
+    const container = attrsOf(section.match(/<rowBreaks\b[^>]*>/)?.[0] ?? '<rowBreaks>');
+    return {
+      read: (read.getWorksheet('S')?.rowBreaks ?? []).map((brk) => ({...brk})),
+      rewritten: {
+        counts: {
+          count: container.count ?? null,
+          manualBreakCount: container.manualBreakCount ?? null,
+        },
+        breaks: [...section.matchAll(/<brk\b[^>]*\/>/g)].map(([element]) => {
+          const attrs = attrsOf(element);
+          return {
+            id: attrs.id ?? null,
+            min: attrs.min ?? null,
+            max: attrs.max ?? null,
+            man: attrs.man ?? null,
+          };
+        }),
+      },
+    };
   },
 
   // Merge A1:B3 with values only in A1/A2, round-trip, then iterate every used-range position

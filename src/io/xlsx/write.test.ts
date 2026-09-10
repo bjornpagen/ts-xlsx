@@ -1243,6 +1243,30 @@ test('manual row breaks are emitted as <rowBreaks> and round-trip', () => {
   );
 });
 
+// Every break was written `man="1"` and counted as manual, so one save hardened a producer's automatic
+// breaks into author-set ones; `min` was dropped on read.
+test('an automatic break stays automatic, and manualBreakCount counts manual breaks only', () => {
+  const wb = new Workbook();
+  const sheet = wb.addWorksheet('S');
+  sheet.getCell('A1').value = 'x';
+  sheet.rowBreaks.push(
+    {id: 3, max: 16383, man: true},
+    {id: 6, min: 2, max: 16383, man: false},
+    {id: 9},
+  );
+
+  const xml = partIn(partsOf(wb), 'xl/worksheets/sheet1.xml');
+  assert.match(xml, /<rowBreaks count="3" manualBreakCount="2">/);
+  assert.match(xml, /<brk id="6" min="2" max="16383"\/>/, 'the automatic break carries no man');
+  assert.match(xml, /<brk id="9" man="1"\/>/, 'a break authored without man is a manual one');
+
+  assert.deepEqual(roundtrip(wb).getWorksheet('S')?.rowBreaks, [
+    {id: 3, max: 16383, man: true},
+    {id: 6, min: 2, max: 16383, man: false},
+    {id: 9, man: true},
+  ]);
+});
+
 test('a sheet with no manual row breaks emits no <rowBreaks> element', () => {
   const wb = new Workbook();
   wb.addWorksheet('S').getCell('A1').value = 'x';

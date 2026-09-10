@@ -363,9 +363,10 @@ Page header/footer text. Mutate in place: `sheet.headerFooter.oddHeader = '&C&".
 readonly rowBreaks: PageBreak[] = [];
 ```
 
-Manual horizontal page breaks (`<rowBreaks>`): each break's `id` is a row the print layout splits
-before. Mutate in place: `sheet.rowBreaks.push({id: 3})`. Empty means no manual row breaks and the
-writer emits no `<rowBreaks>` element.
+Horizontal page breaks (`<rowBreaks>`): each break's `id` is the last row before it, so
+`sheet.rowBreaks.push({id: 3})` starts a new printed page at row 4. Mutate in place. A row splice
+moves a break with the row after it. Empty means no row breaks and the writer emits no
+`<rowBreaks>` element.
 
 #### `Worksheet.columnBreaks`
 
@@ -373,9 +374,10 @@ writer emits no `<rowBreaks>` element.
 readonly columnBreaks: PageBreak[] = [];
 ```
 
-Manual vertical page breaks (`<colBreaks>`): each break's `id` is a column the print layout splits
-before. Mutate in place: `sheet.columnBreaks.push({id: 3})`. Empty means no manual column breaks and
-the writer emits no `<colBreaks>` element.
+Vertical page breaks (`<colBreaks>`): each break's `id` is the last column before it, so
+`sheet.columnBreaks.push({id: 3})` starts a new printed page at column D. Mutate in place. A column
+splice moves a break with the column after it. Empty means no column breaks and the writer emits
+no `<colBreaks>` element.
 
 #### `Worksheet.getCell`
 

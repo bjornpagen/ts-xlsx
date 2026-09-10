@@ -1,9 +1,9 @@
 // Structural-edit machinery: the splice arithmetic that inserts or deletes whole rows and columns
-// and keeps everything anchored to the grid moving in step: line metadata, merged ranges, tables,
-// anchored images, the coordinates a cell's value carries, and the range-bound overlays (data
-// validations, conditional formats, comment threads, the autofilter). It is isolated from Worksheet
-// because it is pure grid mechanics: it holds the sheet's storage containers by reference and mutates
-// them in place, and touches none of the public cell API. Worksheet builds the cells an insert introduces, then hands
+// and keeps everything anchored to the grid moving in step: line metadata and page breaks, merged
+// ranges, tables, anchored images, the coordinates a cell's value carries, and the range-bound
+// overlays (data validations, conditional formats, comment threads, the autofilter). It is isolated
+// from Worksheet because it is pure grid mechanics: it holds the sheet's storage containers by
+// reference and mutates them in place, and touches none of the public cell API. Worksheet builds the cells an insert introduces, then hands
 // the pre-built rows (or the raw column values) here for the shift.
 
 import {
@@ -23,6 +23,7 @@ import type {DataValidationOverlay} from './data-validation-overlay.ts';
 import {type AxisSplice, isDeletedSpan, shiftIndex, shiftPoint, shiftRect} from './grid-shift.ts';
 import {type AnchoredImage, type AnchorPoint, type ImageAnchor, isOneCellAnchor} from './image.ts';
 import type {MergeRect} from './merge.ts';
+import type {PageBreak} from './page-setup.ts';
 import {positionalPlacements} from './row-input.ts';
 import type {Table} from './table.ts';
 import {
@@ -56,6 +57,8 @@ interface GridStorage {
   readonly dataValidations: DataValidationOverlay;
   readonly conditionalFormattings: ConditionalFormattingOverlay;
   readonly comments: WorksheetComments;
+  readonly rowBreaks: PageBreak[];
+  readonly columnBreaks: PageBreak[];
   readonly autoFilter: AutoFilterSlot;
 }
 
@@ -69,6 +72,8 @@ export class GridEdits {
   readonly #dataValidations: DataValidationOverlay;
   readonly #conditionalFormattings: ConditionalFormattingOverlay;
   readonly #comments: WorksheetComments;
+  readonly #rowBreaks: PageBreak[];
+  readonly #columnBreaks: PageBreak[];
   readonly #autoFilter: AutoFilterSlot;
 
   constructor(storage: GridStorage) {
@@ -81,6 +86,8 @@ export class GridEdits {
     this.#dataValidations = storage.dataValidations;
     this.#conditionalFormattings = storage.conditionalFormattings;
     this.#comments = storage.comments;
+    this.#rowBreaks = storage.rowBreaks;
+    this.#columnBreaks = storage.columnBreaks;
     this.#autoFilter = storage.autoFilter;
   }
 
@@ -176,6 +183,7 @@ export class GridEdits {
   // a participant is added once and cannot be moved on one axis and forgotten on the other.
   #shiftAnchored<T>(splice: AxisSplice, lineProperties: Map<number, T>): void {
     this.#shiftLineProperties(lineProperties, splice);
+    this.#shiftPageBreaks(splice);
     this.#shiftMerges(splice);
     this.#shiftTables(splice);
     this.#shiftImages(splice);
@@ -245,6 +253,21 @@ export class GridEdits {
     }
     map.clear();
     for (const [index, value] of shifted) map.set(index, value);
+  }
+
+  // Re-anchor the page breaks on the spliced axis. A break falls between line `id` and the line after
+  // it and belongs to that later line, the one Excel reports as its location: the break moves with it,
+  // and a delete of that line takes the break too, which is what Excel does to both. Breaks on the
+  // other axis keep their `id`; `PageBreak` says why their extent is not moved either.
+  #shiftPageBreaks(splice: AxisSplice): void {
+    const breaks = splice.axis === 'row' ? this.#rowBreaks : this.#columnBreaks;
+    const moved = breaks.flatMap((brk) => {
+      const line = brk.id + 1;
+      if (isDeletedSpan(line, line, splice)) return [];
+      const id = shiftIndex(line, splice) - 1;
+      return [id === brk.id ? brk : {...brk, id}];
+    });
+    replaceContents(breaks, moved);
   }
 
   // Re-anchor merged ranges through a row or column splice. A range wholly before the edit is
