@@ -23,7 +23,9 @@ export interface RowPosition {
   /**
    * Whether that number names a row the grid has. A row past the ceiling is dropped whole by both
    * readers rather than clamped: an `r` names one row, so there is nothing to fold it onto, and
-   * clamping would silently move its formatting to the last row of the sheet.
+   * clamping would silently move its formatting to the last row of the sheet. Its cells go with it,
+   * even one whose own `r` is in the grid, because `CellAccumulator` places no cell outside an
+   * in-grid row.
    */
   readonly inGrid: boolean;
 }

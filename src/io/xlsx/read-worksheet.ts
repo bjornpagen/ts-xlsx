@@ -26,7 +26,7 @@ import {ColumnRecordBudget} from '../read-policy/column-budget.ts';
 import {admitting} from '../read-policy/read-repair.ts';
 import {CellStyleResolver} from '../style/cell-style-resolution.ts';
 import type {XfStyle} from '../style/xf-style.ts';
-import {CellAccumulator} from './cell-accumulator.ts';
+import {CellAccumulator, WORKSHEET_BODY_EMPTY_CLOSES} from './cell-accumulator.ts';
 import type {SharedString} from './cell-value.ts';
 import {takeColumnSpan} from './column-span.ts';
 import {RowPositionTracker} from './row-position.ts';
@@ -45,10 +45,12 @@ function isHeaderFooterElement(local: string): local is (typeof HEADER_FOOTER_EL
   return HEADER_FOOTER_CHILDREN.has(local);
 }
 
-// Worksheet elements that commit on their close: a formatted-but-empty `<c/>` and a criteria-free
-// self-closing `<autoFilter/>` are expanded to open+close so each finalises once in onClose. The
-// text-bearing `<f/>`/`<v/>`/`<t/>` are deliberately excluded: an empty one must not commit.
-const WORKSHEET_EMPTY_CLOSES: ReadonlySet<string> = new Set(['c', 'autoFilter']);
+// The body elements both readers expand to open+close, plus a criteria-free self-closing
+// `<autoFilter/>`, which this reader also commits from its close.
+const WORKSHEET_EMPTY_CLOSES: ReadonlySet<string> = new Set([
+  ...WORKSHEET_BODY_EMPTY_CLOSES,
+  'autoFilter',
+]);
 
 // Fold a filter column's accumulated `<filters>` or `<customFilters>` state into one criteria value,
 // or null when it carried nothing filterable. A `<filters>` block with no values and no blank flag,
@@ -223,10 +225,10 @@ export function worksheetPass(
         case 'row': {
           const {number, inGrid} = rowPosition.open(attrs);
           if (inGrid) applyRow(sheet, number, attrs);
-          // The cell machine is told where it is whether or not the row is in the grid: it keeps
+          // The cell machine is told about the row whether or not it is in the grid: it keeps
           // reading the row's cells either way (that is what keeps it in step with the element
-          // stream), and a positional `<c>` still has to resolve against a row number.
-          cell.openRow(inGrid ? number : -1);
+          // stream), and it is the one that declines to place them when the row is past the grid.
+          cell.openRow(number, inGrid);
           styleResolution.openRow(numInteger(attrs.s, 0) ?? -1, boolStrict(attrs.customFormat));
           break;
         }
@@ -315,6 +317,7 @@ export function worksheetPass(
       switch (local) {
         case 'row':
           styleResolution.closeRow();
+          cell.closeRow();
           break;
         case 'filterColumn':
           autoFilter.endColumn();

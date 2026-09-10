@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
+import {MAX_ROW} from '../../core/address.ts';
 import {isFormulaValue} from '../../core/value.ts';
 import {Workbook} from '../../core/workbook.ts';
 import {patchParts, SHEET1, sheetXml} from './package.test-support.ts';
@@ -123,6 +124,22 @@ test('a formula whose cached <v> is unparseable keeps its formula and caches not
 
   const streamed = [...readSheetRows(patched)][0]?.cells ?? [];
   assert.deepEqual(streamed[0]?.value, {formula: 'B1*2'}, 'and the two readers agree');
+});
+
+// A row past the grid is dropped by both readers, cells included: the streamer dropped them, and the
+// buffered reader placed one whose own `r` was in the grid.
+test('buffered and streamed reads agree that a row past the grid places no cell', () => {
+  const book = new Workbook();
+  book.addWorksheet('S').getCell('A1').value = 1;
+  const data = patchParts(writeXlsx(book), {
+    [SHEET1]: (xml) =>
+      xml.replace(
+        /<sheetData>[\s\S]*?<\/sheetData>/,
+        `<sheetData><row r="${MAX_ROW + 1}"><c r="A5"><v>9</v></c></row></sheetData>`,
+      ),
+  });
+  assert.equal(readXlsx(data).getWorksheet('S')?.getCell('A5').value, null, 'buffered');
+  assert.deepEqual([...readSheetRows(data)], [], 'streamed');
 });
 
 // Replace the whole `<sheetData>` body of the first worksheet part with one authored row.

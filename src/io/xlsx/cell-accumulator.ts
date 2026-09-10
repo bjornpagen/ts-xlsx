@@ -45,12 +45,23 @@ interface DataTableDeclaration {
   r2: string | undefined;
 }
 
+/**
+ * The worksheet-body elements both readers expand from `<x/>` into an open and a close, so each
+ * commits from its close alone. A formatted-but-empty `<c/>` finalises once there, and a self-closing
+ * `<row/>` closes its row, where the streamer yields it and both readers end its style and its cells:
+ * a producer may write `<row r="2" hidden="1"/>`, and with no close the streamer lost the row and its
+ * `hidden` flag. The text-bearing `<f/>`/`<v/>`/`<t/>` stay out, so an empty one never commits text.
+ */
+export const WORKSHEET_BODY_EMPTY_CLOSES: ReadonlySet<string> = new Set(['c', 'row']);
+
 export class CellAccumulator {
   #ref = '';
   #type = '';
   #style = -1;
   #col = -1;
   #row = -1;
+  // Whether an in-grid `<row>` is open, the only place a cell can be placed.
+  #rowOpen = false;
   // Where a `<c>` with no `r` of its own sits: the column after the last one placed in this row.
   #nextCol = 1;
   #formula = '';
@@ -100,11 +111,25 @@ export class CellAccumulator {
 
   /**
    * Open a `<row>`: the cells that follow belong to it, and the next one with no `r` of its own is
-   * its first column. Both readers call this where they already tell the style resolver a row opened.
+   * its first column. A row past the grid opens no row, so none of its cells is placed, not even one
+   * whose own `r` names an in-grid cell. Both readers call this where they already tell the style
+   * resolver a row opened.
    */
-  openRow(number: number): void {
-    this.#row = number;
+  openRow(number: number, inGrid: boolean): void {
+    this.#rowOpen = inGrid;
+    this.#row = inGrid ? number : -1;
     this.#nextCol = 1;
+  }
+
+  /** Whether an in-grid `<row>` is open. */
+  get rowOpen(): boolean {
+    return this.#rowOpen;
+  }
+
+  /** Close the `<row>`: a `<c>` before the next one belongs to no row and is not placed. */
+  closeRow(): void {
+    this.#rowOpen = false;
+    this.#row = -1;
   }
 
   // Begin a new `<c>`: record its address/type/style and clear every per-cell gathered field so the
@@ -134,12 +159,16 @@ export class CellAccumulator {
    * relying on document position is emitting a legal file that this reader used to lose every cell of.
    */
   #placeCell(ref: string | undefined): void {
-    const decoded = ref === undefined ? undefined : tryDecodeCellRef(ref);
+    // Whether a cell can be placed at all is decided here, for both readers: outside an in-grid row
+    // there is nothing to place it in. Each reader used to decide for itself, and they disagreed: the
+    // streamer dropped every cell of a row past the grid, while the buffered reader still placed one
+    // whose own `r` named an in-grid cell.
+    const decoded = this.#rowOpen && ref !== undefined ? tryDecodeCellRef(ref) : undefined;
     if (decoded !== undefined) {
       this.#ref = ref ?? '';
       this.#col = decoded.col;
       this.#row = decoded.row;
-    } else if (ref === undefined && this.#row > 0 && this.#nextCol <= MAX_COLUMN) {
+    } else if (ref === undefined && this.#rowOpen && this.#nextCol <= MAX_COLUMN) {
       this.#col = this.#nextCol;
       this.#ref = encodeAddress(this.#col, this.#row);
     } else {

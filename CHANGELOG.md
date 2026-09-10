@@ -217,6 +217,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   `showGridLines` on a sheet, and a conditional format's `aboveAverage` read `"yes"` as on, so the
   writer turned it into `"1"`. Such a token is now dropped.
 
+- **The buffered and streaming readers disagreed about rows.** A self-closing `<row r="2" hidden="1"/>`
+  vanished from `readSheetRows`, `hidden` flag and all, because the streamer yielded a row only on
+  `</row>`; streams now yield it, with no cells. A cell whose own `r` was in the grid, inside a `<row>`
+  past the last row, was placed by `readXlsx` but not streamed; neither reader places it now. A stray
+  `<c>` between two rows could be added to the row the streamer had already yielded.
+
 
 ## [3.1.0] — 2026-09-04
 

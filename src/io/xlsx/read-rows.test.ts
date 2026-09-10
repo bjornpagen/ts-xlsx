@@ -195,6 +195,46 @@ test('a row past the last row is dropped, as the buffered reader drops it', () =
   );
 });
 
+// The streamer yielded a row on `</row>`, and `<row r="2" hidden="1"/>` fires none, so the row and its
+// `hidden` flag vanished from the stream while the buffered reader kept both.
+test('a self-closing row is yielded, hidden flag and all, as the buffered reader keeps it', () => {
+  const archive = foreignPackage({
+    [SHEET1]: foreignSheet(
+      '<row r="1"><c r="A1"><v>1</v></c></row><row r="2" hidden="1"/>' +
+        '<row r="3" hidden="1"><c r="A3"><v>3</v></c></row>',
+    ),
+  });
+  assert.deepEqual(
+    rows(archive).map((row) => ({number: row.number, hidden: row.hidden, cells: row.cells.length})),
+    [
+      {number: 1, hidden: false, cells: 1},
+      {number: 2, hidden: true, cells: 0},
+      {number: 3, hidden: true, cells: 1},
+    ],
+  );
+  assert.equal(
+    readXlsx(archive).worksheets[0]?.getRow(2).hidden,
+    true,
+    'the buffered reader agrees',
+  );
+});
+
+// The row buffer was reset only when the next `<row>` opened, so a `<c>` between rows was pushed into
+// the array the streamer had already handed to the consumer.
+test('a stray cell between rows neither joins the yielded row nor is placed by either reader', () => {
+  const archive = foreignPackage({
+    [SHEET1]: foreignSheet(
+      '<row r="1"><c r="A1"><v>1</v></c></row><c r="B1"><v>2</v></c>' +
+        '<row r="2"><c r="A2"><v>3</v></c></row>',
+    ),
+  });
+  assert.deepEqual(
+    rows(archive).map((row) => row.cells.map((cell) => cell.address)),
+    [['A1'], ['A2']],
+  );
+  assert.equal(readXlsx(archive).worksheets[0]?.getCell('B1').value, null);
+});
+
 test('a stylesheet at an unconventional path is still found, so a date stays a date', () => {
   // The resolution both readers run: through the relationship that names the part, with the
   // conventional path only as the fallback. A package is free to name any part anything, and a

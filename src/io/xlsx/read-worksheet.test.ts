@@ -158,6 +158,16 @@ test('a `<row>` past the last row is dropped rather than clamped onto it', () =>
   assert.equal(worksheet.getRow(MAX_ROW).height, undefined, 'and nothing landed on the last row');
 });
 
+// The streamer checked the row and dropped its cells, while this reader placed a cell whose own `r`
+// was in the grid, so the same markup gave `A5 = 9` here and nothing through the streamer.
+test('a cell in a `<row>` past the last row is dropped even when its own `r` is in the grid', () => {
+  const worksheet = sheet(
+    `<sheetData><row r="${MAX_ROW + 1}"><c r="A5"><v>9</v></c></row></sheetData>`,
+  );
+  assert.equal([...worksheet.rows()].length, 0, 'no row 5 was created to hold the cell');
+  assert.equal(worksheet.getCell('A5').value, null);
+});
+
 test('a `<pane>` split that is not a non-negative integer is dropped, not carried to the writer', () => {
   // Each of these used to land in `view` verbatim and surface later out of the serializer, as a
   // RangeError naming a column the file never mentioned.

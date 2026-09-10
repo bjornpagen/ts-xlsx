@@ -29,7 +29,7 @@ import {openSpreadsheetPackage, readPartRelationships} from '../opc/read-opc.ts'
 import {unsupportedWorkbookPart} from '../opc/sniff-format.ts';
 import {ColumnRecordBudget} from '../read-policy/column-budget.ts';
 import {CellStyleResolver} from '../style/cell-style-resolution.ts';
-import {CellAccumulator} from './cell-accumulator.ts';
+import {CellAccumulator, WORKSHEET_BODY_EMPTY_CLOSES} from './cell-accumulator.ts';
 import type {SharedString} from './cell-value.ts';
 import {takeColumnSpan} from './column-span.ts';
 import {XlsxParseError} from './errors.ts';
@@ -317,11 +317,6 @@ class StreamedSheetReader implements StreamedSheet {
   }
 }
 
-// A formatted-but-empty `<c/>` is expanded to open+close so it finalises once on close, matching
-// the buffered reader; the text-bearing `<f/>`/`<v/>`/`<t/>` are excluded so an empty one never
-// commits (their close captures text, which an empty tag has none of).
-const CELL_EMPTY_CLOSE: ReadonlySet<string> = new Set(['c']);
-
 // Pull the sheet XML through the event stream, yielding a StreamedRow at each `</row>`, while
 // recording the sheet's hidden columns (from `<col hidden>`, before <sheetData>) and merged ranges
 // (from `<mergeCells>`, after <sheetData>) into the caller-supplied collectors. The `<c>` machine is
@@ -339,7 +334,6 @@ function* scanSheet(
 ): Generator<StreamedRow, void, undefined> {
   let rowNumber = 0;
   let rowHidden = false;
-  let rowInGrid = true;
   let cells: StreamedCell[] = [];
   const columnBudget = new ColumnRecordBudget();
   const styleResolution = new CellStyleResolver();
@@ -353,7 +347,8 @@ function* scanSheet(
   const cell = new CellAccumulator({richRuns: false, dateEpoch});
 
   const finalizeCell = (): void => {
-    if (cell.ref === '' || cell.col < 0 || !rowInGrid) return;
+    // Whether a cell was placed at all, a row past the grid included, is the accumulator's decision.
+    if (cell.ref === '') return;
     // Through the shared resolution, xf 0 included, not the cell's own `s` alone. `decodeCellContent`
     // reads `numFmt` off the resolved style to tell a date serial from a plain number, so anything less
     // decodes a cell to a different *type* than the buffered reader does.
@@ -373,7 +368,7 @@ function* scanSheet(
     }
   };
 
-  for (const event of closeEmptyElements(xmlEvents(xml), CELL_EMPTY_CLOSE)) {
+  for (const event of closeEmptyElements(xmlEvents(xml), WORKSHEET_BODY_EMPTY_CLOSES)) {
     if (event.kind === 'text') {
       cell.appendChunk(event.text);
       continue;
@@ -387,15 +382,15 @@ function* scanSheet(
           // names one row, so there is nothing to clamp it onto, and yielding a `number` of 1048577
           // would hand the consumer an address no `getCell` will accept. The `<c>` machine still runs
           // over its cells, because it is what keeps the reader in step with the element stream, but
-          // nothing is retained for them and no row is handed off.
-          ({number: rowNumber, inGrid: rowInGrid} = rowPosition.open(event.attrs));
+          // it places none of them and no row is handed off.
+          const position = rowPosition.open(event.attrs);
+          rowNumber = position.number;
           rowHidden = boolStrict(event.attrs.hidden);
-          cell.openRow(rowInGrid ? rowNumber : -1);
+          cell.openRow(position.number, position.inGrid);
           styleResolution.openRow(
             numInteger(event.attrs.s, 0) ?? -1,
             boolStrict(event.attrs.customFormat),
           );
-          cells = [];
           break;
         }
         case 'col':
@@ -415,7 +410,12 @@ function* scanSheet(
     if (claimed === 'cell') finalizeCell();
     else if (claimed === 'other' && local === 'row') {
       styleResolution.closeRow();
-      if (rowInGrid) yield {number: rowNumber, hidden: rowHidden, cells};
+      const inGrid = cell.rowOpen;
+      cell.closeRow();
+      if (inGrid) yield {number: rowNumber, hidden: rowHidden, cells};
+      // A fresh buffer at the close rather than at the next open: the one just yielded belongs to the
+      // consumer now, and a stray `<c>` between rows was being pushed into it after the hand-off.
+      cells = [];
     }
   }
 }
