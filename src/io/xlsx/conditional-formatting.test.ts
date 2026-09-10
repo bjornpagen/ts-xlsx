@@ -3,6 +3,7 @@ import {test} from 'node:test';
 
 import type {CfValueObjectType} from '../../core/conditional-formatting.ts';
 import {Workbook} from '../../core/workbook.ts';
+import {AuthoringError} from '../../errors.ts';
 import {
   elementIn,
   partText,
@@ -280,6 +281,108 @@ test('a malformed rank and stdDev are dropped on read rather than round-tripping
 
   assert.doesNotMatch(xml, /rank="NaN"/, 'the malformed rank is not written as NaN');
   assert.doesNotMatch(xml, /stdDev="NaN"/, 'the malformed stdDev is not written as NaN');
+});
+
+// `priority` and `stdDev` are xsd:int and `rank` is xsd:unsignedInt, but they were read as any finite
+// number, so `priority="1.5"`, `rank="2.5"` and `stdDev="-1.5"` came back out verbatim.
+test('a fractional priority, rank or stdDev, or a negative rank, is dropped on read', () => {
+  const sheet1 =
+    '<?xml version="1.0"?>' +
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData/>' +
+    '<conditionalFormatting sqref="A1:A3">' +
+    '<cfRule type="duplicateValues" priority="1.5"/>' +
+    '<cfRule type="top10" rank="2.5" priority="2"/>' +
+    '<cfRule type="top10" rank="-3" priority="3"/>' +
+    '<cfRule type="aboveAverage" stdDev="-1.5" priority="4"/>' +
+    '<cfRule type="aboveAverage" stdDev="-2" priority="5"/>' +
+    '</conditionalFormatting></worksheet>';
+  const book = readPatched({[SHEET1]: sheet1});
+  const rules = book.getWorksheet('S')?.conditionalFormattings[0]?.rules ?? [];
+  assert.deepEqual(
+    rules.map((rule) => [rule.priority, rule.rank, rule.stdDev]),
+    [
+      [undefined, undefined, undefined],
+      [2, undefined, undefined],
+      [3, undefined, undefined],
+      [4, undefined, undefined],
+      [5, undefined, -2],
+    ],
+    'only integers the attributes can hold are kept, a negative stdDev included',
+  );
+  const block = elementIn(
+    sheetXml(writeXlsx(book)),
+    /<conditionalFormatting[\s\S]*?<\/conditionalFormatting>/,
+  );
+  assert.doesNotMatch(block, /="-?\d+\.\d+"|rank="-/, 'and none is written back');
+});
+
+test('an authored priority, rank or stdDev the schema cannot hold is refused at write', () => {
+  const refused = (rule: Record<string, unknown>) => {
+    const workbook = new Workbook();
+    workbook.addWorksheet('S').addConditionalFormatting({
+      ref: 'A1:A3',
+      rules: [{type: 'top10', ...rule}],
+    });
+    assert.throws(() => writeXlsx(workbook), AuthoringError, JSON.stringify(rule));
+  };
+  refused({priority: Number.NaN});
+  refused({priority: 1.5});
+  refused({rank: -1});
+  refused({rank: 2.5});
+  refused({stdDev: 0.5});
+});
+
+// An authored NaN priority used to spread through `Math.max` into the counter, so every rule after it
+// that took an automatic priority was written `priority="NaN"` too.
+test('a NaN priority is refused before it can reach the automatic priorities after it', () => {
+  const workbook = new Workbook();
+  workbook.addWorksheet('S').addConditionalFormatting({
+    ref: 'A1:A3',
+    rules: [{type: 'duplicateValues', priority: Number.NaN}, {type: 'uniqueValues'}],
+  });
+  assert.throws(() => writeXlsx(workbook), AuthoringError);
+});
+
+test('a NaN cfvo value is refused rather than written as val="NaN"', () => {
+  for (const type of ['colorScale', 'dataBar'] as const) {
+    const workbook = new Workbook();
+    workbook.addWorksheet('S').addConditionalFormatting({
+      ref: 'A1:A3',
+      rules: [{type, priority: 1, cfvo: [{type: 'num', value: Number.NaN}, {type: 'max'}]}],
+    });
+    assert.throws(() => writeXlsx(workbook), AuthoringError, type);
+  }
+});
+
+// A block with no `sqref` read as `ref: ''` and was written back as `sqref=""`, and one whose `sqref`
+// did not decode was written back verbatim. Neither names a cell to format.
+test('a conditional format whose sqref is missing or does not decode is dropped on read', () => {
+  const sheet1 =
+    '<?xml version="1.0"?>' +
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData/>' +
+    '<conditionalFormatting><cfRule type="duplicateValues" priority="1"/></conditionalFormatting>' +
+    '<conditionalFormatting sqref="not a range"><cfRule type="duplicateValues" priority="2"/>' +
+    '</conditionalFormatting>' +
+    '<conditionalFormatting sqref="B1:B3"><cfRule type="duplicateValues" priority="3"/>' +
+    '</conditionalFormatting></worksheet>';
+  const book = readPatched({[SHEET1]: sheet1});
+  assert.deepEqual(
+    book.getWorksheet('S')?.conditionalFormattings.map((cf) => cf.ref),
+    ['B1:B3'],
+  );
+  assert.doesNotMatch(sheetXml(writeXlsx(book)), /sqref=""|sqref="not a range"/);
+});
+
+test('authoring a conditional format on a range that names no cells is refused', () => {
+  const sheet = new Workbook().addWorksheet('S');
+  for (const ref of ['', 'not a range']) {
+    assert.throws(
+      () => sheet.addConditionalFormatting({ref, rules: [{type: 'duplicateValues'}]}),
+      AuthoringError,
+      JSON.stringify(ref),
+    );
+  }
+  assert.deepEqual(sheet.conditionalFormattings, []);
 });
 
 function dataBarBook(rule: Record<string, unknown>): Workbook {

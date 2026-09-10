@@ -42,6 +42,14 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   column past `XFD`. `decodeRange('A1:B1048577')` used to return a range naming a row that cannot
   exist, which every caller then had to notice for itself.
 
+- **BREAKING: conditional-format and data-validation numbers the schema cannot hold are refused at
+  write.** A conditional format's `priority`, `rank` or `stdDev` that is not an integer (or a negative
+  `rank`), and a `NaN` cfvo value, which was written as `val="NaN"`, now make `writeXlsx` throw
+  `AuthoringError`; an authored `NaN` priority used to spread to every automatic priority after it. A
+  data validation's non-finite numeric operand throws too, rather than being dropped, which silently
+  turned a two-bound rule into a one-bound one. `Worksheet.addConditionalFormatting` refuses a range
+  that names no cells.
+
 ### Fixed
 
 - **A refused cell position left the sheet unreadable and unwritable.** `getCell('A0')`,
@@ -187,6 +195,11 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   does (`a/p` renders `a`), while the long form stays in capitals however it is spelled, which is also
   what Excel displays. An escaped or quoted `s` before `.0` no longer renders fractional seconds. CSV
   output changes for these format codes.
+
+- **Conditional formats kept numbers and ranges from a file that the schema cannot hold.** A foreign
+  `priority="1.5"`, `rank="2.5"` or `stdDev="-1.5"` was written back verbatim, and a block whose `sqref`
+  was missing or did not decode was written back as `sqref=""` or as its unreadable text. Each is now
+  dropped on read.
 
 
 ## [3.1.0] — 2026-09-04

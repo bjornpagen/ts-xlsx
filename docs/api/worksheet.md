@@ -822,6 +822,8 @@ range (`"A1:A10"`), a whole column, or several space-separated areas (`"A1:C1 A3
 rule set. The block is stored once against the range, defensively copied so the getter never hands
 back a reference into the caller's object.
 
+**Throws:** [`AuthoringError`](./errors.md#authoringerror) when `formatting.ref` names no cells: empty, or no area of it decodes.
+
 #### `Worksheet.conditionalFormattings`
 
 ```ts

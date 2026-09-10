@@ -2,7 +2,14 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
 import {AuthoringError} from '../errors.ts';
-import {escapeAttr, escapeSpreadsheetText, escapeText, numAttr, textElement} from './xml.ts';
+import {
+  escapeAttr,
+  escapeSpreadsheetText,
+  escapeText,
+  intAttr,
+  numAttr,
+  textElement,
+} from './xml.ts';
 
 // The three classes of character XML 1.0 cannot carry, one representative each.
 const CONTROL = '\u0001';
@@ -95,4 +102,17 @@ test('numAttr refuses a number OOXML cannot spell', () => {
   for (const value of [Number.NaN, Infinity, -Infinity]) {
     assert.throws(() => numAttr('scale', value), AuthoringError);
   }
+});
+
+test('intAttr omits an unset value and writes an integer at or above its floor', () => {
+  assert.equal(intAttr('priority', undefined), '');
+  assert.equal(intAttr('stdDev', -2), ' stdDev="-2"');
+  assert.equal(intAttr('rank', 0, 0), ' rank="0"');
+});
+
+test('intAttr refuses a value an xsd:int or xsd:unsignedInt cannot hold', () => {
+  for (const value of [Number.NaN, Infinity, 1.5, 2 ** 60]) {
+    assert.throws(() => intAttr('priority', value), AuthoringError, String(value));
+  }
+  assert.throws(() => intAttr('rank', -1, 0), AuthoringError, 'below the floor');
 });

@@ -89,7 +89,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 571, when the date-format renderer began keeping a short meridiem's spelling
   // to render it as Excel does, which put this entry two tenths over.
-  '.': 572,
+  //
+  // Raised again, from 572, when conditional formats gained an integer boundary for priority, rank
+  // and stdDev, a range filter on read and a refusal of an empty range, a tenth over.
+  '.': 573,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -98,7 +101,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // put this entry four tenths over.
   './core': 211,
   // Raised from 554 by the same future-function registry as `.`, which put this entry nine tenths over.
-  './xlsx': 555,
+  //
+  // Raised again, from 555, by the same conditional-format boundaries as `.`, eight tenths over.
+  './xlsx': 556,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -126,7 +131,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 219, by the same structured-reference spelling as `/xlsb`, which put this
   // entry two tenths over.
-  './csv': 220,
+  //
+  // Raised again, from 220, by the conditional-format overlay's refusal of an empty range, which
+  // every entry carrying the model pays for, a tenth over.
+  './csv': 221,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //
@@ -149,7 +157,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // put it 0.7 KB over; the new figure restores the headroom against today's measurement. And to 417
   // when the row writer began checking a cell error's code against the closed set before writing it,
   // which left the entry sitting exactly on its budget.
-  './node': 417,
+  //
+  // Raised again, from 417, by the same conditional-format boundaries as `.`, seven tenths over.
+  './node': 418,
   // Raised from 50 when the MS-OVBA encoder stopped rescanning its whole back-window for every
   // output byte. The hash chain that replaced the rescan is the cost, and it buys a time bound on a
   // path an untrusted `.xlsm` reaches through `removeVbaModule`; the CFB and `dir` guards landed

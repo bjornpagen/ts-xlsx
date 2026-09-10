@@ -3,7 +3,7 @@
 import {messageOf} from '../../thrown.ts';
 import type {Untyped} from '../../untyped.ts';
 import {partMapOf} from './package-facts.ts';
-import {readFixture, readXlsx, Workbook, writeXlsx} from './runtime.ts';
+import {readFixture, readXlsx, Workbook, writeXlsx, XlsxError} from './runtime.ts';
 import {attrsOf, expandSqref} from './xml-probes.ts';
 
 export const validation = {
@@ -47,8 +47,9 @@ export const validation = {
   },
 
   // Author a date-type validation whose operand coerces to a serial (or fails to), write, and report
-  // the emitted first bound → { formula1, hasNaN }. A real date writes a numeric serial; a
-  // non-coercible operand must drop the bound, never serialize the literal "NaN".
+  // the emitted first bound → { formula1, hasNaN, refused }. A real date writes a numeric serial; a
+  // non-coercible operand is a number the format cannot spell, so the write is refused (`refused`,
+  // with no package and therefore no "NaN") rather than serialising the literal "NaN".
   authorDateValidation(operand: string) {
     const serial = (() => {
       const ms = Date.parse(operand);
@@ -57,9 +58,16 @@ export const validation = {
     const workbook = new Workbook();
     const sheet = workbook.addWorksheet('S');
     sheet.addDataValidation('A1', {type: 'date', operator: 'greaterThan', formulae: [serial]});
-    const sheetXml = partMapOf(writeXlsx(workbook))['xl/worksheets/sheet1.xml'] || '';
+    let bytes: Uint8Array;
+    try {
+      bytes = writeXlsx(workbook);
+    } catch (error) {
+      if (!(error instanceof XlsxError)) throw error;
+      return {formula1: null, hasNaN: false, refused: true};
+    }
+    const sheetXml = partMapOf(bytes)['xl/worksheets/sheet1.xml'] || '';
     const formula1 = (sheetXml.match(/<formula1>([\s\S]*?)<\/formula1>/) || [])[1] ?? null;
-    return {formula1, hasNaN: /NaN/.test(sheetXml)};
+    return {formula1, hasNaN: /NaN/.test(sheetXml), refused: false};
   },
 
   // Apply one list validation with a cross-sheet source over a vertical span, round-trip, and report

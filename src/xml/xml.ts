@@ -233,6 +233,30 @@ export function numAttr(name: string, value: number | undefined): string {
 }
 
 /**
+ * An integer attribute rendered with a leading space (` name="3"`), or '' when the value is undefined.
+ *
+ * For an `xsd:int` or `xsd:unsignedInt` attribute, whose lexical space has no spelling for a fraction
+ * any more than for a NaN: `priority="1.5"` and `rank="-1"` make a package the schema rejects, so the
+ * value is refused here rather than written. `min` is the floor the attribute's type implies, `0` for
+ * an unsigned one.
+ *
+ * @throws {AuthoringError} when the value is not finite, not a safe integer, or below `min`.
+ */
+export function intAttr(
+  name: string,
+  value: number | undefined,
+  min = -Number.MAX_SAFE_INTEGER,
+): string {
+  if (value === undefined) return '';
+  assertWritableNumber(value);
+  if (!Number.isSafeInteger(value) || value < min) {
+    const floor = min === -Number.MAX_SAFE_INTEGER ? '' : ` of at least ${min}`;
+    throw new AuthoringError(`cannot write ${name}="${value}": expected an integer${floor}`);
+  }
+  return ` ${name}="${value}"`;
+}
+
+/**
  * Refuse a `Date` OOXML cannot spell, naming the property that carries it.
  *
  * Two ways a `Date` fails to have a `dcterms:W3CDTF` / `xsd:dateTime` spelling, and neither is

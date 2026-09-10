@@ -38,7 +38,7 @@ import {admitting, repairedSheetNames} from '../read-policy/read-repair.ts';
 import type {XfStyle} from '../style/xf-style.ts';
 import {readXlsbPackage} from '../xlsb/read.ts';
 import type {SharedString} from './cell-value.ts';
-import {conditionalFormattingPass} from './conditional-formatting.ts';
+import {applyConditionalFormattings, conditionalFormattingPass} from './conditional-formatting.ts';
 import {
   applyDataValidations,
   dataValidationPass,
@@ -303,11 +303,7 @@ function readSheet(sheet: Worksheet, path: string | undefined, context: SheetRea
   if (sheetXml !== undefined) {
     applyHyperlinks(sheet, hyperlinks.result(), (id) => sheetRels.byId(id)?.target);
     applyDataValidations(sheet, [...validations.result(), ...extendedValidations.result()]);
-    for (const cf of formattings.result()) {
-      admitting(() => {
-        sheet.addConditionalFormatting(cf);
-      });
-    }
+    applyConditionalFormattings(sheet, formattings.result());
   }
 
   const threads = readSheetCommentThreads(context, sheetRels);

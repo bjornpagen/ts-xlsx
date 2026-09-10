@@ -2,10 +2,11 @@
 // of range-bound rule sets. Kept as its own class, the sibling to {@link DataValidationOverlay}, so
 // Worksheet delegates the collection's storage and cloning rather than managing the array itself.
 
+import {AuthoringError, quoted} from '../errors.ts';
 import {type ConditionalFormatting, cloneConditionalFormatting} from './conditional-formatting.ts';
 import {replaceContents} from './containers.ts';
 import type {AxisSplice} from './grid-shift.ts';
-import {shiftSqref} from './merge.ts';
+import {decodeSqrefRects, shiftSqref} from './merge.ts';
 
 export class ConditionalFormattingOverlay {
   readonly #entries: ConditionalFormatting[] = [];
@@ -15,8 +16,17 @@ export class ConditionalFormattingOverlay {
    * range (`"A1:A10"`), a whole column, or several space-separated areas (`"A1:C1 A3:C3"`) sharing one
    * rule set. The block is stored once against the range, defensively copied so the getter never hands
    * back a reference into the caller's object.
+   *
+   * @throws {AuthoringError} when `formatting.ref` names no area at all. A rule set attached to
+   * nothing formats no cell and is written back as the same unreadable text, so it is a mistake worth
+   * surfacing at the call. The reader does not reach this: it drops such a block at its own boundary.
    */
   add(formatting: ConditionalFormatting): void {
+    if (decodeSqrefRects(formatting.ref).length === 0) {
+      throw new AuthoringError(
+        `conditional formatting range ${quoted(formatting.ref)} names no cells`,
+      );
+    }
     this.#entries.push(cloneConditionalFormatting(formatting));
   }
 

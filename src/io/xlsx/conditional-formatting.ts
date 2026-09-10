@@ -28,8 +28,10 @@ import {
   type CfTimePeriod,
 } from '../../core/conditional-formatting.ts';
 import {stripFormulaEquals} from '../../core/formula.ts';
+import {decodeSqrefRects} from '../../core/merge.ts';
 import type {Color} from '../../core/style.ts';
-import {coerceNumericLiteral, enumToken, numFinite, numInteger} from '../../xml/xml-attrs.ts';
+import type {Worksheet} from '../../core/worksheet.ts';
+import {coerceNumericLiteral, enumToken, numInteger} from '../../xml/xml-attrs.ts';
 import {
   type CollectingPass,
   elementSubtrees,
@@ -42,9 +44,11 @@ import {
   checkedToken,
   escapeAttr,
   escapeText,
+  intAttr,
   numberText,
   textAttr,
 } from '../../xml/xml.ts';
+import {admitting} from '../read-policy/read-repair.ts';
 import {colorAttrs, parseColor} from './color-xml.ts';
 // The x14/xm extension namespaces and ext-URI GUIDs are declared inline on the `<ext>` elements
 // exactly as Excel writes them, so no worksheet-root xmlns is needed. `CF_EXT_URI` scopes the
@@ -194,7 +198,8 @@ function cfvoWriter(form: 'classic' | 'x14'): (cfvo: CfValueObject) => string {
     const type = checkedToken(cfvo.type, isCfValueObjectType, 'conditional format value type');
     const tag = form === 'classic' ? 'cfvo' : 'x14:cfvo';
     if (cfvo.value === undefined) return `<${tag} type="${type}"/>`;
-    const value = String(cfvo.value);
+    // A numeric anchor goes through the number check: `String(NaN)` wrote `val="NaN"`.
+    const value = typeof cfvo.value === 'number' ? numberText(cfvo.value) : cfvo.value;
     return form === 'classic'
       ? `<${tag} type="${type}"${textAttr('val', value)}/>`
       : `<${tag} type="${type}"><xm:f>${escapeText(value)}</xm:f></${tag}>`;
@@ -230,6 +235,9 @@ function ruleXml(
   extLinks: DataBarExtLinks,
 ): string {
   const p = rule.priority ?? priority.next;
+  // Checked before it feeds the counter: an authored `NaN` spread through `Math.max` into every
+  // auto-assigned priority after it, so one bad rule wrote `priority="NaN"` on all that followed.
+  const priorityAttr = intAttr('priority', p).trim();
   // Keep the running counter ahead of any explicit priority so later auto-assigned ones stay unique.
   priority.next = Math.max(priority.next, p) + 1;
 
@@ -238,7 +246,7 @@ function ruleXml(
   ];
   const dxfId = resolveDxfId(rule, styles);
   if (dxfId !== undefined) attrs.push(`dxfId="${dxfId}"`);
-  attrs.push(`priority="${p}"`);
+  attrs.push(priorityAttr);
   if (rule.stopIfTrue) attrs.push('stopIfTrue="1"');
   if (rule.aboveAverage === false) attrs.push('aboveAverage="0"');
   if (rule.equalAverage) attrs.push('equalAverage="1"');
@@ -253,8 +261,8 @@ function ruleXml(
   if (rule.timePeriod !== undefined) {
     attrs.push(`timePeriod="${checkedToken(rule.timePeriod, isCfTimePeriod, 'time period')}"`);
   }
-  if (rule.rank !== undefined) attrs.push(`rank="${numberText(rule.rank)}"`);
-  if (rule.stdDev !== undefined) attrs.push(`stdDev="${numberText(rule.stdDev)}"`);
+  if (rule.rank !== undefined) attrs.push(intAttr('rank', rule.rank, 0).trim());
+  if (rule.stdDev !== undefined) attrs.push(intAttr('stdDev', rule.stdDev).trim());
 
   let body = SCALE_TYPES.has(rule.type) ? scaleXml(rule) : formulaeXml(rule.formulae);
   // A data bar with x14-only facets links to its extension by the id assigned in dataBarExtLinks; the
@@ -488,6 +496,23 @@ export function conditionalFormattingPass(): CollectingPass<ConditionalFormattin
   return {handlers, result};
 }
 
+/** Fold parsed conditional formattings onto a sheet, each bound to its original range. */
+export function applyConditionalFormattings(
+  sheet: Worksheet,
+  blocks: readonly ConditionalFormatting[],
+): void {
+  for (const block of blocks) {
+    // A `sqref` no area of which decodes, an absent one included, names no cells to format, and
+    // re-emitting it would put the file's own unreadable text back on the wire. Dropped here, at the
+    // reader's boundary, so the authoring guard behind `addConditionalFormatting` stays a guard
+    // rather than a control-flow path.
+    if (decodeSqrefRects(block.ref).length === 0) continue;
+    admitting(() => {
+      sheet.addConditionalFormatting(block);
+    });
+  }
+}
+
 function emptyExt(): DataBarExt {
   return {gradient: undefined, negativeFillColor: undefined, axisColor: undefined};
 }
@@ -506,13 +531,15 @@ export function parseDxfs(stylesXml: string): string[] {
 function newDraft(attrs: Record<string, string>): RuleDraft {
   return {
     type: enumToken(attrs.type, isConditionalFormattingType),
-    priority: numFinite(attrs.priority),
+    // `priority` and `stdDev` are `xsd:int` and `rank` is `xsd:unsignedInt`, so a fraction or a negative
+    // rank is not a value the attribute can hold, and keeping one wrote it straight back.
+    priority: numInteger(attrs.priority),
     stopIfTrue: boolStrict(attrs.stopIfTrue),
     operator: enumToken(attrs.operator, isConditionalFormattingOperator),
     text: attrs.text,
     timePeriod: enumToken(attrs.timePeriod, isCfTimePeriod),
-    rank: numFinite(attrs.rank),
-    stdDev: numFinite(attrs.stdDev),
+    rank: numInteger(attrs.rank, 0),
+    stdDev: numInteger(attrs.stdDev),
     percent: boolStrict(attrs.percent),
     bottom: boolStrict(attrs.bottom),
     // aboveAverage defaults to true in OOXML; only an explicit "0" means below-average.

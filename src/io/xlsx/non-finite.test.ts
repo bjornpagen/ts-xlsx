@@ -62,6 +62,22 @@ test('<cfRule> refuses a non-finite rank or standard deviation', () => {
   });
 });
 
+// A non-finite operand used to be dropped, turning a `between` into a rule with one bound, while a
+// conditional format's operand was already refused. Both forms of the element write the operand.
+test('<dataValidation> refuses a non-finite numeric operand, in both forms', () => {
+  for (const extended of [false, true]) {
+    for (const value of UNWRITABLE) {
+      refuses((wb) => {
+        wb.getWorksheet('S')!.addDataValidation(
+          'A1:A5',
+          {type: 'whole', operator: 'between', formulae: [value, 5]},
+          {extended},
+        );
+      });
+    }
+  }
+});
+
 test('a picture refuses a non-finite extent or rotation', () => {
   const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   refuses((wb) => {

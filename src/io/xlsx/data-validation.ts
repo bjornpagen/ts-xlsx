@@ -95,32 +95,24 @@ function ruleAttrs(rule: DataValidation): string {
 }
 
 // The standard element: shared attributes, then `sqref` last, then `<formula1>`/`<formula2>` bodies.
+//
+// A non-finite numeric operand (a date bound that failed to coerce to a serial, say) is refused by
+// `stripFormulaEquals` in both forms, as a conditional format's operand is: a number the format cannot
+// spell is refused where it becomes bytes. It used to be dropped, which quietly turned a `between`
+// into a rule with one bound.
 function dataValidationXml(sqref: string, rule: DataValidation): string {
-  const [f1, f2] = operands(rule);
+  const [f1, f2] = rule.formulae ?? [];
   const body =
     (f1 !== undefined ? `<formula1>${escapeText(stripFormulaEquals(f1))}</formula1>` : '') +
     (f2 !== undefined ? `<formula2>${escapeText(stripFormulaEquals(f2))}</formula2>` : '');
   return `<dataValidation${ruleAttrs(rule)} sqref="${escapeAttr(sqref)}">${body}</dataValidation>`;
 }
 
-// A rule's two operands with any non-finite numeric bound dropped: a NaN/±Infinity operand (e.g. a
-// date validation whose bound failed to coerce to a serial) has no OOXML representation, so it is
-// omitted rather than serialised as the literal "NaN": the same graceful degradation a non-finite
-// cell value gets.
-function operands(
-  rule: DataValidation,
-): [string | number | undefined, string | number | undefined] {
-  const drop = (v: string | number | undefined): string | number | undefined =>
-    typeof v === 'number' && !Number.isFinite(v) ? undefined : v;
-  const [f1, f2] = rule.formulae ?? [];
-  return [drop(f1), drop(f2)];
-}
-
 // The extended element: same shared attributes, but each operand wraps in `<x14:formula1><xm:f>…` and
 // the target range is an `<xm:sqref>` child that follows the formulae. The `xr:uid` Excel adds is
 // revision metadata it regenerates freely, so it is not modelled or re-emitted.
 function extendedDataValidationXml(sqref: string, rule: DataValidation): string {
-  const [f1, f2] = operands(rule);
+  const [f1, f2] = rule.formulae ?? [];
   const body =
     (f1 !== undefined
       ? `<x14:formula1><xm:f>${escapeText(stripFormulaEquals(f1))}</xm:f></x14:formula1>`
