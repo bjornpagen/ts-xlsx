@@ -1,8 +1,13 @@
-// Rich-text run accumulation, shared by the two readers that parse `<r>` runs identically: an inline
-// string's `<is>` in a worksheet body and a pooled `<si>` in sharedStrings.xml. One `<r>` opens a run
-// (resetting its font and text so an unformatted run inherits nothing from the last), an `<rPr>` opens
-// the run's font bundle whose self-closing children each set one facet, and a `<t>` appends the run's
-// text; the run commits on `</r>`. A `<t>` no run claimed is the container's own plain text.
+// Rich-text run accumulation, shared by every reader of a `CT_Rst`: an inline string's `<is>` in a
+// worksheet body, a pooled `<si>` in sharedStrings.xml, and a note's `<text>` in a comments part. One
+// `<r>` opens a run (resetting its font and text so an unformatted run inherits nothing from the last),
+// an `<rPr>` opens the run's font bundle whose self-closing children each set one facet, and a `<t>`
+// appends the run's text; the run commits on `</r>`. A `<t>` no run claimed is the container's own
+// plain text.
+//
+// A `<t>` inside an `<rPh>` is neither. A phonetic run holds the furigana Japanese Excel stores beside
+// the base text, in the same container as that text, so a machine gathering every `<t>` read `漢字` as
+// `漢字かんじ` and a save wrote the corruption back. The phonetic text is dropped, not modelled.
 //
 // It drives itself, the way `CellAccumulator` and `TextCapture` do. {@link open}/{@link text}/
 // {@link close} are the element machine that the shared-string reader and the inline-string reader
@@ -60,15 +65,18 @@ export class RunAccumulator {
   #inRun = false;
   #isRich = false;
   #inContainer = false;
+  // How deep the machine is inside `<rPh>` phonetic runs, 0 outside any. A `<t>` opened at any depth
+  // above 0 captures nothing, so furigana never reaches a run or the plain text.
+  #phoneticDepth = 0;
 
   /**
    * @param options.container the element that opens one string: `'si'` for the shared-string pool,
-   * `'is'` for an inline string in a worksheet body.
+   * `'is'` for an inline string in a worksheet body, `'text'` for a note's body.
    * @param options.readRuns whether `<r>`/`<rPr>` open a rich-text run. The buffered readers read
    * them; the row stream deliberately does not, and with runs off every `<t>` falls through to
    * {@link plainText}, which is exactly the documented flattening.
    */
-  constructor(options: {readonly container: 'si' | 'is'; readonly readRuns: boolean}) {
+  constructor(options: {readonly container: 'si' | 'is' | 'text'; readonly readRuns: boolean}) {
     this.#container = options.container;
     this.#readRuns = options.readRuns;
   }
@@ -110,6 +118,7 @@ export class RunAccumulator {
     // is one of them: markup that opens a `<t>` and never closes it leaves it armed, and without this
     // the next container's text would land in that abandoned buffer instead of in `#plain`.
     this.#inContainer = false;
+    this.#phoneticDepth = 0;
     this.#capture.reset();
   }
 
@@ -137,8 +146,12 @@ export class RunAccumulator {
         this.#font = {};
         this.#inProperties = true;
         return true;
+      case 'rPh':
+        // A self-closing `<rPh/>` holds no text and fires no close, so it opens no phonetic span.
+        if (!selfClosing) this.#phoneticDepth++;
+        return true;
       case 't':
-        this.#capture.open(local, selfClosing);
+        if (this.#phoneticDepth === 0) this.#capture.open(local, selfClosing);
         return true;
       default:
         // An unrecognised element is one facet of the open run's font (`<b/>`, `<sz>`, `<color>`,
@@ -175,6 +188,9 @@ export class RunAccumulator {
         }
         return 'claimed';
       }
+      case 'rPh':
+        if (this.#phoneticDepth > 0) this.#phoneticDepth--;
+        return 'claimed';
       case 'rPr':
         if (!this.#readRuns || !this.#inProperties) return 'other';
         this.#inProperties = false;

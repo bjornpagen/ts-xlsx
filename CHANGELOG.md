@@ -41,6 +41,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   `COUNTIF(B:B,B1)`, and a save stored that. Column ranges (`A:C`) and row ranges (`1:5`) now shift
   as cells do, each end only when it is relative, and a range pushed off the grid becomes `#REF!`.
 
+- **Furigana was read as part of the text it annotates.** Japanese Excel stores a phonetic run
+  (`<rPh>`) beside a string's base text, in shared strings, inline strings and note bodies alike, and
+  every reader gathered each `<t>` it met, so a cell holding `漢字` read as `漢字かんじ` and a save
+  wrote that back. Phonetic runs are now skipped wherever a string is read; the reading itself is
+  dropped rather than modelled.
+
 
 ## [3.1.0] — 2026-09-04
 

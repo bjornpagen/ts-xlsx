@@ -25,8 +25,8 @@ import {
   readPartRelationships,
 } from '../opc/read-opc.ts';
 import {admitting} from '../read-policy/read-repair.ts';
-import {type ParsedComment, parseComments} from './comments.ts';
 import {drawingHasUnmodeledContent, parseDrawing} from './images.ts';
+import {type ParsedComment, parseComments} from './read-comments.ts';
 import {parsePivotTable} from './read-pivot.ts';
 import {parseTable} from './tables.ts';
 import {parseThemeColorScheme, parseThemeFontScheme} from './theme-xml.ts';

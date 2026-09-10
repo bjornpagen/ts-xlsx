@@ -1,5 +1,6 @@
-// Cell comments: the `xl/comments{n}.xml` part, its `xl/drawings/vmlDrawing{n}.vml` companion, and the
-// reader that maps a comment back onto its cell.
+// Cell comments: the `xl/comments{n}.xml` part and its `xl/drawings/vmlDrawing{n}.vml` companion, as the
+// writer emits them. Reading the part back onto cells is `read-comments.ts`, kept apart so the writer's
+// closure does not load the reader's run machine.
 //
 // A comment is anchored to a cell by A1 reference and rendered by Excel as a floating box. The box's
 // geometry lives in a legacy VML drawing (the pre-DrawingML shape format Excel still requires here);
@@ -17,15 +18,11 @@
 // decoration. Verified against desktop Excel: a package whose threadedComment part, persons registry,
 // relationships and content types all survive intact still reads back as ordinary notes with zero
 // threads once those two are lost. So the fallback is *derived from the thread model* on write and
-// *suppressed on read*, rather than round-tripped as a plain note.
+// *suppressed on read* (`read-comments.ts`), rather than round-tripped as a plain note.
 
 import {tryDecodeCellRef} from '../../core/address.ts';
 import type {Cell} from '../../core/cell.ts';
 import type {CommentThread} from '../../core/comment-thread.ts';
-import type {Worksheet} from '../../core/worksheet.ts';
-import {decodeSpreadsheetText, numInteger} from '../../xml/xml-attrs.ts';
-import {parseXml, TextCapture} from '../../xml/xml-read.ts';
-import {localName} from '../../xml/xml-scan.ts';
 import {escapeText, textAttr, textElement, XML_DECLARATION} from '../../xml/xml.ts';
 import {MARKUP_COMPATIBILITY_NS, REVISION_NS, SPREADSHEETML_NS} from './namespaces.ts';
 
@@ -220,115 +217,4 @@ export function vmlDrawingXml(comments: readonly CommentCell[]): string {
     })
     .join('');
   return `${VML_HEADER}${shapes}</xml>`;
-}
-
-/** One `<comment>` read back from a comments part. */
-export interface ParsedComment {
-  readonly text: string;
-  /**
-   * The thread head id this comment is the legacy fallback for, read off its synthetic `tc={headId}`
-   * author; absent for a user's own note.
-   */
-  readonly threadId?: string;
-}
-
-// A comment names its author by index into `<authors>`, so an empty entry must still occupy its slot.
-// Presenting the self-closing `<author/>` an author-less file writes as an empty element gives it the
-// close that pushes it. Without this every later index would shift by one and a note could inherit a
-// thread's `tc=` author. `<text/>` is here for the same reason on the other axis: an empty note is a
-// note, and a self-closing one used to latch a capture nothing would close.
-const COMMENT_EMPTY_CLOSES: ReadonlySet<string> = new Set(['author', 'text']);
-
-// The author string marking a comment as a thread's legacy fallback: `tc={headThreadId}`.
-const THREAD_AUTHOR_PREFIX = 'tc=';
-
-/**
- * Parse a `comments{n}.xml` part into a map of A1 reference → comment. Text runs within one comment are
- * concatenated; an author-name run is Excel's own convention and is not stripped, so a note reads back
- * as exactly the text that was written.
- */
-export function parseComments(xml: string): Map<string, ParsedComment> {
-  const comments = new Map<string, ParsedComment>();
-  const authors: string[] = [];
-  let currentRef: string | undefined;
-  let currentAuthorId: string | undefined;
-  // Through the shared machine rather than a latch and a buffer of its own: a self-closing `<text/>`
-  // fires no close, so the hand-rolled version stayed latched on it and was saved only by the next
-  // open happening to clear the buffer, which is an accident rather than a property.
-  const capture = new TextCapture(['author', 'text']);
-  let body = '';
-  parseXml(
-    xml,
-    {
-      onOpen(name, attrs, selfClosing) {
-        const local = localName(name);
-        if (local === 'comment') {
-          currentRef = attrs.ref;
-          currentAuthorId = attrs.authorId;
-          body = '';
-        }
-        capture.open(local, selfClosing);
-      },
-      onText(text) {
-        capture.text(text);
-      },
-      onClose(name) {
-        const local = localName(name);
-        const text = capture.close(local);
-        if (local === 'author') {
-          authors.push(text ?? '');
-        } else if (local === 'text') {
-          // A note's body is a `CT_Rst`, so it carries the `_xHHHH_` escape a cell's `<t>` does.
-          // Decoding at the close of `<text>` rather than per `<t>` is deliberate: the capture is by
-          // then the whole note, so no escape can straddle the boundary the decode runs on.
-          body = decodeSpreadsheetText(text ?? '');
-        } else if (local === 'comment' && currentRef !== undefined) {
-          const threadId = threadIdOf(authors[numInteger(currentAuthorId, 0) ?? -1]);
-          comments.set(currentRef, {
-            text: body,
-            ...(threadId !== undefined ? {threadId} : {}),
-          });
-          currentRef = undefined;
-          currentAuthorId = undefined;
-        }
-      },
-    },
-    {closeEmptyElements: COMMENT_EMPTY_CLOSES},
-  );
-  return comments;
-}
-
-// A missing or non-numeric `authorId` indexes nothing, so `authors[NaN]` is undefined and the comment
-// reads as a plain note: the safe direction, since mistaking a note for a fallback would delete it.
-function threadIdOf(author: string | undefined): string | undefined {
-  if (author === undefined || !author.startsWith(THREAD_AUTHOR_PREFIX)) return undefined;
-  const id = author.slice(THREAD_AUTHOR_PREFIX.length);
-  return id === '' ? undefined : id;
-}
-
-/**
- * Apply a parsed comments part onto a sheet's cells as notes, addressing each by its A1 reference.
- *
- * A thread's legacy fallback is not a note and does not become one: its text is boilerplate wrapping a
- * copy of the conversation, so surfacing it as `cell.note` hands the caller garbage, and on write it
- * would be re-emitted as a plain note, destroying the `tc=`/`xr:uid` binding and leaving Excel unable to
- * see the thread at all.
- *
- * Suppressed only for a conversation the reader actually holds: a file whose thread part is missing or
- * damaged has nothing else left, so there the boilerplate is kept rather than the content lost. Call
- * after the sheet's threads are restored, since that is what this reads to decide.
- */
-export function applyNotes(sheet: Worksheet, comments: ReadonlyMap<string, ParsedComment>): void {
-  const headIds = new Set(
-    sheet.commentThreads.flatMap((thread) => {
-      const head = thread.comments[0];
-      return head === undefined ? [] : [head.id];
-    }),
-  );
-  for (const [ref, comment] of comments) {
-    if (comment.threadId !== undefined && headIds.has(comment.threadId)) continue;
-    // A `ref` naming no cell that can exist costs its note, not the sheet.
-    if (tryDecodeCellRef(ref) === undefined) continue;
-    sheet.getCell(ref).note = comment.text;
-  }
 }

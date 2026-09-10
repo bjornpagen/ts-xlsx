@@ -38,7 +38,6 @@ import {admitting, repairedSheetNames} from '../read-policy/read-repair.ts';
 import type {XfStyle} from '../style/xf-style.ts';
 import {readXlsbPackage} from '../xlsb/read.ts';
 import type {SharedString} from './cell-value.ts';
-import {applyNotes} from './comments.ts';
 import {conditionalFormattingPass} from './conditional-formatting.ts';
 import {
   applyDataValidations,
@@ -47,6 +46,7 @@ import {
 } from './data-validation.ts';
 import {applyHyperlinks, sheetHyperlinkPass} from './hyperlinks.ts';
 import {SHARED_STRINGS_PART, STYLES_PART} from './part-names.ts';
+import {applyNotes} from './read-comments.ts';
 import {
   type PackageReadContext,
   readRootPreservedReferences,

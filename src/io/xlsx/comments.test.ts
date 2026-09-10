@@ -5,13 +5,7 @@ import type {CommentThread} from '../../core/comment-thread.ts';
 import {INTERNAL} from '../../core/internal.ts';
 import {Workbook} from '../../core/workbook.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
-import {
-  applyNotes,
-  collectComments,
-  commentsXml,
-  parseComments,
-  vmlDrawingXml,
-} from './comments.ts';
+import {collectComments, commentsXml, vmlDrawingXml} from './comments.ts';
 import {liveCells} from './hyperlinks.ts';
 import {
   captureIn,
@@ -21,7 +15,20 @@ import {
   roundtrip,
   sheetXml,
 } from './package.test-support.ts';
+import {applyNotes, parseComments} from './read-comments.ts';
 import {writeXlsx} from './write.ts';
+
+test('a note body reads its base text, not the phonetic run stored beside it', () => {
+  // A note's `<text>` is a `CT_Rst`, so it can carry furigana (`<rPh>`) the way a cell's string can,
+  // and a capture over the whole body used to append it: `漢字` read back as `漢字かんじ`.
+  const parsed = parseComments(
+    '<comments><authors><author>a</author></authors><commentList>' +
+      '<comment ref="A1" authorId="0"><text><r><t>漢字</t></r>' +
+      '<rPh sb="0" eb="2"><t>かんじ</t></rPh><phoneticPr fontId="0" type="noConversion"/>' +
+      '</text></comment></commentList></comments>',
+  );
+  assert.equal(parsed.get('A1')?.text, '漢字');
+});
 
 test('a cell note survives the write/read round-trip', () => {
   const wb = new Workbook();

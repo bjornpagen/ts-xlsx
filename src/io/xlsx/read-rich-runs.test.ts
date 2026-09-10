@@ -15,7 +15,7 @@ function feed(runs: RunAccumulator, events: readonly (readonly [string, ...unkno
 }
 
 // A tiny document reader over one container, so a case reads as XML rather than as a call log.
-function read(container: 'si' | 'is', xml: string, readRuns = true) {
+function read(container: 'si' | 'is' | 'text', xml: string, readRuns = true) {
   const runs = new RunAccumulator({container, readRuns});
   // Deliberately not a real parser: a hand-rolled scan keeps this test independent of `parseXml`, so
   // a break in the machine cannot be masked by a break in the tokenizer (or vice versa).
@@ -178,6 +178,43 @@ test('close reports the container so a caller knows when its string is complete'
   assert.strictEqual(runs.close('t'), 'claimed');
   assert.strictEqual(runs.close('si'), 'container');
   assert.strictEqual(runs.close('row'), 'other');
+});
+
+// ── Phonetic runs ────────────────────────────────────────────────────────────────────────────────────
+// `<rPh>` holds the furigana Japanese Excel stores beside a string's base text, in the same container
+// as that text. Gathering every `<t>` read `漢字` as `漢字かんじ`, pooled, inline and in a note alike.
+
+const PHONETIC =
+  '<rPh sb="0" eb="2"><t>かんじ</t></rPh><phoneticPr fontId="0" type="noConversion"/>';
+
+test('a pooled plain string reads its base text without the phonetic run beside it', () => {
+  const runs = read('si', `<si><t>漢字</t>${PHONETIC}</si>`);
+  assert.strictEqual(runs.plainText, '漢字');
+  assert.strictEqual(runs.isRich, false);
+});
+
+test("a rich string's runs carry the base text and its plain text gains nothing", () => {
+  const runs = read('si', `<si><r><rPr><b/></rPr><t>漢字</t></r>${PHONETIC}</si>`);
+  assert.deepStrictEqual(runs.runs, [{text: '漢字', font: {bold: true}}]);
+  assert.strictEqual(runs.plainText, '');
+});
+
+test('with runs off, the text after a phonetic run still reads and the run itself does not', () => {
+  const runs = read(
+    'is',
+    '<is><r><t>漢</t></r><rPh sb="0" eb="1"><t>かん</t></rPh><r><t>字</t></r></is>',
+    false,
+  );
+  assert.strictEqual(runs.plainText, '漢字');
+});
+
+test('a self-closing rPh opens no phonetic span, so the text after it still reads', () => {
+  assert.strictEqual(read('si', '<si><rPh/><t>base</t></si>').plainText, 'base');
+});
+
+test("a note's body is a container like any other, and leaves its phonetic run out", () => {
+  const runs = read('text', `<text><r><t>note</t></r>${PHONETIC}</text>`, false);
+  assert.strictEqual(runs.plainText, 'note');
 });
 
 // The row streamer reads no runs, so a rich inline string flattens to its concatenated text. That is

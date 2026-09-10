@@ -301,4 +301,51 @@ export const comments = {
       identical: pooledReading === inlineReading,
     };
   },
+
+  // Put a phonetic run (`<rPh>`, the furigana Japanese Excel stores beside a string's base text) in
+  // each place a `CT_Rst` carries one: a pooled plain string on A1, a pooled rich string on A2, an
+  // inline string on A3 and the note on A1. Read it, then write and read again → { read, rewritten },
+  // each { pooledPlain, pooledRichRuns, inline, note }, where the base text of every one is `漢字`
+  // except the note's, which is `note`.
+  phoneticRunReport() {
+    const wb = new Workbook();
+    const sheet = wb.addWorksheet('S');
+    sheet.getCell('A1').value = 'one';
+    sheet.getCell('A2').value = 'two';
+    sheet.getCell('A3').value = 'three';
+    sheet.getCell('A1').note = 'note';
+    const written = writeXlsx(wb, {useSharedStrings: true});
+    const notesPart = partNamesOf(written).find((name) => /^xl\/comments\d*\.xml$/.test(name));
+    if (notesPart === undefined) throw new Error('expected a comments part for the note on A1');
+    const phonetic =
+      '<rPh sb="0" eb="2"><t>かんじ</t></rPh><phoneticPr fontId="0" type="noConversion"/>';
+    const patched = patchedPackage(written, {
+      edit: {
+        'xl/sharedStrings.xml': () =>
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="2" uniqueCount="2">' +
+          `<si><t>漢字</t>${phonetic}</si>` +
+          `<si><r><rPr><b/></rPr><t>漢字</t></r>${phonetic}</si></sst>`,
+        'xl/worksheets/sheet1.xml': (xml) =>
+          xml.replace(
+            /<c r="A3"[^>]*>[\s\S]*?<\/c>/,
+            `<c r="A3" t="inlineStr"><is><t>漢字</t>${phonetic}</is></c>`,
+          ),
+        // Appended to the note's own body, whatever runs the writer spelled that body in.
+        [notesPart]: (xml) => xml.replace('</text>', `${phonetic}</text>`),
+      },
+    });
+    const readings = (workbook: WorkbookInstance) => {
+      const s = workbook.getWorksheet('S')!;
+      const rich = s.getCell('A2').value;
+      return {
+        pooledPlain: s.getCell('A1').value,
+        pooledRichRuns: isRichTextValue(rich) ? rich.richText.map((run) => run.text) : null,
+        inline: s.getCell('A3').value,
+        note: s.getCell('A1').note ?? null,
+      };
+    };
+    const reread = readXlsx(patched);
+    return {read: readings(reread), rewritten: readings(roundtrip(reread))};
+  },
 };

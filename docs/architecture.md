@@ -487,9 +487,10 @@ monolith, split along the OOXML package's own divisions so a change touches one 
 
 - **read** (`src/io/xlsx/`): `read-styles.ts` (`styles.xml`), `read-worksheet.ts` (one sheet),
   with `read.ts` keeping `readXlsx` and the workbook-level wiring. `read-rich-runs.ts` owns the
-  `<r>`/`<rPr>`/`<t>` element machine the worksheet and shared-strings parsers share, taking the
-  container name (`is` or `si`) as a constructor argument, since that is the only thing that differs
-  between a rich string Excel pooled and the same string written inline; `cell-accumulator.ts` owns
+  `<r>`/`<rPr>`/`<t>` element machine every `CT_Rst` reader shares (a worksheet's inline strings, the
+  shared-strings pool, and a note's body), taking the container name (`is`, `si` or `text`) as a
+  constructor argument, since that is the only thing that differs between them, and keeping a
+  phonetic run's `<t>` out of the text in all three; `cell-accumulator.ts` owns
   the per-cell gathering state machine the buffered and streaming readers both drive (ADR-0004).
   Both are *machines*, not bags of state calls, and for one reason: a grammar two readers spell out
   separately is kept in step by convention rather than by mechanism, and the drift it admits reads
