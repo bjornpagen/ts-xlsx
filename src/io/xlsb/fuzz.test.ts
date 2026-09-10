@@ -10,6 +10,9 @@ import type {Workbook} from '../../core/workbook.ts';
 import {PackageReadError, UnsupportedFormatError} from '../opc/errors.ts';
 import {XlsbParseError} from './errors.ts';
 import {readXlsb} from './read.ts';
+import {readRecords} from './record-stream.ts';
+import {BRT} from './record-types.ts';
+import {concat, frame, nameCitations, wide, word} from './records.test-support.ts';
 
 // An adversarial pass over the BIFF12 reader.
 //
@@ -178,6 +181,53 @@ test('a cell, row, or column addressed outside the grid is dropped, not encoded'
     mutated[offset + 3] = 0x0f;
     readOrFailClosed(zipSync({...parts, 'xl/worksheets/sheet2.bin': mutated}), `grid@${offset}`);
   }
+});
+
+test('a cell formula citing a megabyte defined name hundreds of times fails no worse than closed', () => {
+  // Random mutation cannot find this one: it needs a long name *and* a stream that cites it, and each
+  // is harmless without the other. The decoded text would be the name's length times the citations.
+  const parts = unzipSync(readFileSync(FIXTURE));
+  const workbookPart = parts['xl/workbook.bin'];
+  const sheetPart = parts['xl/worksheets/sheet1.bin'];
+  assert.ok(workbookPart && sheetPart);
+  // A `PtgName` cites by 1-based position among every `BrtName` in the file.
+  const index = [...readRecords(workbookPart)].filter(({type}) => type === BRT.Name).length + 1;
+  const longName = frame(
+    BRT.Name,
+    concat(
+      word(0),
+      Uint8Array.of(0),
+      word(0xffffffff),
+      wide('x'.repeat(1 << 20)),
+      word(3),
+      Uint8Array.of(0x1e, 1, 0),
+      word(0),
+    ),
+  );
+  const rgce = nameCitations(600, index);
+  const citingCell = concat(
+    frame(BRT.RowHdr, concat(word(199), word(0), Uint8Array.of(0, 0, 0, 0))),
+    frame(
+      BRT.FmlaNum,
+      concat(
+        word(0),
+        word(0),
+        new Uint8Array(8),
+        Uint8Array.of(0, 0),
+        word(rgce.length),
+        rgce,
+        word(0),
+      ),
+    ),
+  );
+  readOrFailClosed(
+    zipSync({
+      ...parts,
+      'xl/workbook.bin': concat(workbookPart, longName),
+      'xl/worksheets/sheet1.bin': concat(sheetPart, citingCell),
+    }),
+    'a megabyte name cited 600 times',
+  );
 });
 
 test('a deeply repeated collection marker does not accumulate unbounded state', () => {

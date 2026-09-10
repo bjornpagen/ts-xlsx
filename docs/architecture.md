@@ -660,6 +660,12 @@ recognisable as a change to a property somebody checked rather than to an implem
   a dropped token ended and finds a closing quote with one `indexOf`, which bounds every character to
   a constant number of visits. `xml-scan.test.ts` counts those visits and holds the scan to the
   regex's answers.
+- **Formula text decoded from BIFF12 is bounded.** In XML a formula is never longer than the bytes it
+  came from; in BIFF12 a five-byte `PtgName` or 3-D reference stands for a name or sheet of any
+  length, and a 3,599-byte stream citing a 1 MiB name 600 times threw a native `RangeError` out of
+  `readXlsb`. Every decoded result passes through one `push`, which drops a formula past four times
+  Excel's 8,192-character limit and keeps its cached value. A byte above `0x7f` names no token, rather
+  than being masked onto an operand as it was.
 - **Attribute coercion is one vocabulary.** No hand-rolled `attr === '1'` or bare `Number(attr)`
   survives on the read path; `xml-attrs.ts` is the whole of it, and its answer to an unreadable value
   is always `undefined`.

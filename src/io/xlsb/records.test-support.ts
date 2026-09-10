@@ -46,6 +46,16 @@ export function wide(text: string): Uint8Array {
 }
 
 /**
+ * A formula token stream citing defined name `index` (1-based) `count` times, joined by `&`: 3,599
+ * bytes for 600 citations. Over a long name, the stream whose decoded text is that name's length
+ * times `count`, while its own length stays five bytes a citation.
+ */
+export function nameCitations(count: number, index = 1): Uint8Array {
+  const cite = concat(Uint8Array.of(0x43), word(index));
+  return concat(cite, ...Array.from({length: count - 1}, () => concat(cite, Uint8Array.of(0x08))));
+}
+
+/**
  * A part re-framed record by record, each replaced by the bytes `edit` returns for it. Returning
  * `frame(type, data)` keeps a record as it was; returning more than one framed record inserts some.
  * How a test changes one field of an Excel-authored part without hand-copying the rest of it.

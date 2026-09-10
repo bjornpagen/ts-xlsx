@@ -124,8 +124,9 @@ function decodeTokens(rgce: Uint8Array, rgcb: Uint8Array, scope: FormulaScope): 
     scope,
     // Pushing `undefined` is how an undecodable token is reported without unwinding: the loop stops
     // and the arity check below rejects the stream. It keeps every token case a plain expression.
+    // Every result reaches the stack through here, so this is also the one place the text is bounded.
     push: (text: string | undefined): boolean => {
-      if (text === undefined) return false;
+      if (text === undefined || text.length > MAX_DECODED_FORMULA_LENGTH) return false;
       stack.push(text);
       return true;
     },
@@ -198,7 +199,9 @@ function step(ptg: number, decode: Decode): boolean {
     default:
       // Every remaining token is an operand or call whose meaning is independent of its result class
       // (reference, value, or array): the class only tells the calculation engine how to coerce it.
-      return ptg >= CLASSED_TOKEN_FLOOR
+      // The class is two bits above a five-bit base, so the family ends at 0x7f. A byte with the top
+      // bit set names no token, and masking it anyway read `0xA4` as `A1` and `0xE5` as `A1:B4`.
+      return ptg >= CLASSED_TOKEN_FLOOR && ptg <= CLASSED_TOKEN_CEILING
         ? operand((ptg & CLASSED_TOKEN_MASK) | CLASSED_TOKEN_FLOOR, decode)
         : false;
   }
@@ -477,7 +480,20 @@ const PTG = {
 } as const;
 
 const CLASSED_TOKEN_FLOOR = 0x20;
+const CLASSED_TOKEN_CEILING = 0x7f;
 const CLASSED_TOKEN_MASK = 0x1f;
+
+// The longest text a decoded stream may produce. Excel caps a formula's contents at 8,192 characters,
+// and the on-disk spelling adds `_xlfn.` and `_xlpm.` prefixes that do not count against that cap, so
+// four times it leaves every real spelling room while holding a hostile stream to kilobytes.
+//
+// In XML a formula is never longer than the bytes it came from. Here it can be: a five-byte `PtgName`
+// or 3-D reference stands for a name or sheet of any length, so the text grows as that length times
+// the token count. A 3,599-byte stream citing a 1 MiB defined name 600 times threw a native
+// `RangeError: Invalid string length` out of `readXlsb`, and a stream kept just under the engine's
+// string limit would have put hundreds of megabytes into every cell carrying it. Past this length the
+// formula is dropped and its cached value kept, the answer an undecodable token already gets.
+const MAX_DECODED_FORMULA_LENGTH = 4 * 8_192;
 
 // `PtgAttr` flag bits.
 const ATTR_CHOOSE = 0x04;

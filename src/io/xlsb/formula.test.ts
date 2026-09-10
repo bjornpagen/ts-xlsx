@@ -3,6 +3,7 @@ import {test} from 'node:test';
 
 import {decodeFormula, type FormulaScope, formulaAnchor} from './formula.ts';
 import {builtinFunctionAt, functionNameFor} from './ptg-functions.ts';
+import {nameCitations} from './records.test-support.ts';
 
 function bytes(...values: number[]): Uint8Array {
   return Uint8Array.from(values);
@@ -79,6 +80,52 @@ test('an unrecognised token abandons the formula rather than guessing past it', 
   // 0x18 opens the extended-token family (structured references), which this reader does not decode.
   // Its length is not knowable from the ptg alone, so continuing would desynchronise the walk.
   assert.equal(decodeFormula(bytes(0x1e, 1, 0, 0x18, 0x19, 0, 0), NONE, SCOPE), undefined);
+});
+
+test('a short stream citing a long name costs the formula, not the read', () => {
+  // A five-byte `PtgName` stands for a name of any length, so decoded text is not bounded by the bytes
+  // it came from. This stream used to throw a native `RangeError: Invalid string length`.
+  const rgce = nameCitations(600);
+  assert.equal(rgce.length, 3_599);
+  assert.equal(decodeFormula(rgce, NONE, {...SCOPE, names: ['x'.repeat(1 << 20)]}), undefined);
+});
+
+test('a formula as long as Excel allows still decodes', () => {
+  const name = 'x'.repeat(8_192);
+  assert.equal(decodeFormula(nameCitations(1), NONE, {...SCOPE, names: [name]}), name);
+});
+
+test('a byte above 0x7f names no token, even where masking it would name an operand', () => {
+  // A classed token is a five-bit base under two bits of result class, so the family is 0x20..0x7f.
+  // Each payload here is one the value-class token of the same base decodes, which is asserted
+  // alongside, so the refusal is of the byte and not of a malformed stream.
+  const payloads: ReadonlyMap<number, readonly number[]> = new Map([
+    [0x23, [1, 0, 0, 0]],
+    [0x24, [0, 0, 0, 0, 0x00, 0xc0]],
+    [0x25, [0, 0, 0, 0, 3, 0, 0, 0, 0x00, 0xc0, 0x01, 0xc0]],
+    [0x2a, new Array<number>(6).fill(0)],
+    [0x2b, new Array<number>(12).fill(0)],
+    [0x3a, [0, 0, 0, 0, 0, 0, 0x00, 0xc0]],
+    [0x3b, [0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0x00, 0xc0, 0x01, 0xc0]],
+    [0x3c, new Array<number>(8).fill(0)],
+    [0x3d, new Array<number>(14).fill(0)],
+  ]);
+  for (const [base, payload] of payloads) {
+    const valueClass = base + 0x20;
+    assert.notEqual(
+      decodeFormula(bytes(valueClass, ...payload), NONE, SCOPE),
+      undefined,
+      `0x${valueClass.toString(16)} decodes`,
+    );
+  }
+  for (let ptg = 0x80; ptg <= 0xff; ptg++) {
+    const payload = payloads.get((ptg & 0x1f) | 0x20) ?? [];
+    assert.equal(
+      decodeFormula(bytes(ptg, ...payload), NONE, SCOPE),
+      undefined,
+      `0x${ptg.toString(16)}`,
+    );
+  }
 });
 
 test('a stream that does not reduce to one value is rejected', () => {
