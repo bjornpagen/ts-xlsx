@@ -358,6 +358,36 @@ export const grid = {
     };
   },
 
+  // Put a `tokenLength`-character junk token with no `=` into A1's open tag, then time both readers
+  // → { tokenLength, zippedBytes, bufferedMs, buffered, streamingMs, streamed }, where `buffered` and
+  // `streamed` are A1's value as each reader saw it. The token is the input that made a backtracking
+  // attribute scan quadratic; the `r` after it is what proves the scan still reads past it.
+  junkAttributeTokenReport(tokenLength: number) {
+    const wb = new Workbook();
+    wb.addWorksheet('S').getCell('A1').value = 42;
+    const archive = patchedPackage(writeXlsx(wb), {
+      edit: {
+        'xl/worksheets/sheet1.xml': (xml) =>
+          xml.replace('<c r="A1"', `<c ${'j'.repeat(tokenLength)} r="A1"`),
+      },
+    });
+
+    const bufferedStart = performance.now();
+    const buffered = readXlsx(archive).getWorksheet('S')?.getCell('A1').value ?? null;
+    const bufferedMs = performance.now() - bufferedStart;
+
+    const streamingStart = performance.now();
+    let streamed: unknown = null;
+    for (const sheet of readWorkbookStream(archive)) {
+      for (const row of sheet.rows()) {
+        for (const cell of row.cells) if (cell.address === 'A1') streamed = cell.value;
+      }
+    }
+    const streamingMs = performance.now() - streamingStart;
+
+    return {tokenLength, zippedBytes: archive.length, bufferedMs, buffered, streamingMs, streamed};
+  },
+
   // Assign an outline (grouping) level to a row and a column, write, and read back → { rowOutline,
   // colOutline }. The OOXML outlineLevel attribute on <row>/<col> must survive the round-trip on both
   // axes so a collapsible grouping is preserved on reopen.

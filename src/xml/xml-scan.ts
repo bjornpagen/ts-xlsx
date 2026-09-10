@@ -104,21 +104,82 @@ function admitText(value: string): string {
   return stripUnrepresentable(decodeEntities(value));
 }
 
-// One attribute at a time: a name, then a value in either quote style. Matching the quotes is what
-// lets a delimiter-respecting scan find a tag's end even when an attribute value holds a `>` (legal
-// but rare). Names may carry a namespace prefix (`r:id`, `xml:space`).
-const ATTRIBUTE = /([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+const EQUALS = 0x3d;
+const SLASH = 0x2f;
+const GREATER_THAN = 0x3e;
+const DOUBLE_QUOTE = 0x22;
+const SINGLE_QUOTE = 0x27;
 
+const WIDE_WHITESPACE = /\s/;
+
+// JavaScript's `\s`, not XML's four whitespace characters: the regex this scan replaced split names on
+// `\s`, and keeping its set keeps every tag reading exactly as it did. Beyond ASCII the set is asked of
+// `\s` itself, one character at a time, rather than copied into a table that could drift from it.
+function isScanWhitespace(code: number): boolean {
+  if (code < 0x80) return code === 0x20 || (code >= 0x09 && code <= 0x0d);
+  return WIDE_WHITESPACE.test(String.fromCharCode(code));
+}
+
+function skipScanWhitespace(source: string, from: number): number {
+  let i = from;
+  while (i < source.length && isScanWhitespace(source.charCodeAt(i))) i++;
+  return i;
+}
+
+function endsName(code: number): boolean {
+  // Everything between `>` and NBSP ends nothing, and that range holds the letters most names are
+  // made of, so the common character is answered by one comparison instead of the whitespace table.
+  if (code > GREATER_THAN && code < 0xa0) return false;
+  return isScanWhitespace(code) || code === EQUALS || code === SLASH || code === GREATER_THAN;
+}
+
+/**
+ * A tag's attributes: each a name, then `=`, then a value in either quote style. Matching the quotes
+ * is what lets a delimiter-respecting scan find a tag's end even when a value holds a `>` (legal but
+ * rare). Names may carry a namespace prefix (`r:id`, `xml:space`). Anything that is not an attribute,
+ * such as a name nothing assigns or a quote never closed, is skipped rather than refused.
+ *
+ * Linear in the source, and that is the point of it being hand-written. The regex it replaced
+ * backtracked over a run of name characters no `=` followed from every position inside the run, so a
+ * single junk token in a tag cost the square of its length: a megabyte of one letter, a kilobyte
+ * zipped, cost minutes inside either reader. Here a dropped token resumes the scan where the token
+ * ended, and a value's closing quote is found with one `indexOf`, so no character is visited more
+ * than a constant number of times.
+ */
 export function parseAttributes(source: string): XmlAttributes {
   // Null-prototype: attribute names are file-derived, and `XmlAttributes` is an index signature
   // every reader reads through, so an inherited `constructor` would read as a present attribute.
   const attrs: Record<string, string> = Object.create(null) as Record<string, string>;
-  ATTRIBUTE.lastIndex = 0;
-  let match = ATTRIBUTE.exec(source);
-  while (match !== null) {
-    const value = match[2] ?? match[3] ?? '';
-    attrs[match[1] as string] = admitText(value);
-    match = ATTRIBUTE.exec(source);
+  const length = source.length;
+  let i = 0;
+  while (i < length) {
+    const nameStart = i;
+    while (i < length && !endsName(source.charCodeAt(i))) i++;
+    if (i === nameStart) {
+      i++;
+      continue;
+    }
+    let cursor = skipScanWhitespace(source, i);
+    if (source.charCodeAt(cursor) !== EQUALS) {
+      // A name nothing assigns, like the `jjj` in `<c jjj r="A1">`: dropped, resuming at whatever
+      // ended it.
+      i = cursor;
+      continue;
+    }
+    cursor = skipScanWhitespace(source, cursor + 1);
+    const quote = source.charCodeAt(cursor);
+    const close =
+      quote === DOUBLE_QUOTE || quote === SINGLE_QUOTE
+        ? source.indexOf(quote === DOUBLE_QUOTE ? '"' : "'", cursor + 1)
+        : -1;
+    if (close === -1) {
+      // No value, or one never closed. What stands at the cursor starts the next name, a stray quote
+      // included, since a quote is a name character to this scan as it was to the regex.
+      i = cursor;
+      continue;
+    }
+    attrs[source.slice(nameStart, i)] = admitText(source.slice(cursor + 1, close));
+    i = close + 1;
   }
   return attrs;
 }

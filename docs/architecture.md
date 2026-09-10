@@ -647,6 +647,13 @@ recognisable as a change to a property somebody checked rather than to an implem
   a header that lies about its uncompressed length buys nothing.
 - **`<dimension ref>` and `<row spans>` drive no preallocation.** Both are hints a file chooses, and
   a reader that sized an array from one would let a few bytes of XML ask for an arbitrary allocation.
+- **The attribute scan is linear.** It was not until September 2026: `parseAttributes` was a global
+  regex that backtracked over a run of name characters no `=` followed from every position inside
+  the run, so one junk token in a tag cost the square of its length, and a megabyte of one letter,
+  a kilobyte zipped, cost minutes in either reader. It is now a hand-written scan that resumes where
+  a dropped token ended and finds a closing quote with one `indexOf`, which bounds every character to
+  a constant number of visits. `xml-scan.test.ts` counts those visits and holds the scan to the
+  regex's answers.
 - **Attribute coercion is one vocabulary.** No hand-rolled `attr === '1'` or bare `Number(attr)`
   survives on the read path; `xml-attrs.ts` is the whole of it, and its answer to an unreadable value
   is always `undefined`.

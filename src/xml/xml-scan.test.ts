@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
 import {decodeSpreadsheetText, numFinite, numInteger} from './xml-attrs.ts';
-import {decodeEntities, localName, type XmlAttributes, xmlEvents} from './xml-scan.ts';
+import {
+  decodeEntities,
+  localName,
+  parseAttributes,
+  type XmlAttributes,
+  xmlEvents,
+} from './xml-scan.ts';
 import {escapeSpreadsheetText} from './xml.ts';
 
 interface Event {
@@ -82,6 +88,116 @@ test('xmlEvents parses attributes in both quote styles and decodes their entitie
 test('xmlEvents tolerates a literal ">" inside a quoted attribute value', () => {
   const [open] = events('<f formula="1 > 0"/>');
   assert.equal(open?.attrs?.formula, '1 > 0');
+});
+
+// The attribute scan runs on every open tag of every part, and a file chooses what sits inside a tag.
+// It used to be the global regex below, which backtracked over a name run no `=` followed from every
+// start position inside it: `<c aaaa…/>` cost the square of the run, so 8K, 16K and 32K characters took 84, 339 and 1,120 ms, and
+// a megabyte-long run that zips to a kilobyte took minutes. The scan that replaced it is held to that
+// regex's answers and counted rather than timed, for the reason `merge-index.test.ts` gives.
+
+const REGEX_SCAN = /([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+
+function regexAttributes(source: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const match of source.matchAll(REGEX_SCAN)) {
+    out[match[1] as string] = match[2] ?? match[3] ?? '';
+  }
+  return out;
+}
+
+test('parseAttributes skips what is not an attribute and still reads the attributes after it', () => {
+  // A name nothing assigns, a value with no quote, and a quote never closed each cost only themselves.
+  // The last is the subtle one: the stray quote reads as the start of a name, so an attribute in the
+  // other quote style after it still reads.
+  assert.deepEqual({...parseAttributes(' junk r="A1"')}, {r: 'A1'});
+  assert.deepEqual({...parseAttributes(' a=b t="s"')}, {t: 's'});
+  assert.deepEqual({...parseAttributes(` a="open b='q'`)}, {b: 'q'});
+});
+
+test('parseAttributes answers exactly what the regex scan it replaced answered', () => {
+  // Tokens rather than characters, so a random source is often shaped like a tag: a name, an `=`, a
+  // quoted value or a quote left open, and whatever follows. Whitespace includes what only
+  // JavaScript's `\s` knows (NBSP, LINE SEPARATOR, BOM). No `&` or control character appears, so
+  // entity decoding is the identity and any difference is the scan's. A seeded generator, so a
+  // failure names a reproducible input.
+  const alphabet = [
+    'a',
+    'b:c',
+    '=',
+    '"',
+    "'",
+    '"v"',
+    "'w'",
+    '""',
+    '/',
+    '>',
+    ' ',
+    '\t',
+    '\n',
+    '\u00a0',
+    '\u2028',
+    '\ufeff',
+  ];
+  let seed = 0x2f6b93cd;
+  const next = (): number => {
+    // `Math.imul`, not `*`: the plain product passes 2^53, rounding zeroes its low bits, and the
+    // generator collapses into a short cycle that never produces most shapes.
+    seed = (Math.imul(seed, 1_103_515_245) + 12_345) >>> 0;
+    return seed >>> 8;
+  };
+  for (let round = 0; round < 20_000; round++) {
+    let source = '';
+    for (let length = next() % 24; length > 0; length--) {
+      source += alphabet[next() % alphabet.length];
+    }
+    assert.deepEqual({...parseAttributes(source)}, regexAttributes(source), JSON.stringify(source));
+  }
+});
+
+// `parseAttributes` reads its source through `charCodeAt`, `indexOf` and `slice`, so a `String` that
+// counts those calls sees every character the scan visits. A regex handed the same object would coerce
+// it to a primitive and count nothing, which is why the floor is asserted beside the ceiling.
+class CountingString extends String {
+  visits = 0;
+
+  override charCodeAt(index: number): number {
+    this.visits++;
+    return super.charCodeAt(index);
+  }
+
+  override indexOf(search: string, from = 0): number {
+    const found = super.indexOf(search, from);
+    this.visits += (found === -1 ? this.length : found + 1) - from;
+    return found;
+  }
+
+  override slice(start?: number, end?: number): string {
+    const sliced = super.slice(start, end);
+    this.visits += sliced.length;
+    return sliced;
+  }
+}
+
+test('parseAttributes visits each character a constant number of times, whatever the tag holds', () => {
+  const shapes: Record<string, (n: number) => string> = {
+    'a name run no "=" follows': (n) => ` ${'a'.repeat(n)}`,
+    'names each followed by "=" and no quote': (n) => ` ${'a='.repeat(n / 2)}`,
+    'a quote left open to the end': (n) => ` a="${'x'.repeat(n)}`,
+    'a run of quotes read as a name': (n) => ` ${'"'.repeat(n)}`,
+    'whitespace between "=" and its quote': (n) => ` a=${' '.repeat(n)}"v"`,
+    'many well-formed attributes': (n) => ' a="1"'.repeat(n / 6),
+  };
+  for (const [shape, build] of Object.entries(shapes)) {
+    for (const n of [1_200, 96_000]) {
+      const source = new CountingString(build(n));
+      parseAttributes(source as unknown as string);
+      assert.ok(
+        source.visits >= source.length && source.visits <= 8 * source.length,
+        `${shape}: ${source.visits} visits over ${source.length} characters`,
+      );
+    }
+  }
 });
 
 test('xmlEvents normalizes CRLF and lone CR line endings in text to LF (XML §2.11)', () => {
