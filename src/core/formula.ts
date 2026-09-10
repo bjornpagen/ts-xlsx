@@ -1,6 +1,7 @@
 // OOXML froze its formula-function grammar around Excel 2007. Every function Microsoft has added
 // since (the dynamic-array family, LAMBDA and its helpers, the newer text and logical functions)
-// is persisted in the sheet XML under an `_xlfn.` name-mangling prefix. The prefix is purely an
+// is persisted in the sheet XML under an `_xlfn.` name-mangling prefix, which a worksheet-only
+// function extends to `_xlfn._xlws.`. The prefix is purely an
 // on-disk convention: the model only ever holds the plain, readable name, the writer applies the
 // prefix on the way out, and the reader strips it back on the way in. A writer that omits it emits
 // a formula current Excel silently drops, because the function is unknown under its bare name. This
@@ -23,10 +24,9 @@
 
 import {assertWritableNumber} from '../errors.ts';
 import {MAX_COLUMN, MAX_ROW, numberToColumn, tryColumnToNumber} from './address.ts';
-import {MODERN_FUNCTIONS} from './modern-functions.ts';
+import {FUTURE_FUNCTION_PREFIXES} from './future-functions.ts';
 import {REF_ERROR} from './value.ts';
 
-const XLFN = '_xlfn.';
 const XLPM = '_xlpm.';
 
 /**
@@ -65,7 +65,7 @@ const SCOPING_FUNCTIONS: ReadonlySet<string> = new Set(['LET', 'LAMBDA']);
 // double-prefixed. Lookbehind rather than a consumed boundary char so adjacent calls
 // (SUM(FILTER(…))) both match.
 const FUNCTION_CALL = /(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_.]*)(\s*\()/g;
-const PREFIX = /_xlfn\.|_xlpm\./g;
+const PREFIX = /_xlfn\.(?:_xlws\.)?|_xlpm\./g;
 
 // Advance past the opaque region opened at `index`: a double-quoted string literal or a single-quoted
 // sheet name, both honouring the doubled-quote escape (`""`, `''`), or a bracketed structured
@@ -138,7 +138,8 @@ function scanFormula(formula: string, transform: (code: string) => string): stri
 }
 
 /**
- * Prefix every modern function called by its plain name with `_xlfn.` so Excel accepts the stored
+ * Prefix every future function called by its plain name with the prefix Excel stores it under
+ * (`_xlfn.`, or `_xlfn._xlws.` for the worksheet-only FILTER, SORT and PY) so Excel accepts the stored
  * formula. Names already prefixed are left alone (never doubled), unknown/legacy functions pass
  * through untouched, and opaque regions (string literals, sheet names, structured references) are
  * preserved verbatim. No other rewriting occurs: in particular no `@` implicit-intersection operator
@@ -146,16 +147,18 @@ function scanFormula(formula: string, transform: (code: string) => string): stri
  */
 export function mangleFunctions(formula: string): string {
   return scanFormula(formula, (code) =>
-    code.replace(FUNCTION_CALL, (whole, name: string, open: string) =>
-      MODERN_FUNCTIONS.has(name.toUpperCase()) ? `${XLFN}${name}${open}` : whole,
-    ),
+    code.replace(FUNCTION_CALL, (whole, name: string, open: string) => {
+      const prefix = FUTURE_FUNCTION_PREFIXES.get(name.toUpperCase());
+      return prefix === undefined ? whole : `${prefix}${name}${open}`;
+    }),
   );
 }
 
 /**
- * Strip the `_xlfn.` function prefix and the `_xlpm.` LET-parameter prefix back to the plain names,
- * so the model holds the readable form regardless of how a file stored it. Opaque regions (string
- * literals, sheet names, structured references) are left untouched.
+ * Strip the `_xlfn.` function prefix (with the `_xlws.` a worksheet-only function adds after it) and
+ * the `_xlpm.` LET-parameter prefix back to the plain names, so the model holds the readable form
+ * regardless of how a file stored it. Opaque regions (string literals, sheet names, structured
+ * references) are left untouched.
  */
 export function unmangleFunctions(formula: string): string {
   return scanFormula(formula, (code) => code.replace(PREFIX, ''));
@@ -227,19 +230,20 @@ function boundName(formula: string, [start, end]: [number, number]): string | un
   return name.startsWith(XLPM) ? undefined : name;
 }
 
-// The parameter names a LET/LAMBDA call binds. LAMBDA binds every argument but its last (the body);
-// LET binds the even-indexed arguments up to but excluding its last (the calculation).
+// The parameter names a LET/LAMBDA call binds, keyed uppercased to the spelling each was declared with.
+// LAMBDA binds every argument but its last (the body); LET binds the even-indexed arguments up to but
+// excluding its last (the calculation).
 function parameterNames(
   formula: string,
   keyword: string,
   args: [number, number][],
-): ReadonlySet<string> {
-  const names = new Set<string>();
+): ReadonlyMap<string, string> {
+  const names = new Map<string, string>();
   const isLambda = keyword === 'LAMBDA';
   for (let a = 0; a < args.length - 1; a += 1) {
     if (isLambda || a % 2 === 0) {
       const name = boundName(formula, args[a] as [number, number]);
-      if (name !== undefined) names.add(name);
+      if (name !== undefined && !names.has(name.toUpperCase())) names.set(name.toUpperCase(), name);
     }
   }
   return names;
@@ -250,7 +254,8 @@ function parameterNames(
  * reference within the binding call's parentheses, so Excel accepts the stored formula. The prefix
  * is lexically scoped: a name is only rewritten inside the call that binds it, opaque regions are
  * copied verbatim, and a lambda-valued parameter used as a call (`f(…)`) is prefixed too. Formulas
- * with no LET/LAMBDA pass through unchanged.
+ * with no LET/LAMBDA pass through unchanged. A parameter matches case-insensitively, as Excel's names
+ * do, and every reference to it is written in the spelling it was declared with, as Excel writes it.
  */
 export function mangleParams(formula: string): string {
   // This is the one pass scanFormula cannot serve: it must know when a paren opens a LET/LAMBDA scope
@@ -260,10 +265,19 @@ export function mangleParams(formula: string): string {
   let out = '';
   let i = 0;
   const n = formula.length;
-  // A stack of active bindings, each expiring exactly at its owner call's close paren. Nested
-  // LET/LAMBDA push inner frames that pop first, so shadowing resolves to the same prefix anyway.
-  const frames: {end: number; names: ReadonlySet<string>}[] = [];
-  const inScope = (name: string): boolean => frames.some((frame) => frame.names.has(name));
+  // A stack of active bindings, each expiring exactly at its owner call's close paren. A name is looked
+  // up uppercased: matched case-sensitively, `LET(x,1,X+1)` left `X` bare, which Excel then reads as a
+  // defined name. The innermost binding is searched first, because a shadowing name decides the
+  // spelling its references are written in.
+  const frames: {end: number; names: ReadonlyMap<string, string>}[] = [];
+  const declared = (name: string): string | undefined => {
+    const key = name.toUpperCase();
+    for (let f = frames.length - 1; f >= 0; f -= 1) {
+      const spelling = frames[f]?.names.get(key);
+      if (spelling !== undefined) return spelling;
+    }
+    return undefined;
+  };
 
   while (i < n) {
     const top = frames[frames.length - 1];
@@ -292,7 +306,7 @@ export function mangleParams(formula: string): string {
     while (k < n && WHITESPACE.test(formula[k] ?? '')) k += 1;
     const heads = formula[k] === '(';
 
-    if (heads && SCOPING_FUNCTIONS.has(name.toUpperCase()) && !inScope(name)) {
+    if (heads && SCOPING_FUNCTIONS.has(name.toUpperCase()) && declared(name) === undefined) {
       const {close, args} = parseCall(formula, k);
       // The keyword stays at the outer scope; its parameters take effect inside the parens.
       out += formula.slice(i, k + 1);
@@ -303,9 +317,10 @@ export function mangleParams(formula: string): string {
 
     // Any other identifier: a bare reference, an ordinary call, or a lambda-valued parameter call.
     // In-scope names (declaration sites included, as they lie inside their own binding's parens) take
-    // the prefix; the rest pass through. Call arguments are covered by the continuing scan, so a
-    // nested LET/LAMBDA within them is still seen.
-    out += inScope(name) ? `${XLPM}${name}` : name;
+    // the prefix and their declared spelling; the rest pass through. Call arguments are covered by the
+    // continuing scan, so a nested LET/LAMBDA within them is still seen.
+    const spelling = declared(name);
+    out += spelling === undefined ? name : `${XLPM}${spelling}`;
     i = nameEnd;
   }
   return out;

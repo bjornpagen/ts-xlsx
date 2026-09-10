@@ -84,7 +84,9 @@ const TOTAL_BUDGET_BYTES = 584 * 1024;
 // `imeMode`: the reader and writer for them sit in the XML codec, and a closed token guard and its
 // union came to a few tenths of a kilobyte more than either entry had left.
 const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
-  '.': 570,
+  // Raised from 570 when the future-function registry took [MS-XLSX]'s full table and the names Excel
+  // prefixes beyond it, fifty-odd names more, which put this entry seven tenths over.
+  '.': 571,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -92,7 +94,8 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 210, by the same structured-reference spelling as `/xlsb` and `/csv`, which
   // put this entry four tenths over.
   './core': 211,
-  './xlsx': 554,
+  // Raised from 554 by the same future-function registry as `.`, which put this entry nine tenths over.
+  './xlsx': 555,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -105,7 +108,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 299, when a table's totals row began spelling its structured reference by
   // Excel's escaping rules. The rule sits in its own module so no entry carries the modern-function
   // list for it, yet its few hundred bytes still put this entry a tenth over.
-  './xlsb': 300,
+  //
+  // Raised again, from 300, when the future-function registry took [MS-XLSX]'s full table and the
+  // names Excel prefixes beyond it, fifty-odd names more, which put this entry four tenths over.
+  './xlsb': 301,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never

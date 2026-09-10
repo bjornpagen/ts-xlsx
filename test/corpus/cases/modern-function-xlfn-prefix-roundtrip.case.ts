@@ -22,14 +22,15 @@ export default {
 
   behavior: [
     {
-      name: 'a modern function written by its plain name is stored with the _xlfn. prefix on disk',
+      // FILTER is one of the worksheet-only functions, which Excel stores with `_xlws.` after `_xlfn.`.
+      name: 'a modern function written by its plain name is stored with its future-function prefix on disk',
       async expect(api: CorpusApi, assert: Assert) {
         const {sheets} = await api.inspectPackage({
           sheets: [{name: 'S', cells: [{ref: 'A1', formula: 'FILTER(B1:D1,B2:D2=1)', result: 0}]}],
         });
         assert.ok(
-          /_xlfn\.FILTER/.test(sheets.S!.formulas.A1 || ''),
-          `FILTER must be stored as _xlfn.FILTER for Excel to accept it; got: ${sheets.S!.formulas.A1}`,
+          /_xlfn\._xlws\.FILTER/.test(sheets.S!.formulas.A1 || ''),
+          `FILTER must be stored as _xlfn._xlws.FILTER, as Excel stores it; got: ${sheets.S!.formulas.A1}`,
         );
       },
     },

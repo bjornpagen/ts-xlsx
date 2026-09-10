@@ -16,12 +16,12 @@ test('an escaped bracket inside a structured reference neither closes nor extend
   assert.equal(mangleFunctions("T[[a']b]]"), "T[[a']b]]");
   assert.equal(
     mangleFunctions("SUBTOTAL(109,T[[a'[b]])+FILTER(x)"),
-    "SUBTOTAL(109,T[[a'[b]])+_xlfn.FILTER(x)",
+    "SUBTOTAL(109,T[[a'[b]])+_xlfn._xlws.FILTER(x)",
   );
 });
 
 test('a modern function called by its plain name gains the _xlfn. prefix', () => {
-  assert.equal(mangleFunctions('FILTER(B1:D1,B2:D2=1)'), '_xlfn.FILTER(B1:D1,B2:D2=1)');
+  assert.equal(mangleFunctions('SORTBY(B1:D1,B2:D2)'), '_xlfn.SORTBY(B1:D1,B2:D2)');
   assert.equal(mangleFunctions('XLOOKUP(1,B:B,C:C)'), '_xlfn.XLOOKUP(1,B:B,C:C)');
 });
 
@@ -31,10 +31,10 @@ test('a legacy function is left untouched', () => {
 });
 
 test('nested modern functions each get the prefix, legacy ones do not', () => {
-  assert.equal(mangleFunctions('SUM(FILTER(A:A,B:B=1))'), 'SUM(_xlfn.FILTER(A:A,B:B=1))');
+  assert.equal(mangleFunctions('SUM(FILTER(A:A,B:B=1))'), 'SUM(_xlfn._xlws.FILTER(A:A,B:B=1))');
   assert.equal(
     mangleFunctions('COUNTA(UNIQUE(FILTER(a,b=1)))'),
-    'COUNTA(_xlfn.UNIQUE(_xlfn.FILTER(a,b=1)))',
+    'COUNTA(_xlfn.UNIQUE(_xlfn._xlws.FILTER(a,b=1)))',
   );
 });
 
@@ -55,8 +55,8 @@ test('mangling introduces no @ implicit-intersection operator', () => {
 });
 
 test('matching is case-insensitive on the function name but preserves its casing', () => {
-  assert.equal(mangleFunctions('filter(A:A,B:B=1)'), '_xlfn.filter(A:A,B:B=1)');
-  assert.equal(mangleFunctions('Filter(A:A,B:B=1)'), '_xlfn.Filter(A:A,B:B=1)');
+  assert.equal(mangleFunctions('filter(A:A,B:B=1)'), '_xlfn._xlws.filter(A:A,B:B=1)');
+  assert.equal(mangleFunctions('Xlookup(1,A:A,B:B)'), '_xlfn.Xlookup(1,A:A,B:B)');
 });
 
 test('a LET/LAMBDA formula gets the _xlfn. prefix on every modern function', () => {
@@ -67,7 +67,7 @@ test('a LET/LAMBDA formula gets the _xlfn. prefix on every modern function', () 
   assert.ok(out.includes('_xlfn.BYROW'));
   assert.ok(out.includes('_xlfn.LAMBDA'));
   assert.ok(out.includes('_xlfn.UNIQUE'));
-  assert.ok(out.includes('_xlfn.FILTER'));
+  assert.ok(out.includes('_xlfn._xlws.FILTER'));
   assert.ok(out.includes('SUM(r)'));
   assert.ok(out.includes('COUNTA('));
 });
@@ -88,6 +88,66 @@ test('a pre-2007 function whose name resembles a modern one is left untouched', 
   assert.equal(mangleFunctions('COS(A1)'), 'COS(A1)');
   assert.equal(mangleFunctions('GAMMALN(A1)'), 'GAMMALN(A1)');
   assert.equal(mangleFunctions('WEEKNUM(A1)'), 'WEEKNUM(A1)');
+});
+
+// Excel stores FILTER and SORT as `_xlfn._xlws.FILTER` and `_xlfn._xlws.SORT`. Knowing only `_xlfn.`,
+// the reader left `_xlws.FILTER` in the model, the writer then wrote it back without `_xlfn.`, and an
+// authored FILTER went out as `_xlfn.FILTER`, a spelling Excel does not write.
+test('the worksheet-only functions take _xlws. after _xlfn., and unmangling strips both', () => {
+  assert.equal(mangleFunctions('FILTER(A1:A3,A1:A3>0)'), '_xlfn._xlws.FILTER(A1:A3,A1:A3>0)');
+  assert.equal(mangleFunctions('SORT(A1:A3)'), '_xlfn._xlws.SORT(A1:A3)');
+  assert.equal(mangleFunctions('PY(0,0)'), '_xlfn._xlws.PY(0,0)');
+  assert.equal(unmangleFunctions('_xlfn._xlws.FILTER(A1:A3,A1:A3>0)'), 'FILTER(A1:A3,A1:A3>0)');
+  assert.equal(unmangleFunctions('SUM(_xlfn._xlws.SORT(A1:A3))'), 'SUM(SORT(A1:A3))');
+  assert.equal(
+    mangleFunctions('_xlfn._xlws.SORT(A1:A3)'),
+    '_xlfn._xlws.SORT(A1:A3)',
+    'not doubled',
+  );
+});
+
+// Each of these was written bare, and current Excel reads a future function without its prefix as
+// `#NAME?`. The spellings are what Excel Desktop itself saved.
+test('every family Excel writes with _xlfn. that the registry lacked is prefixed', () => {
+  for (const call of [
+    'CEILING.MATH(4.3)',
+    'FLOOR.MATH(4.3)',
+    'FORECAST.LINEAR(1,A1:A3,A1:A3)',
+    'FORECAST.ETS(4,A1:A3,A1:A3)',
+    'FORECAST.ETS.CONFINT(4,A1:A3,A1:A3)',
+    'FORECAST.ETS.SEASONALITY(A1:A3,A1:A3)',
+    'FORECAST.ETS.STAT(A1:A3,A1:A3,1)',
+    'GROUPBY(A1:A3,A1:A3,x)',
+    'PIVOTBY(A1:A3,A1:A3,A1:A3,x)',
+    'PERCENTOF(A1:A3,A1:A3)',
+    'REGEXTEST(A1,"a")',
+    'REGEXEXTRACT(A1,"a")',
+    'REGEXREPLACE(A1,"a","b")',
+    'TRIMRANGE(A1:A3)',
+    'ANCHORARRAY(E1)',
+    'SINGLE(A1:A3)',
+    'FIELDVALUE(A1,"x")',
+    'STOCKHISTORY("MSFT",1)',
+    'IMAGE("https://example.com/a.png")',
+    'TRANSLATE("hola","es","en")',
+    'DETECTLANGUAGE("hola")',
+    'PYTHON_STR(A1)',
+  ]) {
+    assert.equal(mangleFunctions(call), `_xlfn.${call}`, call);
+  }
+});
+
+// [MS-XLSX] lists these among its future functions with no prefix, and Excel writes them bare. ISO.CEILING
+// used to be prefixed, which is a spelling Excel does not read.
+test('a post-2007 function Excel writes bare is left bare', () => {
+  for (const call of [
+    'NETWORKDAYS.INTL(1,30)',
+    'WORKDAY.INTL(1,5)',
+    'ISO.CEILING(4.3)',
+    'ECMA.CEILING(4.3,1)',
+  ]) {
+    assert.equal(mangleFunctions(call), call);
+  }
 });
 
 test('a dotted 2010 statistical function is matched whole and prefixed', () => {
@@ -170,6 +230,25 @@ test('a parameter name inside a structured reference is never prefixed', () => {
   assert.equal(mangleParams('LET(x,1,Table[x]&x)'), 'LET(_xlpm.x,1,Table[x]&_xlpm.x)');
 });
 
+// Excel's names are case-insensitive, and it writes every reference in the declared spelling: it saves
+// `LET(x,1,X+1)` as `_xlfn.LET(_xlpm.x,1,_xlpm.x+1)`. Matched case-sensitively, the `X` stayed bare and
+// read back as a defined name.
+test('a parameter reference matches its declaration whatever its case, in the declared spelling', () => {
+  assert.equal(mangleParams('LET(x,1,X+1)'), 'LET(_xlpm.x,1,_xlpm.x+1)');
+  assert.equal(mangleFormula('LAMBDA(Val,val*2)(3)'), '_xlfn.LAMBDA(_xlpm.Val,_xlpm.Val*2)(3)');
+  assert.equal(
+    mangleParams('let(total,SUM(A1:A3),TOTAL*2)'),
+    'let(_xlpm.total,SUM(A1:A3),_xlpm.total*2)',
+  );
+});
+
+test('a shadowing binding decides the spelling of the references inside it', () => {
+  assert.equal(
+    mangleParams('LET(x,1,LET(X,2,x)+x)'),
+    'LET(_xlpm.x,1,LET(_xlpm.X,2,_xlpm.X)+_xlpm.x)',
+  );
+});
+
 test('a lambda-valued parameter called as a function is prefixed', () => {
   assert.equal(
     mangleParams('LET(f,LAMBDA(v,v+1),f(5))'),
@@ -199,7 +278,7 @@ test('mangleFormula applies both prefixes in the correct order', () => {
   assert.equal(mangleFormula('LET(x,1,x+1)'), '_xlfn.LET(_xlpm.x,1,_xlpm.x+1)');
   assert.equal(
     mangleFormula('LET(a,B2:B9,b,BYROW(a,LAMBDA(r,SUM(r))),COUNTA(UNIQUE(FILTER(a,b=1))))'),
-    '_xlfn.LET(_xlpm.a,B2:B9,_xlpm.b,_xlfn.BYROW(_xlpm.a,_xlfn.LAMBDA(_xlpm.r,SUM(_xlpm.r))),COUNTA(_xlfn.UNIQUE(_xlfn.FILTER(_xlpm.a,_xlpm.b=1))))',
+    '_xlfn.LET(_xlpm.a,B2:B9,_xlpm.b,_xlfn.BYROW(_xlpm.a,_xlfn.LAMBDA(_xlpm.r,SUM(_xlpm.r))),COUNTA(_xlfn.UNIQUE(_xlfn._xlws.FILTER(_xlpm.a,_xlpm.b=1))))',
   );
 });
 

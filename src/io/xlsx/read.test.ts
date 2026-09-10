@@ -133,7 +133,7 @@ test('a modern function is stored with _xlfn. on disk but round-trips as its pla
   const wb = new Workbook();
   wb.addWorksheet('S').getCell('A1').value = {formula: 'FILTER(B1:D1,B2:D2=1)', result: 0};
   const xml = sheetXml(writeXlsx(wb));
-  assert.match(xml, /<f>_xlfn\.FILTER\(B1:D1,B2:D2=1\)<\/f>/);
+  assert.match(xml, /<f>_xlfn\._xlws\.FILTER\(B1:D1,B2:D2=1\)<\/f>/);
 
   const value = roundtrip(wb).getWorksheet('S')?.getCell('A1').value;
   assert.ok(value && isFormulaValue(value));

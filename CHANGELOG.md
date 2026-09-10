@@ -168,6 +168,16 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   whatever the authored spelling or the theme part's casing, and `resolveColor` resolves a
   caller-built scheme slot that is not six hex digits to `undefined`.
 
+- **Future-function prefixes came from an incomplete and partly wrong list.** Excel stores FILTER, SORT
+  and PY as `_xlfn._xlws.FILTER`: formula text read from such a file kept `_xlws.FILTER`, a rewrite
+  dropped its `_xlfn.`, and an authored FILTER or SORT was written as `_xlfn.FILTER`. The list now
+  follows [MS-XLSX]'s future-function table plus the functions Excel writes with `_xlfn.` that the table
+  does not list yet. CEILING.MATH, FLOOR.MATH, FORECAST.LINEAR, the FORECAST.ETS family, GROUPBY,
+  PIVOTBY, PERCENTOF, the REGEX functions, TRIMRANGE, IMAGE and STOCKHISTORY were written bare, and so
+  were SINGLE and ANCHORARRAY, the forms Excel stores `@` and a spill reference in. ISO.CEILING was
+  prefixed although Excel writes it bare. A LET or LAMBDA parameter referenced in a different case
+  (`LET(x,1,X+1)`) is now recognised, and written in its declared spelling as Excel writes it.
+
 
 ## [3.1.0] — 2026-09-04
 
