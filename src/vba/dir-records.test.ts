@@ -8,19 +8,7 @@ import {test} from 'node:test';
 
 import {dirRecords, REC_MODULES_COUNT, REC_PROJECT_VERSION} from './dir-records.ts';
 import {VbaParseError} from './errors.ts';
-
-function u16le(n: number): number[] {
-  return [n & 0xff, (n >> 8) & 0xff];
-}
-
-function u32le(n: number): number[] {
-  return [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, (n >> 24) & 0xff];
-}
-
-/** One TLV record: `Id(u16) Size(u32) data[Size]`. */
-function rec(id: number, data: readonly number[]): number[] {
-  return [...u16le(id), ...u32le(data.length), ...data];
-}
+import {rec, u16le, u32le} from './vba.test-support.ts';
 
 test('dirRecords walks a flat TLV stream, reporting each record and where the next begins', () => {
   const stream = Uint8Array.from([

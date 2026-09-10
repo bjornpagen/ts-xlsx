@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {unzipSync, zipSync} from 'fflate';
 
 import type {Workbook} from '../../core/workbook.ts';
+import {xorshift32} from '../../fuzz.test-support.ts';
 import {PackageReadError, UnsupportedFormatError} from '../opc/errors.ts';
 import {XlsbParseError} from './errors.ts';
 import {readXlsb} from './read.ts';
@@ -42,18 +43,6 @@ const BINARY_PARTS = [
   'xl/styles.bin',
   'xl/sharedStrings.bin',
 ];
-
-// xorshift32: a deterministic generator, so a failing case is reproducible from its seed alone rather
-// than being a flake someone has to reproduce by luck.
-function random(seed: number): () => number {
-  let state = seed | 0 || 1;
-  return () => {
-    state ^= state << 13;
-    state ^= state >>> 17;
-    state ^= state << 5;
-    return state >>> 0;
-  };
-}
 
 // A formula literal JavaScript spells but no spreadsheet grammar does. Eight mutated bytes of a
 // `PtgNum` decode to one of these as readily as to any other double, and the decoder used to render
@@ -115,7 +104,7 @@ function assertWritableFormulas(workbook: Workbook, label: string): void {
 
 test('single-byte mutations anywhere in the binary parts never escape the typed failure modes', () => {
   const parts = unzipSync(readFileSync(FIXTURE));
-  const next = random(0x5eed1);
+  const next = xorshift32(0x5eed1);
   for (let round = 0; round < 300; round++) {
     const partName = BINARY_PARTS[next() % BINARY_PARTS.length] ?? '';
     const original = parts[partName];
@@ -132,7 +121,7 @@ test('single-byte mutations anywhere in the binary parts never escape the typed 
 
 test('a part truncated at any point fails closed rather than reading half a workbook into a crash', () => {
   const parts = unzipSync(readFileSync(FIXTURE));
-  const next = random(0x7ac6);
+  const next = xorshift32(0x7ac6);
   for (let round = 0; round < 200; round++) {
     const partName = BINARY_PARTS[next() % BINARY_PARTS.length] ?? '';
     const original = parts[partName];

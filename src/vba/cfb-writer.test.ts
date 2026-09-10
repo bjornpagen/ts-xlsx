@@ -12,6 +12,15 @@ import {strToU8} from 'fflate';
 import {type CfbNode, writeCompoundFile} from './cfb-writer.ts';
 import {CompoundFile} from './cfb.ts';
 import {VbaAuthorError} from './errors.ts';
+import {parseVbaProject} from './project.ts';
+import {
+  buildDirStream,
+  buildModuleStream,
+  CODE_PAGE,
+  MODULES,
+  PROJECT_STREAM,
+  storeCompress,
+} from './vba.test-support.ts';
 
 const SECTOR = 512;
 const NOSTREAM = 0xffffffff;
@@ -245,4 +254,30 @@ test('a name that collides only across storages is legal, since uniqueness is pe
     {name: 'B', children: [{name: 'shared', data: bytes(16, 2)}]},
   ]);
   assert.deepEqual(treeReachableStreams(bin).sort(), ['/A/shared', '/B/shared']);
+});
+
+// ── The join: a project packaged through this writer ─────────────────────────────────────────────────
+// The encoder's own properties are asserted above, against the bytes. What belongs here too is the
+// join: that a project packaged through the production writer is one the production parser reads back.
+
+test('writeCompoundFile produces a container parseVbaProject decodes', () => {
+  // Build the VBA-project stream set from the same fixture bytes, but package it through the production
+  // writer (proper VBA-storage hierarchy) rather than the fixture's own container, proving the writer
+  // yields a parseable project, not merely a reader-round-trippable blob.
+  const dir = storeCompress(Uint8Array.from(buildDirStream(CODE_PAGE, MODULES)));
+  const vbaChildren: CfbNode[] = [
+    {name: 'dir', data: dir},
+    ...MODULES.map((m) => ({name: m.name, data: buildModuleStream(m)})),
+  ];
+  const bin = writeCompoundFile([
+    {name: 'PROJECT', data: strToU8(PROJECT_STREAM)},
+    {name: 'VBA', children: vbaChildren},
+  ]);
+
+  const project = parseVbaProject(bin);
+  assert.deepEqual(
+    project.modules.map((m) => m.name),
+    ['ThisWorkbook', 'Module1', 'Class1'],
+  );
+  assert.equal(project.codePage, 1251);
 });

@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
+import {xorshift32} from '../fuzz.test-support.ts';
 import {type CfbNode, writeCompoundFile} from './cfb-writer.ts';
 import {CompoundFile} from './cfb.ts';
 import {VbaAuthorError, VbaParseError} from './errors.ts';
 import {compressContainer} from './ms-ovba.ts';
 import {addVbaReference, removeVbaModule} from './project-editor.ts';
 import {parseVbaProject} from './project.ts';
+import {ascii, rec, u16le, u32le} from './vba.test-support.ts';
 
 // An adversarial pass over the CFB container reader and the MS-OVBA decompressor.
 //
@@ -33,34 +35,24 @@ const PARSE_BUDGET_MS = 4_000;
 
 // ── The seed ────────────────────────────────────────────────────────────────────────────────────────
 
-const u16 = (n: number): number[] => [n & 0xff, (n >> 8) & 0xff];
-const u32 = (n: number): number[] => [
-  n & 0xff,
-  (n >> 8) & 0xff,
-  (n >> 16) & 0xff,
-  (n >> 24) & 0xff,
-];
-const record = (id: number, data: number[]): number[] => [...u16(id), ...u32(data.length), ...data];
-const ascii = (s: string): number[] => Array.from({length: s.length}, (_, i) => s.charCodeAt(i));
-
 const MODULE_NAMES = ['ThisWorkbook', 'Module1', 'Class1'] as const;
 
 // The dir stream [MS-OVBA] 2.3.4.2: enough of the record grammar for `parseVbaProject` to discover
 // every module and its stream, which is what puts the deeper parsers in a mutation's reach.
 function dirStream(): Uint8Array {
   const records: number[] = [];
-  records.push(...record(0x0003, u16(1252))); // PROJECTCODEPAGE
-  records.push(...record(0x0009, u32(4)), ...u16(10)); // PROJECTVERSION, uncounted minor
-  records.push(...record(0x000f, u16(MODULE_NAMES.length))); // MODULES_COUNT
-  records.push(...record(0x0013, u16(0xffff))); // PROJECTCOOKIE
+  records.push(...rec(0x0003, u16le(1252))); // PROJECTCODEPAGE
+  records.push(...rec(0x0009, u32le(4)), ...u16le(10)); // PROJECTVERSION, uncounted minor
+  records.push(...rec(0x000f, u16le(MODULE_NAMES.length))); // MODULES_COUNT
+  records.push(...rec(0x0013, u16le(0xffff))); // PROJECTCOOKIE
   for (const [index, name] of MODULE_NAMES.entries()) {
-    records.push(...record(0x0019, ascii(name))); // MODULENAME
-    records.push(...record(0x001a, ascii(name))); // MODULESTREAMNAME
-    records.push(...record(0x0031, u32(16))); // MODULEOFFSET
-    records.push(...record(index === 0 ? 0x0022 : 0x0021, [])); // MODULETYPE
-    records.push(...record(0x002b, [])); // MODULETERMINATOR
+    records.push(...rec(0x0019, ascii(name))); // MODULENAME
+    records.push(...rec(0x001a, ascii(name))); // MODULESTREAMNAME
+    records.push(...rec(0x0031, u32le(16))); // MODULEOFFSET
+    records.push(...rec(index === 0 ? 0x0022 : 0x0021, [])); // MODULETYPE
+    records.push(...rec(0x002b, [])); // MODULETERMINATOR
   }
-  records.push(...record(0x0010, [])); // dir terminator
+  records.push(...rec(0x0010, [])); // dir terminator
   return compressContainer(Uint8Array.from(records));
 }
 
@@ -97,18 +89,6 @@ function seed(): Uint8Array {
 const SEED = seed();
 
 // ── The harness ─────────────────────────────────────────────────────────────────────────────────────
-
-// xorshift32: deterministic, so a failing case is reproducible from its seed alone rather than being a
-// flake someone has to reproduce by luck.
-function random(state: number): () => number {
-  let value = state | 0 || 1;
-  return () => {
-    value ^= value << 13;
-    value ^= value >>> 17;
-    value ^= value << 5;
-    return value >>> 0;
-  };
-}
 
 /**
  * Drive every entry point the container reaches through, asserting only that each fails the way a
@@ -161,7 +141,7 @@ test('the seed itself parses, so a mutation of it is a mutation of something rea
 });
 
 test('single-byte mutations anywhere in the container never escape the typed failure modes', () => {
-  const next = random(0xc0ffee);
+  const next = xorshift32(0xc0ffee);
   for (let round = 0; round < 400; round++) {
     const mutated = Uint8Array.from(SEED);
     const offset = next() % mutated.length;
@@ -171,7 +151,7 @@ test('single-byte mutations anywhere in the container never escape the typed fai
 });
 
 test('a container truncated at any point fails closed rather than reading half a project into a crash', () => {
-  const next = random(0x7ac6);
+  const next = xorshift32(0x7ac6);
   for (let round = 0; round < 120; round++) {
     parsesOrFailsClosed(SEED.subarray(0, next() % SEED.length), `cut round ${round}`);
   }
@@ -184,7 +164,7 @@ test('every header count driven to its maximum is rejected, not believed', () =>
   for (const offset of [30, 32, 44, 48, 56, 60, 68, 72]) {
     for (const value of [0xffffffff, 0x7fffffff, 0x0000ffff, 0xfffffffe]) {
       const mutated = Uint8Array.from(SEED);
-      mutated.set(u32(value), offset);
+      mutated.set(u32le(value), offset);
       parsesOrFailsClosed(mutated, `header@${offset}=${value.toString(16)}`);
     }
   }
@@ -198,7 +178,7 @@ test('every header count driven to its maximum is rejected, not believed', () =>
 test('a mini-stream cutoff other than the one MS-CFB fixes is rejected, not believed', () => {
   for (const cutoff of [0, 64, 8192, 0xffffffff]) {
     const mutated = Uint8Array.from(SEED);
-    mutated.set(u32(cutoff), 56);
+    mutated.set(u32le(cutoff), 56);
     assert.throws(() => new CompoundFile(mutated), {
       name: 'VbaParseError',
       message: /mini-stream cutoff/,
@@ -209,7 +189,7 @@ test('a mini-stream cutoff other than the one MS-CFB fixes is rejected, not beli
 test('a directory entry declaring a stream past 4 GiB is rejected rather than read truncated', () => {
   const mutated = Uint8Array.from(SEED);
   // The root entry is the first; the second is the first real stream, whose size is a u64 at +120.
-  mutated.set(u32(1), findDirectory(mutated) + 128 + 124); // the high half of the declared size
+  mutated.set(u32le(1), findDirectory(mutated) + 128 + 124); // the high half of the declared size
   assert.throws(() => new CompoundFile(mutated), {
     name: 'VbaParseError',
     message: /larger than 4 GiB/,
@@ -226,7 +206,7 @@ test('a stream whose chain ends before its declared size is rejected, not return
     findDirectory(mutated) + 120,
     true,
   );
-  mutated.set(u32(rootSize + 8192), findDirectory(mutated) + 120);
+  mutated.set(u32le(rootSize + 8192), findDirectory(mutated) + 120);
   assert.throws(() => new CompoundFile(mutated), {
     name: 'VbaParseError',
     message: /ends after \d+ bytes, but \d+ were declared/,
@@ -251,8 +231,8 @@ test('a directory whose sibling links form a chain does not recurse once per ent
   for (let index = 1; index < entries; index++) {
     const base = directory + index * 128;
     if (base + 128 > container.length) break;
-    container.set(u32(index - 1), base + 68); // left sibling
-    container.set(u32(0xffffffff), base + 72); // right sibling: none
+    container.set(u32le(index - 1), base + 68); // left sibling
+    container.set(u32le(0xffffffff), base + 72); // right sibling: none
   }
 
   parsesOrFailsClosed(container, 'left-linked sibling chain');
