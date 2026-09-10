@@ -70,9 +70,11 @@ export {
   type DataValidation,
   type DataValidationEntry,
   type DataValidationErrorStyle,
+  type DataValidationImeMode,
   type DataValidationOperator,
   type DataValidationType,
   isDataValidationErrorStyle,
+  isDataValidationImeMode,
   isDataValidationOperator,
   isDataValidationType,
 } from '../core/data-validation.ts';

@@ -4,6 +4,7 @@ import {test} from 'node:test';
 import type {
   DataValidation,
   DataValidationErrorStyle,
+  DataValidationImeMode,
   DataValidationOperator,
   DataValidationType,
 } from '../../core/data-validation.ts';
@@ -305,6 +306,19 @@ test('every schema token of every validation union round-trips unchanged', () =>
     'lessThanOrEqual',
   ];
   const errorStyles: DataValidationErrorStyle[] = ['stop', 'warning', 'information'];
+  const imeModes: DataValidationImeMode[] = [
+    'noControl',
+    'off',
+    'on',
+    'disabled',
+    'hiragana',
+    'fullKatakana',
+    'halfKatakana',
+    'fullAlpha',
+    'halfAlpha',
+    'fullHangul',
+    'halfHangul',
+  ];
 
   const workbook = new Workbook();
   const sheet = workbook.addWorksheet('S');
@@ -318,12 +332,48 @@ test('every schema token of every validation union round-trips unchanged', () =>
         sheet.addDataValidation(ref, rule);
         expected.set(ref, rule);
       }
+  for (const [index, imeMode] of imeModes.entries()) {
+    const ref = `C${index + 1}`;
+    const rule: DataValidation = {type: 'whole', imeMode, formulae: [1]};
+    sheet.addDataValidation(ref, rule);
+    expected.set(ref, rule);
+  }
 
   const read = roundtrip(workbook).getWorksheet('S');
   for (const [ref, rule] of expected) {
     const back = read?.dataValidationAt(ref);
     assert.equal(back?.type, rule.type, `${ref} type`);
-    assert.equal(back?.operator, rule.operator, `${ref} operator`);
+    assert.equal(back?.operator, rule.operator ?? 'between', `${ref} operator`);
     assert.equal(back?.errorStyle, rule.errorStyle, `${ref} errorStyle`);
+    assert.equal(back?.imeMode, rule.imeMode, `${ref} imeMode`);
+  }
+});
+
+// `showDropDown` and `imeMode` had no field, so a list validated without its arrow got the arrow back
+// on the next save, and an input rule for a Japanese form lost its input mode.
+test('suppressDropDown and imeMode round-trip in both the standard and the extended form', () => {
+  const workbook = new Workbook();
+  const sheet = workbook.addWorksheet('S');
+  const rule: DataValidation = {
+    type: 'list',
+    formulae: ['"a,b"'],
+    suppressDropDown: true,
+    imeMode: 'hiragana',
+  };
+  sheet.addDataValidation('A1', rule);
+  sheet.addDataValidation('B1', rule, {extended: true});
+
+  const xml = sheetXml(writeXlsx(workbook));
+  assert.match(xml, /<dataValidation type="list" imeMode="hiragana" showDropDown="1" sqref="A1">/);
+  assert.match(xml, /<x14:dataValidation type="list" imeMode="hiragana" showDropDown="1"[ >]/);
+
+  const read = roundtrip(workbook).getWorksheet('S');
+  for (const ref of ['A1', 'B1']) {
+    assert.equal(
+      read?.dataValidationAt(ref)?.suppressDropDown,
+      true,
+      `${ref} keeps its arrow hidden`,
+    );
+    assert.equal(read?.dataValidationAt(ref)?.imeMode, 'hiragana', `${ref} keeps its input mode`);
   }
 });

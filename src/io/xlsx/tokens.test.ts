@@ -14,8 +14,10 @@ import {zipSync} from 'fflate';
 import {
   partIn,
   partsWritten as partsOf,
+  patchParts,
   refuses,
   roundtrip,
+  SHEET1,
   sheeted,
   sheetXml,
 } from './package.test-support.ts';
@@ -34,8 +36,13 @@ test('<pageSetup> refuses a foreign orientation or page order', () => {
   });
 });
 
-test('<dataValidation> refuses a foreign type, operator or error style', () => {
-  for (const facet of [{type: ESCAPE}, {operator: 'sortOf'}, {errorStyle: 'boom'}]) {
+test('<dataValidation> refuses a foreign type, operator, error style or IME mode', () => {
+  for (const facet of [
+    {type: ESCAPE},
+    {operator: 'sortOf'},
+    {errorStyle: 'boom'},
+    {imeMode: ESCAPE},
+  ]) {
     refuses((wb) => {
       wb.getWorksheet('S')!.addDataValidation('A1', {type: 'whole', ...facet} as never);
     });
@@ -135,6 +142,20 @@ test('the tokens the enumerations do allow still round-trip', () => {
   assert.equal(sheetBack?.conditionalFormattings[0]?.rules[0]?.timePeriod, 'lastWeek');
   assert.equal(back.getWorksheet('Hidden')?.state, 'veryHidden');
   assert.equal(back.view.visibility, 'hidden');
+});
+
+test('a foreign IME mode in a file is dropped on read, and the validation it sat on is kept', () => {
+  const wb = sheeted();
+  wb.getWorksheet('S')!.addDataValidation('A1', {type: 'whole', formulae: [1], imeMode: 'off'});
+  const doctored = patchParts(writeXlsx(wb), {
+    [SHEET1]: (xml) => xml.replace('imeMode="off"', 'imeMode="sideways"'),
+  });
+
+  const back = readXlsx(doctored);
+  const rule = back.getWorksheet('S')?.dataValidationAt('A1');
+  assert.equal(rule?.type, 'whole', 'the validation is kept');
+  assert.equal(rule?.imeMode, undefined, 'the foreign IME mode is dropped');
+  assert.doesNotThrow(() => writeXlsx(back), 'and what was read writes back');
 });
 
 test('a foreign token in a file is dropped on read rather than carried into a write that refuses it', () => {

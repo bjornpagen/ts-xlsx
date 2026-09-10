@@ -18,6 +18,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   protected a sheet with, verbatim, so that protection survives a save. The library never derives one
   from a password; `protect` still writes only the agile credential.
 
+- **`DataValidation.suppressDropDown` and `DataValidation.imeMode`**, with the `DataValidationImeMode`
+  union and its `isDataValidationImeMode` guard on `/core`. The two attributes Excel writes as
+  `showDropDown` and `imeMode` had no field, so a list validated without its dropdown arrow got the
+  arrow back on save and an input mode was dropped. Both now round-trip in the standard and the
+  extended form; `suppressDropDown` is named for what `showDropDown="1"` does, which is hide the arrow.
+
 ### Changed
 
 - **BREAKING: `StreamedRow` can no longer be constructed directly.** Get one from

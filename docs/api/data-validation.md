@@ -16,9 +16,17 @@ interface DataValidation {
   operator?: DataValidationOperator;
   formulae?: (string | number)[];
   allowBlank?: boolean;
+  /**
+   * Hide the in-cell dropdown arrow of a `list` rule while still enforcing the list, the usual way to
+   * validate against a list without offering a picker. Stored as `showDropDown="1"`, an attribute
+   * whose name says the opposite of what it does.
+   */
+  suppressDropDown?: boolean;
   showInputMessage?: boolean;
   showErrorMessage?: boolean;
   errorStyle?: DataValidationErrorStyle;
+  /** How the input method editor behaves in a covered cell; absent leaves it as the user had it. */
+  imeMode?: DataValidationImeMode;
   error?: string;
   errorTitle?: string;
   prompt?: string;
@@ -57,6 +65,31 @@ How Excel reacts to input that fails the rule.
 
 ```ts
 type DataValidationErrorStyle = 'stop' | 'warning' | 'information';
+```
+
+---
+
+### `DataValidationImeMode`
+
+<sub>type</sub>
+
+How the input method editor behaves while a covered cell is edited. Only an East Asian input method
+acts on it: `hiragana`, the katakana, alpha and hangul widths switch its mode, `on` and `off` turn it
+on and off, `disabled` turns it off and keeps it off, and `noControl` leaves it as the user had it.
+
+```ts
+type DataValidationImeMode =
+  | 'noControl'
+  | 'off'
+  | 'on'
+  | 'disabled'
+  | 'hiragana'
+  | 'fullKatakana'
+  | 'halfKatakana'
+  | 'fullAlpha'
+  | 'halfAlpha'
+  | 'fullHangul'
+  | 'halfHangul';
 ```
 
 ---
@@ -112,6 +145,18 @@ Narrow a raw `<dataValidation errorStyle>` token to a known [`DataValidationErro
 
 ```ts
 const isDataValidationErrorStyle: (value: string) => value is DataValidationErrorStyle
+```
+
+---
+
+### `isDataValidationImeMode`
+
+<sub>const</sub>
+
+Narrow a raw `<dataValidation imeMode>` token to a known [`DataValidationImeMode`](./data-validation.md#datavalidationimemode).
+
+```ts
+const isDataValidationImeMode: (value: string) => value is DataValidationImeMode
 ```
 
 ---

@@ -18,13 +18,14 @@ import {
   type DataValidation,
   type DataValidationEntry,
   isDataValidationErrorStyle,
+  isDataValidationImeMode,
   isDataValidationOperator,
   isDataValidationType,
 } from '../../core/data-validation.ts';
 import {stripFormulaEquals} from '../../core/formula.ts';
 import {decodeSqrefRects} from '../../core/merge.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
-import {coerceNumericLiteral} from '../../xml/xml-attrs.ts';
+import {coerceNumericLiteral, enumToken} from '../../xml/xml-attrs.ts';
 import {type CollectingPass, type SaxHandlers, TextCapture} from '../../xml/xml-read.ts';
 import {boolStrict, localName} from '../../xml/xml-scan.ts';
 import {checkedToken, escapeAttr, escapeText, textAttr} from '../../xml/xml.ts';
@@ -66,20 +67,24 @@ export function dataValidationsExtXml(entries: readonly DataValidationEntry[]): 
   );
 }
 
-// The shared attributes of a validation, in CT_DataValidation order: type, errorStyle, operator,
-// allowBlank, showInputMessage, showErrorMessage, errorTitle, error, promptTitle, prompt. The target
-// range differs between the two forms (a `sqref` attribute vs an `<xm:sqref>` child), so it is not
-// part of this shared prefix.
+// The shared attributes of a validation, in CT_DataValidation order: type, errorStyle, imeMode,
+// operator, allowBlank, showDropDown, showInputMessage, showErrorMessage, errorTitle, error,
+// promptTitle, prompt. The target range differs between the two forms (a `sqref` attribute vs an
+// `<xm:sqref>` child), so it is not part of this shared prefix.
 function ruleAttrs(rule: DataValidation): string {
   return (
     ` type="${checkedToken(rule.type, isDataValidationType, 'data validation type')}"` +
     (rule.errorStyle === undefined
       ? ''
       : ` errorStyle="${checkedToken(rule.errorStyle, isDataValidationErrorStyle, 'data validation error style')}"`) +
+    (rule.imeMode === undefined
+      ? ''
+      : ` imeMode="${checkedToken(rule.imeMode, isDataValidationImeMode, 'data validation IME mode')}"`) +
     (rule.operator === undefined
       ? ''
       : ` operator="${checkedToken(rule.operator, isDataValidationOperator, 'data validation operator')}"`) +
     (rule.allowBlank ? ' allowBlank="1"' : '') +
+    (rule.suppressDropDown ? ' showDropDown="1"' : '') +
     (rule.showInputMessage ? ' showInputMessage="1"' : '') +
     (rule.showErrorMessage ? ' showErrorMessage="1"' : '') +
     textAttr('errorTitle', rule.errorTitle) +
@@ -207,11 +212,15 @@ function buildRule(
     rule.operator = 'between';
   }
   if (boolStrict(attrs.allowBlank)) rule.allowBlank = true;
+  if (boolStrict(attrs.showDropDown)) rule.suppressDropDown = true;
   if (boolStrict(attrs.showInputMessage)) rule.showInputMessage = true;
   if (boolStrict(attrs.showErrorMessage)) rule.showErrorMessage = true;
   // Likewise a facet: an unrecognised errorStyle costs the rule its alert level, not its identity.
   if (attrs.errorStyle !== undefined && isDataValidationErrorStyle(attrs.errorStyle))
     rule.errorStyle = attrs.errorStyle;
+  // And the input mode: a foreign one costs the rule only how the IME behaves in its cells.
+  const imeMode = enumToken(attrs.imeMode, isDataValidationImeMode);
+  if (imeMode !== undefined) rule.imeMode = imeMode;
   if (attrs.error !== undefined) rule.error = attrs.error;
   if (attrs.errorTitle !== undefined) rule.errorTitle = attrs.errorTitle;
   if (attrs.prompt !== undefined) rule.prompt = attrs.prompt;

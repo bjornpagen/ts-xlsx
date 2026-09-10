@@ -71,6 +71,39 @@ export const isDataValidationErrorStyle = tokenSet<DataValidationErrorStyle>({
   information: true,
 });
 
+/**
+ * How the input method editor behaves while a covered cell is edited. Only an East Asian input method
+ * acts on it: `hiragana`, the katakana, alpha and hangul widths switch its mode, `on` and `off` turn it
+ * on and off, `disabled` turns it off and keeps it off, and `noControl` leaves it as the user had it.
+ */
+export type DataValidationImeMode =
+  | 'noControl'
+  | 'off'
+  | 'on'
+  | 'disabled'
+  | 'hiragana'
+  | 'fullKatakana'
+  | 'halfKatakana'
+  | 'fullAlpha'
+  | 'halfAlpha'
+  | 'fullHangul'
+  | 'halfHangul';
+
+/** Narrow a raw `<dataValidation imeMode>` token to a known {@link DataValidationImeMode}. */
+export const isDataValidationImeMode = tokenSet<DataValidationImeMode>({
+  noControl: true,
+  off: true,
+  on: true,
+  disabled: true,
+  hiragana: true,
+  fullKatakana: true,
+  halfKatakana: true,
+  fullAlpha: true,
+  halfAlpha: true,
+  fullHangul: true,
+  halfHangul: true,
+});
+
 /** One validation rule. `formulae` holds the operand(s), `formula1` then optional `formula2`: a
  * numeric literal is stored as a number, while a cell reference, defined name, or list source keeps
  * its verbatim string. */
@@ -79,9 +112,17 @@ export interface DataValidation {
   operator?: DataValidationOperator;
   formulae?: (string | number)[];
   allowBlank?: boolean;
+  /**
+   * Hide the in-cell dropdown arrow of a `list` rule while still enforcing the list, the usual way to
+   * validate against a list without offering a picker. Stored as `showDropDown="1"`, an attribute
+   * whose name says the opposite of what it does.
+   */
+  suppressDropDown?: boolean;
   showInputMessage?: boolean;
   showErrorMessage?: boolean;
   errorStyle?: DataValidationErrorStyle;
+  /** How the input method editor behaves in a covered cell; absent leaves it as the user had it. */
+  imeMode?: DataValidationImeMode;
   error?: string;
   errorTitle?: string;
   prompt?: string;
@@ -107,9 +148,11 @@ const RULE_CLONE: ClonePlan<DataValidation> = {
   operator: 'value',
   formulae: 'values',
   allowBlank: 'value',
+  suppressDropDown: 'value',
   showInputMessage: 'value',
   showErrorMessage: 'value',
   errorStyle: 'value',
+  imeMode: 'value',
   error: 'value',
   errorTitle: 'value',
   prompt: 'value',

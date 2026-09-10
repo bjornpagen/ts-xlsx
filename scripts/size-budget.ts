@@ -75,13 +75,17 @@ const TOTAL_BUDGET_BYTES = 580 * 1024;
 // moved. `core/grid-edits.ts` is on every entry that reaches the model, so the ~0.9 KB landed on five
 // entries at once, none of which had a kilobyte left after the VBA byte-splicing and model-assignment
 // fixes just before it. Each number below restores about a kilobyte against today's measurement.
+//
+// And again, on `.` and `/xlsx` alone, when data validations began carrying `showDropDown` and
+// `imeMode`: the reader and writer for them sit in the XML codec, and a closed token guard and its
+// union came to a few tenths of a kilobyte more than either entry had left.
 const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
-  '.': 568,
+  '.': 570,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
   './core': 210,
-  './xlsx': 552,
+  './xlsx': 554,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which

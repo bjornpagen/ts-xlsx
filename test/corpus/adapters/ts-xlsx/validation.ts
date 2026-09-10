@@ -7,6 +7,45 @@ import {readFixture, readXlsx, Workbook, writeXlsx} from './runtime.ts';
 import {attrsOf, expandSqref} from './xml-probes.ts';
 
 export const validation = {
+  // Author one list validation that hides its dropdown arrow and sets an input mode, in the standard
+  // form on A1 and the extended form on B1, write it, read it back and write it again →
+  // { written, read, rewritten }: `written`/`rewritten` give each form's `{showDropDown, imeMode}`
+  // attributes (null when absent), and `read` gives each cell's rule as `{suppressDropDown, imeMode}`.
+  dropdownAndImeModeReport() {
+    const wb = new Workbook();
+    const sheet = wb.addWorksheet('S');
+    const rule = {
+      type: 'list' as const,
+      formulae: ['"a,b"'],
+      suppressDropDown: true,
+      imeMode: 'off' as const,
+    };
+    sheet.addDataValidation('A1', rule);
+    sheet.addDataValidation('B1', rule, {extended: true});
+    const attributes = (bytes: Uint8Array) => {
+      const xml = partMapOf(bytes)['xl/worksheets/sheet1.xml'] ?? '';
+      const pick = (pattern: RegExp) => {
+        const attrs = attrsOf(xml.match(pattern)?.[0] ?? '<none/>');
+        return {showDropDown: attrs.showDropDown ?? null, imeMode: attrs.imeMode ?? null};
+      };
+      return {
+        standard: pick(/<dataValidation\b[^>]*>/),
+        extended: pick(/<x14:dataValidation\b[^>]*>/),
+      };
+    };
+    const written = writeXlsx(wb);
+    const read = readXlsx(written);
+    const cell = (ref: string) => {
+      const back = read.getWorksheet('S')?.dataValidationAt(ref);
+      return {suppressDropDown: back?.suppressDropDown ?? null, imeMode: back?.imeMode ?? null};
+    };
+    return {
+      written: attributes(written),
+      read: {A1: cell('A1'), B1: cell('B1')},
+      rewritten: attributes(writeXlsx(read)),
+    };
+  },
+
   // Author a date-type validation whose operand coerces to a serial (or fails to), write, and report
   // the emitted first bound → { formula1, hasNaN }. A real date writes a numeric serial; a
   // non-coercible operand must drop the bound, never serialize the literal "NaN".
