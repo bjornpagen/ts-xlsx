@@ -452,9 +452,12 @@ export const styles = {
       const ws = wb.addWorksheet('S');
       ws.getCell('A1').value = 'x';
       ws.getCell('A1').font = {bold: true};
-      const reloaded = reloadPatched(writeXlsx(wb), {
-        'xl/styles.xml': (xml) => xml.replace(/<b ?\/>/, tag),
-      });
+      // The bare tag is the control, and it is what the writer already emits: nothing to patch.
+      const written = writeXlsx(wb);
+      const reloaded =
+        tag === '<b/>'
+          ? readXlsx(written)
+          : reloadPatched(written, {'xl/styles.xml': (xml) => xml.replace(/<b ?\/>/, tag)});
       const font = reloaded.getWorksheet('S')!.getCell('A1').font;
       return !!font?.bold;
     };

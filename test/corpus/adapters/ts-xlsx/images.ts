@@ -1,11 +1,16 @@
 // Images and their drawing anchors: placement, enumeration, removal, and what happens to an
 // anchor when the rows around it move.
 
-import {strFromU8, unzipSync} from 'fflate';
-
 import {messageOf} from '../../thrown.ts';
 import type {Untyped} from '../../untyped.ts';
-import {type PartMap, partMapOf, roundtrip} from './package-facts.ts';
+import {
+  type PartMap,
+  partBytesOf,
+  partMapOf,
+  partNamesOf,
+  partOf,
+  roundtrip,
+} from './package-facts.ts';
 import {fixtureBytes, readFixture, readXlsx, Workbook, writeXlsx} from './runtime.ts';
 import {anchorSpecImage, buildFrom, ONE_PX_PNG} from './spec-model.ts';
 import {attrsOf, hexBytes, imageXmlWellFormed, parseAnchorSide} from './xml-probes.ts';
@@ -133,20 +138,19 @@ export const images = {
       });
     });
     const buffer = writeXlsx(wb);
-    const raw = unzipSync(buffer);
-    const relsXml = strFromU8(raw['xl/drawings/_rels/drawing1.xml.rels'] || new Uint8Array());
+    const relsXml = partOf(buffer, 'xl/drawings/_rels/drawing1.xml.rels');
     const relTarget: Record<string, string | undefined> = {};
     for (const t of relsXml.matchAll(/<Relationship\b[^>]*\/?>/g)) {
       const a = attrsOf(t[0]);
       relTarget[a.Id!] = (a.Target || '').split('/').pop();
     }
-    const drawingXml = strFromU8(raw['xl/drawings/drawing1.xml'] || new Uint8Array());
+    const drawingXml = partOf(buffer, 'xl/drawings/drawing1.xml');
     const embedOrder = [...drawingXml.matchAll(/r:embed="([^"]*)"/g)].map((m) => m[1]);
     const resolvedMedia = embedOrder.map((rid) => relTarget[rid!] ?? null);
     const mediaSizes: Record<string, number> = {};
-    for (const name of Object.keys(raw)) {
+    for (const name of partNamesOf(buffer)) {
       const m = name.match(/^xl\/media\/(image\d+\.png)$/);
-      if (m) mediaSizes[m[1]!] = raw[name]!.length;
+      if (m) mediaSizes[m[1]!] = partBytesOf(buffer, name).length;
     }
     const resolvedLetter = resolvedMedia.map((media) => {
       const size = mediaSizes[media!];
@@ -184,20 +188,17 @@ export const images = {
     destination.importImages(dst, source.exportImages(src));
 
     const buffer = writeXlsx(destination);
-    const raw = unzipSync(buffer);
-    const names = Object.keys(raw);
+    const names = partNamesOf(buffer);
     const mediaParts = new Set(names.filter((f) => f.startsWith('xl/media/')));
     const relTarget: Record<string, string | undefined> = {};
-    for (const t of strFromU8(
-      raw['xl/drawings/_rels/drawing1.xml.rels'] || new Uint8Array(),
-    ).matchAll(/<Relationship\b[^>]*\/?>/g)) {
+    for (const t of partOf(buffer, 'xl/drawings/_rels/drawing1.xml.rels').matchAll(
+      /<Relationship\b[^>]*\/?>/g,
+    )) {
       const a = attrsOf(t[0]);
       relTarget[a.Id!] = (a.Target || '').replace(/^\.\.\//, 'xl/');
     }
     const embeds = [
-      ...strFromU8(raw['xl/drawings/drawing1.xml'] || new Uint8Array()).matchAll(
-        /r:embed="([^"]*)"/g,
-      ),
+      ...partOf(buffer, 'xl/drawings/drawing1.xml').matchAll(/r:embed="([^"]*)"/g),
     ].map((m) => m[1]!);
 
     const back = readXlsx(buffer).getWorksheet('Dst')!;

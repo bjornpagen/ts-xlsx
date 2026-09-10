@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict';
 
-import {strFromU8, unzipSync} from 'fflate';
+import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
 
 import {readXlsx, type WorkbookInstance, type WorksheetInstance, writeXlsx} from './runtime.ts';
 
@@ -33,9 +33,66 @@ export function roundtrip(workbook: WorkbookInstance): WorkbookInstance {
  * assertion built on it goes on passing if the writer ever renames the part it reads.
  */
 export function partOf(buffer: Uint8Array, name: string): string {
-  const text = partMapOf(buffer)[name];
-  assert.ok(text !== undefined, `expected part ${name}`);
-  return text;
+  return strFromU8(partBytesOf(buffer, name));
+}
+
+/** One named part's bytes, for a binary part, failing the case (naming the part) when it is absent. */
+export function partBytesOf(buffer: Uint8Array, name: string): Uint8Array {
+  const bytes = unzipSync(buffer, {filter: (file) => file.name === name})[name];
+  assert.ok(bytes !== undefined, `expected part ${name}`);
+  return bytes;
+}
+
+/** Every part path in a package, without inflating any of them. */
+export function partNamesOf(buffer: Uint8Array): string[] {
+  const names: string[] = [];
+  unzipSync(buffer, {
+    filter: (file) => {
+      names.push(file.name);
+      return false;
+    },
+  });
+  return names;
+}
+
+/** What {@link patchedPackage} does to a package, each map keyed by part path. */
+export interface PackagePatch {
+  /** Rewrite a part's text. The part must exist and the rewrite must change it. */
+  readonly edit?: Readonly<Record<string, (xml: string) => string>>;
+  /** Add a part, or replace one outright, with these bytes or this text. */
+  readonly put?: Readonly<Record<string, Uint8Array | string>>;
+  /** Remove parts. Each must exist. */
+  readonly drop?: readonly string[];
+}
+
+/**
+ * A written package with some parts rewritten, added or removed: how a case hands the reader markup
+ * a real producer emits and this writer never does.
+ *
+ * Nineteen sites spelled this out by hand, reading the part through a non-null assertion, whose
+ * `TypeError` names nothing, or through `|| new Uint8Array()`, which patches an empty string and
+ * lets every negative assertion after it pass. An edit that changes nothing fails as well: a
+ * `replace` whose search string the writer stopped emitting leaves the case reading the unpatched
+ * package while it claims to read a hostile one.
+ */
+export function patchedPackage(buffer: Uint8Array, patch: PackagePatch): Uint8Array {
+  const files: Record<string, Uint8Array> = unzipSync(buffer);
+  for (const [name, transform] of Object.entries(patch.edit ?? {})) {
+    const bytes = files[name];
+    assert.ok(bytes !== undefined, `expected part ${name}`);
+    const before = strFromU8(bytes);
+    const after = transform(before);
+    assert.notEqual(after, before, `edit to ${name} changed nothing`);
+    files[name] = strToU8(after);
+  }
+  for (const name of patch.drop ?? []) {
+    assert.ok(files[name] !== undefined, `expected part ${name}`);
+    delete files[name];
+  }
+  for (const [name, data] of Object.entries(patch.put ?? {})) {
+    files[name] = typeof data === 'string' ? strToU8(data) : data;
+  }
+  return zipSync(files);
 }
 
 export function partMapOf(buffer: Uint8Array): PartMap {

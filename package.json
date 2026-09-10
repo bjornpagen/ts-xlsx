@@ -90,6 +90,7 @@
     "docs:check": "node scripts/gen-docs.ts && git add --intent-to-add -- docs/api && git diff --exit-code -- docs/api",
     "constitution:check": "node scripts/check-constitution.ts",
     "layering:check": "node scripts/check-layering.ts",
+    "corpus-blind:check": "node scripts/check-corpus-blind.ts",
     "entries:check": "node scripts/check-entries.ts",
     "public-types:check": "node scripts/check-public-types.ts",
     "facet-register:check": "node scripts/check-facet-register.ts",

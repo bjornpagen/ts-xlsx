@@ -1,11 +1,17 @@
 // Threaded comments, legacy notes, and rich text.
 
-import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
-
 import {canonicalJson} from '../../canonical-json.ts';
 import {messageOf} from '../../thrown.ts';
 import type {Untyped} from '../../untyped.ts';
-import {commentThreadFacts, packagePartFacts, partMapOf, roundtrip} from './package-facts.ts';
+import {
+  commentThreadFacts,
+  packagePartFacts,
+  partBytesOf,
+  partMapOf,
+  partNamesOf,
+  patchedPackage,
+  roundtrip,
+} from './package-facts.ts';
 import {
   isRichTextValue,
   readFixture,
@@ -93,18 +99,17 @@ export const comments = {
     const ws = wb.addWorksheet('S');
     ws.getCell('A1').value = 'x';
     ws.getCell('A1').note = 'hi';
-    const files = unzipSync(new Uint8Array(writeXlsx(wb)));
-    const commentPart = Object.keys(files).find((n) => /^xl\/comments\d*\.xml$/.test(n))!;
-    const relName = 'xl/worksheets/_rels/sheet1.xml.rels';
-    files['xl/sheet1_comments.xml'] = files[commentPart]!;
-    delete files[commentPart];
-    files[relName] = strToU8(
-      strFromU8(files[relName]!).replace(
-        /Target="[^"]*comments\d*\.xml"/i,
-        'Target="../sheet1_comments.xml"',
-      ),
-    );
-    const buffer = zipSync(files);
+    const written = writeXlsx(wb);
+    const commentPart = partNamesOf(written).find((n) => /^xl\/comments\d*\.xml$/.test(n));
+    if (commentPart === undefined) throw new Error('expected a comments part for the note on A1');
+    const buffer = patchedPackage(written, {
+      edit: {
+        'xl/worksheets/_rels/sheet1.xml.rels': (xml) =>
+          xml.replace(/Target="[^"]*comments\d*\.xml"/i, 'Target="../sheet1_comments.xml"'),
+      },
+      drop: [commentPart],
+      put: {'xl/sheet1_comments.xml': partBytesOf(written, commentPart)},
+    });
     let ok = false;
     let error = null;
     let note = null;
@@ -270,13 +275,12 @@ export const comments = {
 
     const wb = new Workbook();
     wb.addWorksheet('S').getCell('A1').value = 'placeholder';
-    const bytes = writeXlsx(wb);
+    // Pooled, so A1 is already `t="s"` at ordinal 0 and the pool part exists with its relationship.
+    const bytes = writeXlsx(wb, {useSharedStrings: true});
 
-    // Both packages are the same bytes with one cell rewritten, so anything that differs between the
+    // Both packages are the same bytes with one part rewritten, so anything that differs between the
     // two readings came from the `<si>`/`<is>` split and nothing else.
     const pooled = reloadPatched(bytes, {
-      'xl/worksheets/sheet1.xml': (xml) =>
-        xml.replace(/<c r="A1"[^>]*>[\s\S]*?<\/c>/, '<c r="A1" t="s"><v>0</v></c>'),
       'xl/sharedStrings.xml': () =>
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1" uniqueCount="1">' +

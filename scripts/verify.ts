@@ -262,6 +262,7 @@ async function gateSet(mode: Mode): Promise<Gate[]> {
         steps: [
           {command: NODE, args: ['scripts/check-constitution.ts']},
           {command: NODE, args: ['scripts/check-layering.ts']},
+          {command: NODE, args: ['scripts/check-corpus-blind.ts']},
           {command: NODE, args: ['scripts/check-entries.ts']},
           {command: NODE, args: ['scripts/check-public-types.ts']},
           {command: NODE, args: ['scripts/check-facet-register.ts']},

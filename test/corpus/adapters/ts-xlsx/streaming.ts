@@ -4,11 +4,9 @@
 import {tmpdir} from 'node:os';
 import {Duplex, PassThrough} from 'node:stream';
 
-import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
-
 import {codeOrMessageOf, messageOf} from '../../thrown.ts';
 import type {Untyped} from '../../untyped.ts';
-import {partMapOf} from './package-facts.ts';
+import {partMapOf, partOf, patchedPackage} from './package-facts.ts';
 import {
   decodeRange,
   detectValueType,
@@ -360,7 +358,7 @@ export const streaming = {
       sheet.getCell('A1').value = 1;
       sheet.commit();
       const buffer = Buffer.from(await committedPackage(writer));
-      const wbXml = strFromU8(unzipSync(buffer)['xl/workbook.xml']!);
+      const wbXml = partOf(buffer, 'xl/workbook.xml');
       return {threw, hasFlag: /fullCalcOnLoad="1"/.test(wbXml)};
     };
     const set = await streamCalc(true);
@@ -369,7 +367,7 @@ export const streaming = {
     const wb = new Workbook();
     wb.fullCalcOnLoad = true;
     wb.addWorksheet('S').getCell('A1').value = 1;
-    const memXml = strFromU8(unzipSync(writeXlsx(wb))['xl/workbook.xml']!);
+    const memXml = partOf(writeXlsx(wb), 'xl/workbook.xml');
 
     return {
       streamSetThrew: set.threw,
@@ -425,7 +423,7 @@ export const streaming = {
     sheet.commit();
 
     const buffer = Buffer.from(await committedPackage(writer));
-    const xml = strFromU8(unzipSync(buffer)['xl/worksheets/sheet1.xml']!);
+    const xml = partOf(buffer, 'xl/worksheets/sheet1.xml');
     const posCf = xml.indexOf('<conditionalFormatting');
     const posHl = xml.indexOf('<hyperlinks');
     let reloadOk = true;
@@ -455,7 +453,7 @@ export const streaming = {
     sheet.commit();
 
     const buffer = Buffer.from(await committedPackage(writer));
-    const xml = strFromU8(unzipSync(buffer)['xl/worksheets/sheet1.xml']!);
+    const xml = partOf(buffer, 'xl/worksheets/sheet1.xml');
     const posDv = xml.indexOf('<dataValidations');
     const posHl = xml.indexOf('<hyperlinks');
     let reloadOk = true;
@@ -590,14 +588,18 @@ export const streaming = {
   streamVsEagerCells(spec: Untyped, {stripCellStyles = false} = {}) {
     let bytes = writeXlsx(buildFrom(spec));
     if (stripCellStyles) {
-      const files = unzipSync(bytes);
-      for (const name of Object.keys(files)) {
-        if (!/^xl\/worksheets\/sheet\d+\.xml$/.test(name)) continue;
-        files[name] = strToU8(
-          strFromU8(files[name]!).replace(/(<c r="[A-Z]+\d+")\s+s="\d+"/g, '$1'),
-        );
-      }
-      bytes = zipSync(files);
+      const cellStyle = /(<c r="[A-Z]+\d+")\s+s="\d+"/g;
+      // Only the sheets that carry a cell style: a sheet of unstyled cells has nothing to strip, and
+      // naming it would be an edit that changes nothing.
+      const styled = Object.entries(partMapOf(bytes)).filter(
+        ([name, xml]) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name) && xml.search(cellStyle) >= 0,
+      );
+      if (styled.length === 0) throw new Error('stripCellStyles: no sheet carries a cell style');
+      bytes = patchedPackage(bytes, {
+        edit: Object.fromEntries(
+          styled.map(([name]) => [name, (xml: string) => xml.replace(cellStyle, '$1')]),
+        ),
+      });
     }
 
     const describe = (value: Untyped) => ({

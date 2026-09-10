@@ -1,10 +1,8 @@
 // Formulas: shared formulas, data tables, and the values a formula cell reports.
 
-import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
-
 import {messageOf} from '../../thrown.ts';
 import type {Untyped} from '../../untyped.ts';
-import {roundtrip} from './package-facts.ts';
+import {partOf, patchedPackage, roundtrip} from './package-facts.ts';
 import {readXlsx, Workbook, writeXlsx} from './runtime.ts';
 import {buildFrom, isoOrNull} from './spec-model.ts';
 
@@ -18,14 +16,15 @@ export const formulas = {
     seedSheet.getCell('A1').value = 1;
     seedSheet.getCell('B1').value = 2;
     seedSheet.getCell('B2').value = 99;
-    const parts = unzipSync(writeXlsx(seed));
-    parts['xl/worksheets/sheet1.xml'] = strToU8(
-      strFromU8(parts['xl/worksheets/sheet1.xml']!).replace(
-        /<c r="B2"[^>]*>[\s\S]*?<\/c>/,
-        '<c r="B2"><f t="dataTable" ref="B2:B5" dt2D="0" dtr="1" r1="A1"/><v>99</v></c>',
-      ),
-    );
-    const injected = zipSync(parts);
+    const injected = patchedPackage(writeXlsx(seed), {
+      edit: {
+        'xl/worksheets/sheet1.xml': (xml) =>
+          xml.replace(
+            /<c r="B2"[^>]*>[\s\S]*?<\/c>/,
+            '<c r="B2"><f t="dataTable" ref="B2:B5" dt2D="0" dtr="1" r1="A1"/><v>99</v></c>',
+          ),
+      },
+    });
 
     let reloadOk: boolean;
     let readShareType = null;
@@ -42,7 +41,7 @@ export const formulas = {
         readResult = (value as Untyped).result ?? null;
       }
       reloadOk = true;
-      const outXml = strFromU8(unzipSync(writeXlsx(reload))['xl/worksheets/sheet1.xml']!);
+      const outXml = partOf(writeXlsx(reload), 'xl/worksheets/sheet1.xml');
       outHasDataTable = /t="dataTable"/.test(outXml);
     } catch {
       reloadOk = false;

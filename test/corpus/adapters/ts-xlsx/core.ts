@@ -883,7 +883,7 @@ export const core = {
     const cells = ['A1', 'B1', 'C1', 'D1'].map(
       (ref, index) => `<c r="${ref}" t="s"><v>${index}</v></c>`,
     );
-    const back = reloadPatched(writeXlsx(wb), {
+    const back = reloadPatched(writeXlsx(wb, {useSharedStrings: true}), {
       'xl/sharedStrings.xml': () =>
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="5" uniqueCount="4">' +

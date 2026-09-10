@@ -2,12 +2,10 @@
 // levels, freeze panes, print areas and page breaks, and the print settings that ride alongside
 // them: page margins, and the header/footer definition text.
 
-import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
-
 import type {RowInput} from '../../../../src/core/worksheet.ts';
 import {messageOf} from '../../thrown.ts';
 import type {Untyped} from '../../untyped.ts';
-import {type PartMap, partMapOf, roundtrip} from './package-facts.ts';
+import {type PartMap, partMapOf, partOf, patchedPackage, roundtrip} from './package-facts.ts';
 import {
   decodeRange,
   encodeAddress,
@@ -326,7 +324,6 @@ export const grid = {
   repeatedFullGridColumnSpanReport(spans = 4000) {
     const wb = new Workbook();
     wb.addWorksheet('S').getCell('A1').value = 'x';
-    const files = unzipSync(writeXlsx(wb));
     const cols =
       '<cols>' +
       Array.from(
@@ -334,12 +331,9 @@ export const grid = {
         () => '<col min="1" max="99999999" width="12" customWidth="1" hidden="1" style="0"/>',
       ).join('') +
       '</cols>';
-    const sheetXml = strFromU8(files['xl/worksheets/sheet1.xml']!).replace(
-      '<sheetData>',
-      `${cols}<sheetData>`,
-    );
-    files['xl/worksheets/sheet1.xml'] = strToU8(sheetXml);
-    const archive = zipSync(files);
+    const archive = patchedPackage(writeXlsx(wb), {
+      edit: {'xl/worksheets/sheet1.xml': (xml) => xml.replace('<sheetData>', `${cols}<sheetData>`)},
+    });
 
     const bufferedStart = performance.now();
     const back = readXlsx(archive).getWorksheet('S')!;
@@ -355,7 +349,7 @@ export const grid = {
     const streamingMs = performance.now() - streamingStart;
 
     return {
-      xmlBytes: sheetXml.length,
+      xmlBytes: partOf(archive, 'xl/worksheets/sheet1.xml').length,
       spans,
       bufferedMs,
       streamingMs,

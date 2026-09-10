@@ -5,6 +5,7 @@
 import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
 
 import type {Untyped} from '../../untyped.ts';
+import {patchedPackage} from './package-facts.ts';
 import {
   decodeRange,
   encodeAddress,
@@ -69,11 +70,7 @@ export function expandSqref(sqref: string, cap = 4096) {
 // (an explicit-false boolean flag `<b val="0"/>`, an alignment element carrying only `wrapText="0"`,
 // an injected xf). `edits` maps a part path to a (xml) => xml transform; unlisted parts pass through.
 export function reloadPatched(buffer: Uint8Array, edits: Record<string, (xml: string) => string>) {
-  const files = unzipSync(buffer);
-  for (const [name, transform] of Object.entries(edits)) {
-    files[name] = strToU8(transform(strFromU8(files[name]!)));
-  }
-  return readXlsx(zipSync(files));
+  return readXlsx(patchedPackage(buffer, {edit: edits}));
 }
 
 // Substitute a marker the author planted in a cell for arbitrary markup, in every text part that
@@ -196,13 +193,15 @@ const DRAWINGML = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 export function relationshipPrefixReport(prefix: string) {
   const wb = new Workbook();
   wb.addWorksheet('S1').getCell('A1').value = 'hello';
-  const files = unzipSync(writeXlsx(wb));
-  files['xl/workbook.xml'] = strToU8(
-    strFromU8(files['xl/workbook.xml']!)
-      .replace('xmlns:r=', `xmlns:${prefix}=`)
-      .replaceAll('r:id=', `${prefix}:id=`),
-  );
-  const back = readXlsx(zipSync(files));
+  // `r` is the control: the package exactly as written, which is the prefix the writer already chose.
+  const written = writeXlsx(wb);
+  const back =
+    prefix === 'r'
+      ? readXlsx(written)
+      : reloadPatched(written, {
+          'xl/workbook.xml': (xml) =>
+            xml.replace('xmlns:r=', `xmlns:${prefix}=`).replaceAll('r:id=', `${prefix}:id=`),
+        });
   return {
     sheetNames: back.worksheets.map((sheet) => sheet.name),
     a1: back.getWorksheet('S1')?.getCell('A1').value ?? null,
@@ -222,21 +221,20 @@ export function mainNamespacePrefixReport(prefix: string) {
   ws.addDataValidation('A1', {type: 'list', formulae: ['"a,b,c"']});
   ws.addConditionalFormatting({ref: 'A1:A5', rules: [{type: 'duplicateValues', priority: 1}]});
 
-  const files = unzipSync(writeXlsx(wb));
-  const sheet = strFromU8(files['xl/worksheets/sheet1.xml']!)
-    .replace(
-      `<worksheet xmlns="${SPREADSHEETML}"`,
-      `<${prefix}:worksheet xmlns:${prefix}="${SPREADSHEETML}"`,
-    )
-    // Every remaining unprefixed element takes the same prefix; already-prefixed ones (the x14
-    // extension block) are left exactly as they are, which is the point of the comparison.
-    .replace(/<(\/?)([a-zA-Z][\w]*)(?=[ />])/g, (match, slash: string, tag: string) =>
-      tag === 'worksheet' ? match : `<${slash}${prefix}:${tag}`,
-    )
-    .replace(/<\/worksheet>/, `</${prefix}:worksheet>`);
-  files['xl/worksheets/sheet1.xml'] = strToU8(sheet);
-
-  const back = readXlsx(zipSync(files)).getWorksheet('S');
+  const back = reloadPatched(writeXlsx(wb), {
+    'xl/worksheets/sheet1.xml': (xml) =>
+      xml
+        .replace(
+          `<worksheet xmlns="${SPREADSHEETML}"`,
+          `<${prefix}:worksheet xmlns:${prefix}="${SPREADSHEETML}"`,
+        )
+        // Every remaining unprefixed element takes the same prefix; already-prefixed ones (the x14
+        // extension block) are left exactly as they are, which is the point of the comparison.
+        .replace(/<(\/?)([a-zA-Z][\w]*)(?=[ />])/g, (match, slash: string, tag: string) =>
+          tag === 'worksheet' ? match : `<${slash}${prefix}:${tag}`,
+        )
+        .replace(/<\/worksheet>/, `</${prefix}:worksheet>`),
+  }).getWorksheet('S');
   return {
     a1: back?.getCell('A1').value ?? null,
     validations: (back?.dataValidations ?? []).map((entry) => entry.sqref),
@@ -287,10 +285,7 @@ export function themePrefixReport(prefix: string) {
   // A cell whose font colour is theme slot 4 (accent1), so the resolved RGB says which theme won.
   ws.getCell('A1').value = 'x';
   ws.getCell('A1').font = {color: {theme: 4}};
-  const files = unzipSync(writeXlsx(wb));
-  files['xl/theme/theme1.xml'] = strToU8(theme);
-
-  const back = readXlsx(zipSync(files));
+  const back = reloadPatched(writeXlsx(wb), {'xl/theme/theme1.xml': () => theme});
   return {
     colors: {...back.themeColors},
     fonts: {...back.themeFonts},
@@ -308,15 +303,12 @@ export function selfClosingDefinedNameReport() {
   const wb = new Workbook();
   wb.addWorksheet('S').getCell('A1').value = 1;
   wb.defineName({name: 'Later', refersTo: 'S!$A$1'});
-  const files = unzipSync(writeXlsx(wb));
-  files['xl/workbook.xml'] = strToU8(
-    strFromU8(files['xl/workbook.xml']!).replace(
-      '<definedNames>',
-      '<definedNames><definedName name="Empty"/>',
-    ),
-  );
+  const back = reloadPatched(writeXlsx(wb), {
+    'xl/workbook.xml': (xml) =>
+      xml.replace('<definedNames>', '<definedNames><definedName name="Empty"/>'),
+  });
   return {
-    names: readXlsx(zipSync(files)).definedNames.map((name) => ({
+    names: back.definedNames.map((name) => ({
       name: name.name,
       refersTo: name.refersTo,
     })),

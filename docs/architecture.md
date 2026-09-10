@@ -68,8 +68,9 @@ tidiness:
 The wall matters: the `test/` trees earn their separation by being forbidden from reaching
 into src the way a co-located unit test may. Put a white-box test in `src/`; keep `test/`
 for the blind corpus and the external oracles. A "corpus" case that imports a src internal
-has quietly stopped being implementation-blind, and the directory boundary is what keeps
-that mistake hard to make by accident.
+has quietly stopped being implementation-blind, and `corpus-blind:check`
+(`scripts/check-corpus-blind.ts`, in the `invariants` gate) refuses it: a case may import
+`test/corpus/case.ts`, `test/corpus/untyped.ts` and `node:` built-ins, and nothing else.
 
 ## Spec and schema reference
 

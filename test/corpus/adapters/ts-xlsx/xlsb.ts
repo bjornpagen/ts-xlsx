@@ -2,10 +2,11 @@
 // workbook Excel saved in both forms, which is why the fixture is a *pair*: the XML twin is an
 // independent oracle for what the binary must decode to, not something this library produced.
 
-import {strToU8, unzipSync, zipSync} from 'fflate';
+import {strToU8, zipSync} from 'fflate';
 
 import {canonicalJson} from '../../canonical-json.ts';
 import type {Untyped} from '../../untyped.ts';
+import {partBytesOf, patchedPackage} from './package-facts.ts';
 import {encodeAddress, fixtureBytes, readXlsb, readXlsx, type WorkbookInstance} from './runtime.ts';
 
 const FIXTURE = 'xlsb-binary-workbook-reads-like-its-xlsx-twin';
@@ -133,9 +134,8 @@ export const xlsb = {
   // truncation expressed without changing a single length field, so the record framing stays exactly
   // as valid as it was and only the formula runs off its own end.
   xlsbTruncatedFormulaToken() {
-    const files = unzipSync(fixtureBytes(`${FORMULAS}/source.xlsb`));
-    const original = files['xl/worksheets/sheet1.bin'];
-    if (original === undefined) throw new Error('fixture is missing xl/worksheets/sheet1.bin');
+    const source = fixtureBytes(`${FORMULAS}/source.xlsb`);
+    const original = partBytesOf(source, 'xl/worksheets/sheet1.bin');
     const RGCE_LAST = 266;
     if (original[RGCE_LAST] !== 0x03) {
       throw new Error(
@@ -144,7 +144,7 @@ export const xlsb = {
     }
     const sheet = Uint8Array.from(original);
     sheet[RGCE_LAST] = 0x1e;
-    const archive = zipSync({...files, 'xl/worksheets/sheet1.bin': sheet});
+    const archive = patchedPackage(source, {put: {'xl/worksheets/sheet1.bin': sheet}});
     try {
       const workbook = readXlsb(archive);
       const first = workbook.getWorksheet('Calc');

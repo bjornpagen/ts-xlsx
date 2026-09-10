@@ -1,9 +1,10 @@
 // The .xlsm VBA project: round-tripping it untouched, and the two structural edits the
 // project editor supports.
 
-import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
+import {strFromU8} from 'fflate';
 
 import type {Untyped} from '../../untyped.ts';
+import {partBytesOf, partNamesOf, partOf, patchedPackage} from './package-facts.ts';
 import {
   addVbaReference,
   CompoundFile,
@@ -38,34 +39,33 @@ export const vba = {
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships/vbaProject';
     const wb = new Workbook();
     wb.addWorksheet('S');
-    const base = unzipSync(writeXlsx(wb));
-
     const relId = 'rIdVba';
-    base['xl/_rels/workbook.xml.rels'] = strToU8(
-      strFromU8(base['xl/_rels/workbook.xml.rels']!).replace(
-        '</Relationships>',
-        `<Relationship Id="${relId}" Type="${VBA_REL_TYPE}" Target="vbaProject.bin"/></Relationships>`,
-      ),
-    );
-    base['[Content_Types].xml'] = strToU8(
-      strFromU8(base['[Content_Types].xml']!).replace(
-        '</Types>',
-        '<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/></Types>',
-      ),
-    );
-    base['xl/vbaProject.bin'] = strToU8('FAKE-VBA-PROJECT-BYTES');
-    const macroPackage = zipSync(base);
-    const originalHasVba = 'xl/vbaProject.bin' in unzipSync(macroPackage);
+    const macroPackage = patchedPackage(writeXlsx(wb), {
+      edit: {
+        'xl/_rels/workbook.xml.rels': (xml) =>
+          xml.replace(
+            '</Relationships>',
+            `<Relationship Id="${relId}" Type="${VBA_REL_TYPE}" Target="vbaProject.bin"/></Relationships>`,
+          ),
+        '[Content_Types].xml': (xml) =>
+          xml.replace(
+            '</Types>',
+            '<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/></Types>',
+          ),
+      },
+      put: {'xl/vbaProject.bin': 'FAKE-VBA-PROJECT-BYTES'},
+    });
+    const originalHasVba = partNamesOf(macroPackage).includes('xl/vbaProject.bin');
 
     const loaded = readXlsx(macroPackage);
     const reloadedPreservedCount = (loaded.preservedReferences as Untyped[]).filter((r: Untyped) =>
       r.relType.endsWith('/vbaProject'),
     ).length;
 
-    const rewritten = unzipSync(writeXlsx(loaded));
-    const rewrittenHasVba = 'xl/vbaProject.bin' in rewritten;
+    const rewritten = writeXlsx(loaded);
+    const rewrittenHasVba = partNamesOf(rewritten).includes('xl/vbaProject.bin');
     const rewrittenIsMacroEnabled = /macroEnabled\.main\+xml/.test(
-      strFromU8(rewritten['[Content_Types].xml']!),
+      partOf(rewritten, '[Content_Types].xml'),
     );
 
     return {originalHasVba, reloadedPreservedCount, rewrittenHasVba, rewrittenIsMacroEnabled};
@@ -216,9 +216,8 @@ export const vba = {
     });
 
     const written = writeXlsx(wb);
-    const rewrittenParts = unzipSync(written);
     const rewrittenIsMacroEnabled = /macroEnabled\.main\+xml/.test(
-      strFromU8(rewrittenParts['[Content_Types].xml']!),
+      partOf(written, '[Content_Types].xml'),
     );
 
     const reread = readXlsx(written);
@@ -226,7 +225,10 @@ export const vba = {
     const moduleNames = modules.map((m) => m.name);
     const moduleKinds = modules.map((m) => [m.name, m.kind]);
 
-    const rewrittenBin = rewrittenParts['xl/vbaProject.bin'];
+    // A project the writer dropped is a reported fact here, not a crash, so absence is allowed.
+    const rewrittenBin = partNamesOf(written).includes('xl/vbaProject.bin')
+      ? partBytesOf(written, 'xl/vbaProject.bin')
+      : undefined;
     const rewrittenCfb = rewrittenBin ? new CompoundFile(rewrittenBin) : undefined;
     const originalCfb = new CompoundFile(originalBin);
     const untouchedModuleByteIdentical =
