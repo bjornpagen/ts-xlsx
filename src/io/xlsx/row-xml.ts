@@ -32,6 +32,7 @@ import {
   escapeSpreadsheetText,
   escapeText,
   numberText,
+  nonDefaultNumAttr,
   textAttr,
   textElement,
 } from '../../xml/xml.ts';
@@ -496,5 +497,5 @@ export function assertWritableLevel(name: string, level: number): void {
 export function outlineAttr(name: string, level: number | undefined): string {
   if (level === undefined) return '';
   assertWritableLevel(name, level);
-  return level > 0 ? ` ${name}="${numberText(level)}"` : '';
+  return nonDefaultNumAttr(name, level, 0);
 }

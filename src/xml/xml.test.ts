@@ -7,6 +7,7 @@ import {
   escapeSpreadsheetText,
   escapeText,
   intAttr,
+  nonDefaultNumAttr,
   numAttr,
   textElement,
 } from './xml.ts';
@@ -115,4 +116,14 @@ test('intAttr refuses a value an xsd:int or xsd:unsignedInt cannot hold', () => 
     assert.throws(() => intAttr('priority', value), AuthoringError, String(value));
   }
   assert.throws(() => intAttr('rank', -1, 0), AuthoringError, 'below the floor');
+});
+
+test('nonDefaultNumAttr omits the default but refuses a non-finite value before comparing', () => {
+  assert.equal(nonDefaultNumAttr('degree', undefined, 0), '');
+  assert.equal(nonDefaultNumAttr('degree', 0, 0), '');
+  assert.equal(nonDefaultNumAttr('size', 1, 1), '');
+  assert.equal(nonDefaultNumAttr('degree', 45, 0), ' degree="45"');
+  for (const value of [Number.NaN, Infinity, -Infinity]) {
+    assert.throws(() => nonDefaultNumAttr('degree', value, 0), AuthoringError, String(value));
+  }
 });

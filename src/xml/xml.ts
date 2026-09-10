@@ -257,6 +257,27 @@ export function intAttr(
 }
 
 /**
+ * A numeric attribute written only when it differs from its schema default, with a leading space, or
+ * '' when the value is undefined or equals `defaultValue`.
+ *
+ * The number is checked before it is compared, because the two answer different questions: whether
+ * the value can be spelled, and whether it is worth spelling. Tested for truthiness instead, `NaN` is
+ * falsy and was omitted as if it were a default of zero, so a gradient fill with `degree: NaN` was
+ * written as an ordinary gradient rather than refused.
+ *
+ * @throws {AuthoringError} when the value is not finite.
+ */
+export function nonDefaultNumAttr(
+  name: string,
+  value: number | undefined,
+  defaultValue: number,
+): string {
+  if (value === undefined) return '';
+  const text = numberText(value);
+  return value === defaultValue ? '' : ` ${name}="${text}"`;
+}
+
+/**
  * Refuse a `Date` OOXML cannot spell, naming the property that carries it.
  *
  * Two ways a `Date` fails to have a `dcterms:W3CDTF` / `xsd:dateTime` spelling, and neither is

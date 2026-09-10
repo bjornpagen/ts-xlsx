@@ -201,6 +201,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   was missing or did not decode was written back as `sqref=""` or as its unreadable text. Each is now
   dropped on read.
 
+- **A gradient fill's non-finite `degree` or inset was omitted instead of refused**, because it was
+  written behind a truthiness test and `NaN` is falsy; it now throws `AuthoringError` at write, as
+  every other unwritable number does. Fills are also interned by the XML they produce rather than by a
+  separate field list, so two fills written identically (a solid fill that states the default
+  background, a gradient with `degree: 0`) no longer take two entries in the stylesheet.
+
 
 ## [3.1.0] — 2026-09-04
 

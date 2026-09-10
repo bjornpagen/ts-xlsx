@@ -13,7 +13,6 @@ import {
   type Alignment,
   type Border,
   type BorderEdge,
-  type Color,
   type Fill,
   type GradientFill,
   isBorderStyle,
@@ -21,7 +20,13 @@ import {
   type Protection,
 } from '../../core/style.ts';
 import type {DifferentialStyle} from '../../core/workbook-styles.ts';
-import {checkedToken, escapeAttr, escapeFormatCode, numberText} from '../../xml/xml.ts';
+import {
+  checkedToken,
+  escapeAttr,
+  escapeFormatCode,
+  nonDefaultNumAttr,
+  numberText,
+} from '../../xml/xml.ts';
 import {colorAttrs} from './color-xml.ts';
 import {fontXml} from './font-xml.ts';
 
@@ -140,9 +145,8 @@ export function alignmentAttrs(alignment: Alignment): string {
         break;
       }
       case 'number': {
-        const value = alignment[facet.key];
-        if (value === undefined || value === 0) break;
-        parts.push(`${facet.key}="${numberText(value)}"`);
+        const attr = nonDefaultNumAttr(facet.key, alignment[facet.key], 0);
+        if (attr !== '') parts.push(attr.trimStart());
         break;
       }
       case 'flag':
@@ -191,11 +195,11 @@ export function dxfXml(style: DifferentialStyle): string {
 function gradientFillXml(fill: GradientFill): string {
   const attrs =
     (fill.gradient === 'path' ? ' type="path"' : '') +
-    (fill.degree ? ` degree="${numberText(fill.degree)}"` : '') +
-    insetAttr('left', fill.left) +
-    insetAttr('right', fill.right) +
-    insetAttr('top', fill.top) +
-    insetAttr('bottom', fill.bottom);
+    nonDefaultNumAttr('degree', fill.degree, 0) +
+    nonDefaultNumAttr('left', fill.left, 0) +
+    nonDefaultNumAttr('right', fill.right, 0) +
+    nonDefaultNumAttr('top', fill.top, 0) +
+    nonDefaultNumAttr('bottom', fill.bottom, 0);
   const stops = fill.stops
     .map(
       (stop) =>
@@ -203,10 +207,6 @@ function gradientFillXml(fill: GradientFill): string {
     )
     .join('');
   return `<gradientFill${attrs}>${stops}</gradientFill>`;
-}
-
-function insetAttr(name: string, value: number | undefined): string {
-  return value ? ` ${name}="${numberText(value)}"` : '';
 }
 
 // Serialise a border in ECMA-376 CT_Border child order (left, right, top, bottom, diagonal).
@@ -233,20 +233,6 @@ function edgeXml(tag: string, edge: BorderEdge | undefined): string {
   const style = checkedToken(edge.style, isBorderStyle, 'border style');
   if (edge.color === undefined) return `<${tag} style="${style}"/>`;
   return `<${tag} style="${style}"><color ${colorAttrs(edge.color)}/></${tag}>`;
-}
-
-// A stable, collision-free key for a fill: identical fills share it, distinct ones don't.
-export function fillSignature(fill: Fill): string {
-  if (fill.type === 'gradient') {
-    const stops = fill.stops.map((s) => `${s.position}:${colorSignature(s.color)}`).join(',');
-    return `grad|${fill.gradient}|${fill.degree ?? ''}|${fill.left ?? ''}/${fill.right ?? ''}/${fill.top ?? ''}/${fill.bottom ?? ''}|${stops}`;
-  }
-  return `${fill.pattern}|${colorSignature(fill.fgColor)}|${colorSignature(fill.bgColor)}`;
-}
-
-function colorSignature(color: Color | undefined): string {
-  if (color === undefined) return '';
-  return `${color.argb ?? ''}/${color.theme ?? ''}/${color.tint ?? ''}/${color.indexed ?? ''}`;
 }
 
 // The `<fill>` element for a pattern or gradient fill. The two callers differ only in the solid-fill

@@ -3,7 +3,7 @@ import {test} from 'node:test';
 
 import type {Fill, Font} from '../../core/style.ts';
 import {Workbook} from '../../core/workbook.ts';
-import {XlsxError} from '../../errors.ts';
+import {AuthoringError, XlsxError} from '../../errors.ts';
 import {partText, patchParts, roundtrip} from './package.test-support.ts';
 import {parseIndexedColors} from './read-styles.ts';
 import {readXlsx} from './read.ts';
@@ -129,6 +129,46 @@ test('a path gradient emits its type and insets and omits a zero degree', () => 
   const xml = styles.toXml();
   assert.match(xml, /<gradientFill type="path" left="0.5" right="0.5" top="0.25" bottom="0.25">/);
   assert.doesNotMatch(xml, /degree=/, 'a path gradient with no degree emits none');
+});
+
+// `degree` and the insets were written behind a truthiness test, and `NaN` is falsy, so a gradient
+// carrying one was written as an ordinary gradient instead of being refused.
+test('a non-finite gradient degree or inset is refused rather than omitted as if it were zero', () => {
+  const stops = [{position: 0, color: {argb: 'FF000000'}}];
+  for (const value of [Number.NaN, Infinity, -Infinity]) {
+    for (const key of ['degree', 'left', 'right', 'top', 'bottom'] as const) {
+      const gradient = key === 'degree' ? 'linear' : 'path';
+      const fill = {type: 'gradient', gradient, stops, [key]: value} as Fill;
+      assert.throws(() => new StyleRegistry().styleId({fill}), AuthoringError, `${key}: ${value}`);
+    }
+  }
+});
+
+// Fills were interned by a field list kept by hand beside the writer, so two fills the writer spells
+// identically could take two ids, and a field the list missed would merge fills that differ.
+test('two fills that produce the same XML share one fill id', () => {
+  const styles = new StyleRegistry();
+  const stops = [{position: 0, color: {argb: 'FF000000'}}];
+  const implicit = styles.styleId({fill: solid('FFFF0000')});
+  const stated = styles.styleId({
+    fill: {type: 'pattern', pattern: 'solid', fgColor: {argb: 'FFFF0000'}, bgColor: {indexed: 64}},
+  });
+  assert.equal(stated, implicit, 'the background a solid fill states is the one the writer adds');
+  const absent = styles.styleId({fill: {type: 'gradient', gradient: 'linear', stops}});
+  const zero = styles.styleId({fill: {type: 'gradient', gradient: 'linear', degree: 0, stops}});
+  assert.equal(zero, absent, 'a zero degree is the default an absent one writes');
+  assert.match(styles.toXml(), /<fills count="4">/, 'the two reserved fills and two authored ones');
+});
+
+test('two fills that differ only in a colour tint take two fill ids', () => {
+  const styles = new StyleRegistry();
+  const tinted = (tint: number): Fill => ({
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: {theme: 4, tint},
+  });
+  assert.notEqual(styles.styleId({fill: tinted(0.4)}), styles.styleId({fill: tinted(-0.25)}));
+  assert.match(styles.toXml(), /<fills count="4">/);
 });
 
 test('an identical number format interns to one shared xf index', () => {
