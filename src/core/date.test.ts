@@ -40,6 +40,16 @@ test('dateToSerial reproduces the leap-year boundary in reverse', () => {
   assert.equal(dateToSerial(new Date('1900-03-01T00:00:00.000Z'), 1900), 61);
 });
 
+// The shift compared the instant with the phantom day, so any time after midnight on 1900-02-28 was
+// 60 and a fraction, escaped it, and landed on the non-existent 1900-02-29. Reading 59.5 and writing
+// it back changed the stored value to 60.5.
+test('a time of day on 1900-02-28 converts to that day, and its serial round-trips', () => {
+  assert.equal(dateToSerial(new Date('1900-02-28T12:00:00.000Z'), 1900), 59.5);
+  assert.equal(dateToSerial(new Date('1900-02-28T23:59:59.000Z'), 1900) < 60, true);
+  assert.equal(dateToSerial(serialToDate(59.5, 1900), 1900), 59.5);
+  assert.equal(dateToSerial(new Date('1900-03-01T06:00:00.000Z'), 1900), 61.25);
+});
+
 // The numbers here are Excel Desktop's own, read back over COM from a workbook saved with the 1904
 // system on and one with it off: 2023-03-15 is serial 45000 in the first and 43538 in the second.
 // That difference is why the epoch is a parameter rather than a constant, and 1462 is the gap a

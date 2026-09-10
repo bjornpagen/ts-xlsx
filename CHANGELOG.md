@@ -178,6 +178,16 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   prefixed although Excel writes it bare. A LET or LAMBDA parameter referenced in a different case
   (`LET(x,1,X+1)`) is now recognised, and written in its declared spelling as Excel writes it.
 
+- **A time of day on 1900-02-28 was written as the non-existent 1900-02-29.** The phantom-leap-day
+  correction compared the instant rather than the day, so noon on 1900-02-28 became serial 60.5, and
+  reading 59.5 then writing it back changed the stored value.
+
+- **Date formats rendered every meridiem as `AM`/`PM` and read a literal `s` as seconds.** `h:mm A/P`
+  rendered `9:30 AM` where Excel shows `9:30 A`; the short form now keeps each letter's case as Excel
+  does (`a/p` renders `a`), while the long form stays in capitals however it is spelled, which is also
+  what Excel displays. An escaped or quoted `s` before `.0` no longer renders fractional seconds. CSV
+  output changes for these format codes.
+
 
 ## [3.1.0] — 2026-09-04
 

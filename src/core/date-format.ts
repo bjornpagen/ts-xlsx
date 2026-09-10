@@ -52,6 +52,8 @@ interface FormatRun {
   readonly text: string;
   /** For a placeholder, how many times the letter repeated. */
   readonly count: number;
+  /** For a short meridiem (`a/p`), the token as the code spells it, whose letters keep their case. */
+  readonly written?: string;
 }
 
 /**
@@ -88,9 +90,11 @@ function formatRuns(code: string): FormatRun[] {
     }
     // A run of zeros behind a decimal point is a fractional second, not a numeric placeholder and
     // not literal text: `ss.00` renders hundredths. Emitting the `.00` verbatim, which is what a
-    // renderer that did not know the form would do, is silently wrong rather than unsupported.
+    // renderer that did not know the form would do, is silently wrong rather than unsupported. Only a
+    // seconds placeholder opens one: a quoted or escaped `s` is a literal whose text happens to match.
     const fraction = /^\.0+/.exec(code.slice(i));
-    if (fraction !== null && runs.at(-1)?.text === 's') {
+    const previous = runs.at(-1);
+    if (fraction !== null && previous?.kind === 'placeholder' && previous.text === 's') {
       runs.push({kind: 'placeholder', text: '.0', count: fraction[0].length - 1});
       i += fraction[0].length - 1;
       continue;
@@ -103,11 +107,15 @@ function formatRuns(code: string): FormatRun[] {
       i += count - 1;
       continue;
     }
-    // `AM/PM` and its `A/P` short form are one token, not letters to be rendered individually.
+    // `AM/PM` and its `A/P` short form are one token, not letters to be rendered individually. They
+    // render differently, so the run keeps which one matched, and the short form keeps its spelling.
     const meridiem = /^(AM\/PM|A\/P)/i.exec(code.slice(i));
     if (meridiem !== null) {
-      runs.push({kind: 'placeholder', text: 'am/pm', count: meridiem[0].length});
-      i += meridiem[0].length - 1;
+      const token = meridiem[0];
+      if (token.length === 3)
+        runs.push({kind: 'placeholder', text: 'a/p', count: 3, written: token});
+      else runs.push({kind: 'placeholder', text: 'am/pm', count: token.length});
+      i += token.length - 1;
       continue;
     }
     literal(ch);
@@ -169,7 +177,9 @@ export function formatSerialDate(date: Date, code: string, utc: boolean): string
   const second = utc ? date.getUTCSeconds() : date.getSeconds();
   // A `h` run counts to twelve only when the code asks for a meridiem, which is Excel's rule and the
   // reason the runs are collected before any of them is rendered.
-  const twelveHour = runs.some((run) => run.kind === 'placeholder' && run.text === 'am/pm');
+  const twelveHour = runs.some(
+    (run) => run.kind === 'placeholder' && (run.text === 'am/pm' || run.text === 'a/p'),
+  );
   const hour = twelveHour ? hour24 % 12 || 12 : hour24;
   const pad = (value: number, width: number) => String(value).padStart(width, '0');
 
@@ -215,9 +225,17 @@ export function formatSerialDate(date: Date, code: string, utc: boolean): string
         out += `.${(digits + '000').slice(0, run.count)}`;
         break;
       }
+      // Excel Desktop's rendering, read back over COM, not the Format Cells reference's: the long form
+      // is capitals however the code spells it (`am/pm` and `Am/Pm` render `AM`), and the short form
+      // keeps each letter's own case (`a/p` renders `a`, and `A/p` renders `A` before noon, `p` after).
       case 'am/pm':
         out += hour24 < 12 ? 'AM' : 'PM';
         break;
+      case 'a/p': {
+        const written = run.written ?? 'A/P';
+        out += hour24 < 12 ? written.charAt(0) : written.charAt(2);
+        break;
+      }
       default:
         break;
     }

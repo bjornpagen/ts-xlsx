@@ -43,7 +43,8 @@ as what it now is: an Excel number-format code, the same one `Cell.numFmt` holds
 
 The renderer covers what a date format actually contains: `y`/`m`/`d`/`h`/`s` runs of any length,
 month and weekday names (`mmm`, `mmmm`, `mmmmm`, `ddd`, `dddd`), the `AM/PM` and `A/P` meridiems and
-the twelve-hour clock they imply, fractional seconds (`ss.00`), quoted literals, backslash escapes,
+the twelve-hour clock they imply (rendered as Excel Desktop renders them: the long form in capitals
+however it is spelled, the short form in the case each of its letters is written), fractional seconds (`ss.00`), quoted literals, backslash escapes,
 bracketed directives, and the first of a code's `;`-separated sections. Minute-versus-month is
 decided by position, as Excel decides it, which is precisely the rule a token table cannot express
 and the reason the CSV writer had needed a second vocabulary at all.

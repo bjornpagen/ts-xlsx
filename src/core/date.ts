@@ -56,8 +56,10 @@ export function dateToSerial(date: Date, epoch: DateEpoch): number {
   if (epoch === 1904) return (date.getTime() - EPOCH_1904_UTC) / MS_PER_DAY;
   const days = (date.getTime() - EPOCH_1900_UTC) / MS_PER_DAY;
   // Days at or below the phantom (1900-02-28 is day 60 from the nominal epoch) are shifted
-  // one earlier to skip the fake 1900-02-29 that Excel counts at serial 60.
-  return days <= PHANTOM_SERIAL ? days - 1 : days;
+  // one earlier to skip the fake 1900-02-29 that Excel counts at serial 60. The whole day decides,
+  // not the instant: compared with its time of day, noon on 1900-02-28 (day 60.5) escaped the shift
+  // and landed on the day that does not exist.
+  return Math.floor(days) <= PHANTOM_SERIAL ? days - 1 : days;
 }
 
 /**

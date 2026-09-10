@@ -86,7 +86,10 @@ const TOTAL_BUDGET_BYTES = 584 * 1024;
 const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised from 570 when the future-function registry took [MS-XLSX]'s full table and the names Excel
   // prefixes beyond it, fifty-odd names more, which put this entry seven tenths over.
-  '.': 571,
+  //
+  // Raised again, from 571, when the date-format renderer began keeping a short meridiem's spelling
+  // to render it as Excel does, which put this entry two tenths over.
+  '.': 572,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.

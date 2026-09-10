@@ -33,7 +33,26 @@ test('an hour counts to twelve only when the code asks for a meridiem', () => {
   assert.equal(formatSerialDate(afternoon, 'h:mm', true), '14:07');
   assert.equal(formatSerialDate(afternoon, 'h:mm AM/PM', true), '2:07 PM');
   assert.equal(formatSerialDate(midnight, 'h:mm AM/PM', true), '12:30 AM', 'midnight is 12, not 0');
-  assert.equal(formatSerialDate(midnight, 'h:mm A/P', true), '12:30 AM');
+  assert.equal(formatSerialDate(midnight, 'h:mm A/P', true), '12:30 A');
+});
+
+// Every meridiem rendered `AM`/`PM`, so `h:mm A/P` gave `9:30 AM` where Excel shows `9:30 A`. The
+// expected strings are the `.Text` Excel Desktop displayed for each code at 09:30 and 21:30.
+test('a meridiem renders as Excel renders it: the long form in capitals, the short form as spelled', () => {
+  const morning = new Date(Date.UTC(2024, 2, 5, 9, 30, 0));
+  const evening = new Date(Date.UTC(2024, 2, 5, 21, 30, 0));
+  const cases: [string, string, string][] = [
+    ['h:mm AM/PM', '9:30 AM', '9:30 PM'],
+    ['h:mm am/pm', '9:30 AM', '9:30 PM'],
+    ['h:mm Am/Pm', '9:30 AM', '9:30 PM'],
+    ['h:mm A/P', '9:30 A', '9:30 P'],
+    ['h:mm a/p', '9:30 a', '9:30 p'],
+    ['h:mm A/p', '9:30 A', '9:30 p'],
+  ];
+  for (const [code, am, pm] of cases) {
+    assert.equal(formatSerialDate(morning, code, true), am, code);
+    assert.equal(formatSerialDate(evening, code, true), pm, code);
+  }
 });
 
 test('quoted literals, escapes and bracketed directives are honoured', () => {
@@ -57,6 +76,9 @@ test('a fractional-seconds run renders the fraction rather than the zeros', () =
     '0.0',
     'and it is a placeholder only after s',
   );
+  // The check read only the previous run's text, so an escaped or quoted `s` opened a fraction too.
+  assert.equal(formatSerialDate(moment, 'ss\\s.0', true), '09s.0', 'an escaped s is a literal');
+  assert.equal(formatSerialDate(moment, 'ss"s".0', true), '09s.0', 'and so is a quoted one');
 });
 
 test('an Invalid Date renders as nothing rather than as the words', () => {
