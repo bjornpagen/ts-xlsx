@@ -31,7 +31,7 @@ import {readPackageJson, ROOT} from './repo.ts';
 import {verdict} from './verdict.ts';
 
 const DIST = join(ROOT, 'dist');
-const TOTAL_BUDGET_BYTES = 575 * 1024;
+const TOTAL_BUDGET_BYTES = 580 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -60,16 +60,25 @@ const TOTAL_BUDGET_BYTES = 575 * 1024;
 // hands a file-derived value to a guard written about the caller). Nothing crossed a boundary; four
 // entries had simply been left sitting at a few tenths of a percent of headroom, which is not the
 // tripwire this comment describes. The numbers below restore it against today's measurement.
+//
+// Re-baselined by a series of hostile-input and read-path corrections, each measured as it landed and
+// none crossing a boundary. The attribute scanner became a hand-written linear scan (+1.4 KB on every
+// entry that parses XML). Read repair and the column budget moved below both codecs into
+// `io/read-policy/`, which the binary reader now calls (`/xlsb` +2.7 KB and two modules). The BIFF12
+// formula decoder bounds its text, the grid refuses an out-of-bounds edit before mutating
+// (`/core` +0.8 KB), and a shared formula's clone shifts whole-column and whole-row ranges (+1.1 KB on
+// `.`). `.` went over, `/core` and `/xlsb` were left under a kilobyte, and the total under four; the
+// numbers below restore them against today's measurement.
 const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
-  '.': 560,
-  './core': 205,
+  '.': 566,
+  './core': 207,
   './xlsx': 550,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
   // every entry carries, and this was the one entry whose headroom the ~3 KB exhausted. Restores it
   // against that measurement rather than granting the growth a permanent home in the margin.
-  './xlsb': 293,
+  './xlsb': 295,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
