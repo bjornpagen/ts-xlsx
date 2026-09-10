@@ -26,6 +26,13 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Changed
 
+- **BREAKING: `Workbook.tableStyles.styles` holds `{name, xml}` definitions rather than bare
+  fragments.** An authored table style replaces the preserved definition it shares a name with, and
+  the writer found that definition by pulling `name="…"` back out of its bytes: a file that quoted the
+  attribute `name='…'` kept both definitions under one name. The name is now read by the scanner when
+  the file is, and carried beside the fragment as `TableStyleDefinition.name`; read `.xml` where a
+  fragment string was read before.
+
 - **BREAKING: `StreamedRow` can no longer be constructed directly.** Get one from
   `WorksheetStreamWriter.addRow` or `addRows`, which was always the only meaningful source. A
   constructed row named a number its writer never handed out, so `new StreamedRow([], sheet, 5).commit()`

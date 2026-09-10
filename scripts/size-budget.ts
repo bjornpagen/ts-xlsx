@@ -31,7 +31,11 @@ import {readPackageJson, ROOT} from './repo.ts';
 import {verdict} from './verdict.ts';
 
 const DIST = join(ROOT, 'dist');
-const TOTAL_BUDGET_BYTES = 580 * 1024;
+// Raised from 580 when a run of read and write correctness fixes (VBA byte splicing, splice-anchored
+// values and page breaks, validation attributes, drawing preservation, checked error codes, table
+// style names) had grown the shipped JavaScript to exactly this line, each step within its entry's
+// budget but the sum with no room left.
+const TOTAL_BUDGET_BYTES = 584 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.

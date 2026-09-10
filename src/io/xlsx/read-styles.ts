@@ -22,7 +22,11 @@ import {
   isFillPatternType,
   type Protection,
 } from '../../core/style.ts';
-import type {TableStyleNamespace, TableStyleTable} from '../../core/workbook-styles.ts';
+import type {
+  TableStyleDefinition,
+  TableStyleNamespace,
+  TableStyleTable,
+} from '../../core/workbook-styles.ts';
 import {numFinite, numInteger} from '../../xml/xml-attrs.ts';
 import {
   closeEmptyElements,
@@ -595,20 +599,28 @@ function buildTableStyleTable(
   containerAttrs: XmlAttributes | undefined,
 ): TableStyleTable {
   const table: {
-    styles: string[];
+    styles: TableStyleDefinition[];
     defaultTableStyle?: string;
     defaultPivotStyle?: string;
     namespaces?: TableStyleNamespace[];
-  } = {styles: [...styles]};
+  } = {styles: styles.map((xml) => ({name: tableStyleNameOf(xml), xml}))};
   if (containerAttrs?.defaultTableStyle !== undefined) {
     table.defaultTableStyle = containerAttrs.defaultTableStyle;
   }
   if (containerAttrs?.defaultPivotStyle !== undefined) {
     table.defaultPivotStyle = containerAttrs.defaultPivotStyle;
   }
-  const namespaces = fragmentNamespaces(stylesXml, table.styles);
+  const namespaces = fragmentNamespaces(stylesXml, styles);
   if (namespaces.length > 0) table.namespaces = namespaces;
   return table;
+}
+
+// A captured `<tableStyle>`'s `name`, from the scanner rather than a pattern over its bytes: decoded,
+// and in whichever quotes the file used. Empty when the element declares none, which CT_TableStyle
+// requires, so such a fragment is one no table can reach and no authored style can collide with.
+function tableStyleNameOf(fragment: string): string {
+  for (const {attrs} of openElements(fragment, 'tableStyle')) return attrs.name ?? '';
+  return '';
 }
 
 // The namespace declarations the verbatim `<tableStyle>` fragments depend on, resolved against the

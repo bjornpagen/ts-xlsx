@@ -4,9 +4,40 @@ import {test} from 'node:test';
 import type {Fill, Font} from '../../core/style.ts';
 import {Workbook} from '../../core/workbook.ts';
 import {XlsxError} from '../../errors.ts';
-import {roundtrip} from './package.test-support.ts';
+import {partText, patchParts, roundtrip} from './package.test-support.ts';
 import {parseIndexedColors} from './read-styles.ts';
+import {readXlsx} from './read.ts';
 import {StyleRegistry} from './styles.ts';
+import {writeXlsx} from './write.ts';
+
+// An authored table style replaces the preserved definition it shares a name with, and the writer found
+// that definition by pulling `name="..."` back out of its bytes. A file quoting the attribute the other
+// legal way, `name='Harbour'`, slipped past, and the stylesheet carried two definitions of one name.
+test('an authored table style replaces a preserved one of the same name, however the file quoted it', () => {
+  const workbook = new Workbook();
+  workbook.addWorksheet('S').getCell('A1').value = 1;
+  const preserved = `<tableStyles count="1"><tableStyle name='Harbour' pivot='0'></tableStyle></tableStyles>`;
+  const read = readXlsx(
+    patchParts(writeXlsx(workbook), {
+      'xl/styles.xml': (xml) => xml.replace('</styleSheet>', `${preserved}</styleSheet>`),
+    }),
+  );
+  assert.deepEqual(
+    read.tableStyles.styles.map((style) => style.name),
+    ['Harbour'],
+    'the preserved definition is named from the scanner, not from a double-quoted pattern',
+  );
+
+  read.addTableStyle({name: 'Harbour', elements: {wholeTable: {border: {top: {style: 'thin'}}}}});
+  const block = /<tableStyles\b[^>]*>[\s\S]*?<\/tableStyles>/.exec(
+    partText(writeXlsx(read), 'xl/styles.xml'),
+  )?.[0];
+  assert.ok(block, 'the stylesheet carries a <tableStyles> block');
+  const names = [...block.matchAll(/<tableStyle\s[^>]*?\bname=(["'])(.*?)\1/g)].map((m) => m[2]);
+  assert.deepEqual(names, ['Harbour'], 'one definition of the name, not two');
+  assert.match(block, /^<tableStyles count="1"/);
+  assert.doesNotMatch(block, /name='Harbour'/, 'and it is the authored one');
+});
 
 const solid = (argb: string): Fill => ({type: 'pattern', pattern: 'solid', fgColor: {argb}});
 

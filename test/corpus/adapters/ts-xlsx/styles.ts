@@ -1017,6 +1017,30 @@ export const styles = {
     };
   },
 
+  // Put a `<tableStyle name='Harbour'>` definition, single-quoted, into a written stylesheet, read it,
+  // author a `Harbour` table style over it, and write again → { definitions, declaredCount,
+  // preservedDefinitionWritten }: the names the rewritten `<tableStyles>` defines, matched whatever
+  // their quoting; its `count`; and whether the single-quoted preserved definition is still in it.
+  singleQuotedTableStyleOverrideReport() {
+    const source = new Workbook();
+    source.addWorksheet('S').getCell('A1').value = 1;
+    const preserved =
+      "<tableStyles count='1'><tableStyle name='Harbour' pivot='0'></tableStyle></tableStyles>";
+    const read = reloadPatched(writeXlsx(source), {
+      'xl/styles.xml': (xml) => xml.replace('</styleSheet>', `${preserved}</styleSheet>`),
+    });
+    read.addTableStyle({name: 'Harbour', elements: {wholeTable: {border: {top: {style: 'thin'}}}}});
+    const stylesXml = partMapOf(writeXlsx(read))['xl/styles.xml'] ?? '';
+    const block = /<tableStyles\b[^>]*>[\s\S]*?<\/tableStyles>/.exec(stylesXml)?.[0] ?? '';
+    return {
+      definitions: [...block.matchAll(/<tableStyle\s[^>]*?\bname=(["'])(.*?)\1/g)].map(
+        (match) => match[2] ?? '',
+      ),
+      declaredCount: Number(/<tableStyles\b[^>]*\bcount=(["'])(\d+)\1/.exec(block)?.[2] ?? -1),
+      preservedDefinitionWritten: block.includes("name='Harbour'"),
+    };
+  },
+
   // Register a table style the library must refuse → the error message, or null if it was accepted.
   authorInvalidTableStyle(style: Untyped) {
     try {

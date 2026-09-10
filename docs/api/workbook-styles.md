@@ -47,6 +47,29 @@ type NamedCellStyle = Readonly<CellStyle> & {
 
 ---
 
+### `TableStyleDefinition`
+
+<sub>interface</sub>
+
+One preserved `<tableStyle>` definition: its bytes, and the `name` a table's style info matches it by.
+
+The name travels beside the fragment rather than being read back out of it. An authored style
+replaces the preserved definition it shares a name with, and a pattern pulling `name="…"` out of
+the bytes did not see `name='…'`, which is the same attribute in single quotes: the writer emitted
+both definitions under one name, the duplicate [`Workbook.addTableStyle`](./workbook.md#workbookaddtablestyle) promises cannot happen.
+The reader takes the name from the scanner that read the element, decoded, whatever its quoting.
+
+```ts
+interface TableStyleDefinition {
+  /** The style's `name`, decoded; empty for a fragment that declared none. */
+  readonly name: string;
+  /** The `<tableStyle>…</tableStyle>` element exactly as the file spelled it. */
+  readonly xml: string;
+}
+```
+
+---
+
 ### `TableStyleNamespace`
 
 <sub>interface</sub>
@@ -82,7 +105,7 @@ are held decoded.
 
 ```ts
 interface TableStyleTable {
-  readonly styles: readonly string[];
+  readonly styles: readonly TableStyleDefinition[];
   readonly defaultTableStyle?: string | undefined;
   readonly defaultPivotStyle?: string | undefined;
   /**

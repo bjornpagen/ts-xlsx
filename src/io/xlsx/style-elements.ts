@@ -21,7 +21,6 @@ import {
   type Protection,
 } from '../../core/style.ts';
 import type {DifferentialStyle} from '../../core/workbook-styles.ts';
-import {decodeEntities} from '../../xml/xml-scan.ts';
 import {checkedToken, escapeAttr, escapeFormatCode, numberText} from '../../xml/xml.ts';
 import {colorAttrs} from './color-xml.ts';
 import {fontXml} from './font-xml.ts';
@@ -163,14 +162,6 @@ export function protectionAttrs(protection: Protection): string {
   if (protection.locked === false) parts.push('locked="0"');
   if (protection.hidden === true) parts.push('hidden="1"');
   return parts.join(' ');
-}
-
-// The `name` a `<tableStyle>` fragment declares: the key a table's `tableStyleInfo/@name` matches
-// and, here, the key an authored definition overrides a preserved one by. Read out of the fragment
-// rather than stored beside it, so the two cannot drift; `name` is required by CT_TableStyle, and a
-// fragment without one is unreachable anyway and so can never collide.
-export function tableStyleName(fragment: string): string {
-  return decodeEntities(/<tableStyle\b[^>]*\bname="([^"]*)"/.exec(fragment)?.[1] ?? '');
 }
 
 // Serialise a differential style (CT_Dxf) in schema child order: font, numFmt, fill, border. Only the

@@ -43,7 +43,6 @@ import {
   isDefaultFormat,
   patternFillXml,
   protectionAttrs,
-  tableStyleName,
   xfXml,
 } from './style-elements.ts';
 
@@ -457,9 +456,9 @@ export class StyleRegistry {
   #tableStylesXml(): string {
     const {defaultTableStyle, defaultPivotStyle} = this.#tableStyles;
     const authored = this.#authoredTableStyles;
-    const preserved = this.#tableStyles.styles.filter(
-      (fragment) => !authored.has(tableStyleName(fragment)),
-    );
+    const preserved = this.#tableStyles.styles
+      .filter((style) => !authored.has(style.name))
+      .map((style) => style.xml);
     const styles = [...preserved, ...authored.values()];
     if (styles.length === 0 && defaultTableStyle === undefined && defaultPivotStyle === undefined) {
       return '';

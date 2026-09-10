@@ -193,6 +193,7 @@ export {
 export type {
   DifferentialStyle,
   NamedCellStyle,
+  TableStyleDefinition,
   TableStyleNamespace,
   TableStyleTable,
 } from '../core/workbook-styles.ts';
