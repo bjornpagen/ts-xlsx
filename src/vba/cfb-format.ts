@@ -49,3 +49,13 @@ export const DIR_ENTRY_SIZE = 128;
 /** 32 UTF-16 code units including the NUL terminator. This is also why a VBA module name is capped
  * at 31: the module is a stream, and the stream's name is the module's. */
 export const MAX_NAME_CHARS = 31;
+
+/**
+ * Whether two directory-entry names are the same entry. [MS-CFB] 2.6.4 orders siblings by length and
+ * then by their uppercase forms, and forbids two siblings that compare equal, so a host looking a name
+ * up treats `dir` and `DIR` as one entry. A lookup here does the same, or a file whose producer cased a
+ * name differently would read as missing a stream it has.
+ */
+export function sameEntryName(a: string, b: string): boolean {
+  return a.length === b.length && a.toUpperCase() === b.toUpperCase();
+}

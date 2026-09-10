@@ -87,6 +87,14 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   format through one rule. A streamed cell still reports a `style` only when it, its row or its column
   declares one.
 
+- **Removing a VBA module could overwrite the project's `PROJECT` stream, and a module sharing a name
+  with a stream in another storage did not parse.** Streams inside `vbaProject.bin` were found by bare
+  name anywhere in the container, but [MS-OVBA] puts `dir` and the module streams in the `VBA` storage,
+  `PROJECT` at the root and each UserForm's streams in a storage of its own, so names repeat. A module
+  named `f` beside a UserForm, or one named `PROJECT`, failed with a compression signature error, and in
+  the other directory order `removeVbaModule` wrote the module's bytes over the root `PROJECT`,
+  destroying every module declaration. Streams are now read and replaced by their storage path.
+
 
 ## [3.1.0] — 2026-09-04
 

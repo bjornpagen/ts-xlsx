@@ -111,6 +111,14 @@ function isComplete(module: PendingModule): module is CompleteModule {
   return module.streamName !== undefined && module.offset !== undefined;
 }
 
+// Where [MS-OVBA] 2.2 puts each stream this layer reads: `PROJECT` and `PROJECTwm` at the root, `dir`
+// and every module stream in the `VBA` storage. Each is read by its path, because a name alone repeats
+// across storages (see `CompoundFile.readStream`).
+export const VBA_STORAGE = 'VBA';
+export const DIR_PATH: readonly string[] = [VBA_STORAGE, 'dir'];
+export const PROJECT_PATH: readonly string[] = ['PROJECT'];
+export const PROJECTWM_PATH: readonly string[] = ['PROJECTwm'];
+
 export function parseVbaProject(
   bin: Uint8Array,
   maxOutput = DEFAULT_MAX_PROJECT_OUTPUT,
@@ -132,7 +140,7 @@ export function parseVbaProjectIn(
 ): VbaProject {
   const budget = new DecompressionBudget(maxOutput);
 
-  const dirCompressed = cfb.readStream('dir');
+  const dirCompressed = cfb.readStream(DIR_PATH);
   if (!dirCompressed) throw new VbaParseError("VBA project has no 'dir' stream");
   const dir = budget.spend(dirCompressed, 0);
 
@@ -194,9 +202,12 @@ function readModuleSource(
   decoder: Decoder,
   budget: DecompressionBudget,
 ): string {
-  const stream = cfb.readStream(streamName);
-  if (!stream)
-    throw new VbaParseError(`module stream ${quoted(streamName)} not found in container`);
+  const stream = cfb.readStream([VBA_STORAGE, streamName]);
+  if (!stream) {
+    throw new VbaParseError(
+      `module stream ${quoted(streamName)} not found in the ${quoted(VBA_STORAGE)} storage`,
+    );
+  }
   return decoder.decode(budget.spend(stream, textOffset));
 }
 
@@ -246,7 +257,7 @@ const MODULE_KIND_BY_PROJECT_KEYWORD: ReadonlyMap<string, VbaModuleKind> = new M
 // or unparsable PROJECT just falls back to that coarser MODULETYPE classification.
 function readProjectStreamKinds(cfb: CompoundFile, decoder: Decoder): Map<string, VbaModuleKind> {
   const kinds = new Map<string, VbaModuleKind>();
-  const stream = cfb.readStream('PROJECT');
+  const stream = cfb.readStream(PROJECT_PATH);
   if (!stream) return kinds;
   const text = decoder.decode(stream);
   for (const line of text.split(/\r\n|\r|\n/)) {

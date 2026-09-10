@@ -10,8 +10,9 @@
 // pure-TS path (ADR 0019). These splices are safe precisely because they leave every module's p-code
 // exactly as its own compiler wrote it.
 
-import {quoted} from '../errors.ts';
+import {InternalError, quoted} from '../errors.ts';
 import {readU16, spliceBytes, writeU16} from './bytes.ts';
+import {sameEntryName} from './cfb-format.ts';
 import {type CfbNode, isStream, writeCompoundFile} from './cfb-writer.ts';
 import {CompoundFile} from './cfb.ts';
 import {type Decoder, decoderForCodePage, type Encoder, encoderForCodePage} from './codepage.ts';
@@ -27,13 +28,8 @@ import {
 } from './dir-records.ts';
 import {VbaAuthorError, VbaParseError} from './errors.ts';
 import {compressContainer, decompressContainer} from './ms-ovba.ts';
-import {parseVbaProjectIn} from './project.ts';
+import {DIR_PATH, parseVbaProjectIn, PROJECT_PATH, PROJECTWM_PATH, VBA_STORAGE} from './project.ts';
 import {push, u16, u32, utf16le, validateVbaName} from './vba-encoding.ts';
-
-const DIR_STREAM = 'dir';
-const PROJECT_STREAM = 'PROJECT';
-const PROJECTWM_STREAM = 'PROJECTwm';
-const VBA_STORAGE = 'VBA';
 
 /**
  * Remove a standard module from an existing `vbaProject.bin`, returning new bytes that carry every
@@ -69,7 +65,7 @@ export function removeVbaModule(bin: Uint8Array, name: string): Uint8Array {
   // One decoder for the whole removal, as `removeProjectwmRecord` already took. Two calls built two
   // from the same code page, which is a `TextDecoder` allocated to read a handful of record names.
   const decoder = decoderForCodePage(project.codePage);
-  const dirCompressed = cfb.readStream(DIR_STREAM);
+  const dirCompressed = cfb.readStream(DIR_PATH);
   if (!dirCompressed) throw new VbaParseError("VBA project has no 'dir' stream");
   const patchedDir = removeModuleDirRecord(
     decompressContainer(dirCompressed),
@@ -82,37 +78,28 @@ export function removeVbaModule(bin: Uint8Array, name: string): Uint8Array {
   // reset actively crashes the VBA load (verified 2026-07-24, ADR 0019). The surviving modules keep
   // their own compiled p-code; the `dir` stream, authoritative for the module list, no longer names
   // the removed module, which is what makes the removal take.
-  const replacements = new Map<string, Uint8Array>([[DIR_STREAM, compressContainer(patchedDir)]]);
+  const replacements: StreamReplacement[] = [{path: DIR_PATH, data: compressContainer(patchedDir)}];
 
   const encode = encoderForCodePage(project.codePage);
-  const projectText = cfb.readStream(PROJECT_STREAM);
+  const projectText = cfb.readStream(PROJECT_PATH);
   if (projectText) {
-    replacements.set(
-      PROJECT_STREAM,
-      encode(removeProjectStreamLines(decoder.decode(projectText), module.name, module.kind)),
-    );
+    replacements.push({
+      path: PROJECT_PATH,
+      data: encode(removeProjectStreamLines(decoder.decode(projectText), module.name, module.kind)),
+    });
   }
-  const projectwm = cfb.readStream(PROJECTWM_STREAM);
+  const projectwm = cfb.readStream(PROJECTWM_PATH);
   if (projectwm) {
-    replacements.set(
-      PROJECTWM_STREAM,
-      removeProjectwmRecord(projectwm, project.modules.length, module.name, decoder),
-    );
+    replacements.push({
+      path: PROJECTWM_PATH,
+      data: removeProjectwmRecord(projectwm, project.modules.length, module.name, decoder),
+    });
   }
 
-  const applied = new Set<string>();
-  const withReplacements = replaceStreams(cfb.tree(), replacements, applied);
-  if (!applied.has(DIR_STREAM))
-    throw new VbaParseError("VBA project 'dir' stream is not in the container tree");
-
-  const removed = new Set<string>();
-  const newTree = removeFromStorage(withReplacements, VBA_STORAGE, module.streamName, removed);
-  if (!removed.has(VBA_STORAGE)) {
-    throw new VbaParseError(
-      `module stream ${quoted(module.streamName)} is not in the ${quoted(VBA_STORAGE)} storage`,
-    );
-  }
-
+  const newTree = withoutStream(replaceStreams(cfb.tree(), replacements), [
+    VBA_STORAGE,
+    module.streamName,
+  ]);
   return writeCompoundFile(newTree);
 }
 
@@ -231,21 +218,16 @@ export function addVbaReference(bin: Uint8Array, ref: VbaLibraryReference): Uint
   const cfb = new CompoundFile(bin);
   const encode = encoderForCodePage(parseVbaProjectIn(cfb).codePage);
 
-  const dirCompressed = cfb.readStream(DIR_STREAM);
+  const dirCompressed = cfb.readStream(DIR_PATH);
   if (!dirCompressed) throw new VbaParseError("VBA project has no 'dir' stream");
   const records = buildReferenceDirRecords(normalized, encode);
   const patchedDir = insertReferenceDirRecords(decompressContainer(dirCompressed), records);
 
   // Leave _VBA_PROJECT untouched; see the note in removeVbaModule. The new reference is unused by the
   // existing modules' p-code, so they load and run unchanged; only the `dir` reference array grows.
-  const replacements = new Map<string, Uint8Array>([[DIR_STREAM, compressContainer(patchedDir)]]);
-
-  const applied = new Set<string>();
-  const newTree = replaceStreams(cfb.tree(), replacements, applied);
-  if (!applied.has(DIR_STREAM))
-    throw new VbaParseError("VBA project 'dir' stream is not in the container tree");
-
-  return writeCompoundFile(newTree);
+  return writeCompoundFile(
+    replaceStreams(cfb.tree(), [{path: DIR_PATH, data: compressContainer(patchedDir)}]),
+  );
 }
 
 // Build the REFERENCENAME + REFERENCEREGISTERED record bytes ([MS-OVBA] 2.3.4.2.2.2 / .2.2.5) for one
@@ -403,43 +385,65 @@ function removeProjectwmRecord(
   return spliceBytes(wm, removeStart, removeEnd);
 }
 
-// Remove the first direct child stream named `streamName` from the first storage named `storageName`
-// found in the tree (depth-first), marking `storageName` in `removed` once done. The inverse of
-// insertIntoStorage.
-function removeFromStorage(
-  nodes: readonly CfbNode[],
-  storageName: string,
-  streamName: string,
-  removed: Set<string>,
-): CfbNode[] {
-  return nodes.map((n) => {
-    if (isStream(n)) return n;
-    const children = removeFromStorage(n.children, storageName, streamName, removed);
-    if (n.name === storageName && !removed.has(storageName)) {
-      const filtered = children.filter((c) => !(isStream(c) && c.name === streamName));
-      if (filtered.length !== children.length) removed.add(storageName);
-      return {name: n.name, children: filtered};
-    }
-    return {name: n.name, children};
-  });
+/** A stream's new bytes, addressed by its storage path from the root. */
+interface StreamReplacement {
+  readonly path: readonly string[];
+  readonly data: Uint8Array;
 }
 
-// Rebuild the node tree, swapping any stream whose name has a replacement. Non-stream nodes (storages)
-// recurse; everything without a replacement is carried through byte-for-byte.
+// The tree with each replacement's stream swapped for its new bytes, every path segment matched as
+// [MS-CFB] compares names. A same-named stream in another storage is carried through byte-for-byte, as
+// is everything else. Each path was just read through the sibling tree `tree()` walks, so one that
+// finds nothing here is a fault in this module rather than in the file.
 function replaceStreams(
   nodes: readonly CfbNode[],
-  replacements: ReadonlyMap<string, Uint8Array>,
-  applied: Set<string>,
+  replacements: readonly StreamReplacement[],
 ): CfbNode[] {
-  return nodes.map((node) => {
-    if (isStream(node)) {
-      const data = replacements.get(node.name);
-      if (data !== undefined) {
-        applied.add(node.name);
-        return {name: node.name, data};
+  let applied = 0;
+  const rebuild = (
+    level: readonly CfbNode[],
+    pending: readonly StreamReplacement[],
+    depth: number,
+  ): CfbNode[] =>
+    level.map((node) => {
+      const here = pending.filter((replacement) => {
+        const segment = replacement.path[depth];
+        return segment !== undefined && sameEntryName(segment, node.name);
+      });
+      if (here.length === 0) return node;
+      if (isStream(node)) {
+        const replacement = here.find((candidate) => candidate.path.length === depth + 1);
+        if (replacement === undefined) return node;
+        applied++;
+        return {name: node.name, data: replacement.data};
       }
-      return node;
-    }
-    return {name: node.name, children: replaceStreams(node.children, replacements, applied)};
-  });
+      return {name: node.name, children: rebuild(node.children, here, depth + 1)};
+    });
+  const rebuilt = rebuild(nodes, replacements, 0);
+  if (applied !== replacements.length) {
+    throw new InternalError('a VBA stream read by its path is missing from the container tree');
+  }
+  return rebuilt;
+}
+
+// The tree without the stream at `path`. The module's stream was read through this same path by the
+// parse that validated the removal, so a path that finds nothing is a fault here, as above.
+function withoutStream(nodes: readonly CfbNode[], path: readonly string[]): CfbNode[] {
+  const [name, ...rest] = path;
+  const index = nodes.findIndex(
+    (node) =>
+      name !== undefined &&
+      sameEntryName(node.name, name) &&
+      isStream(node) === (rest.length === 0),
+  );
+  const target = nodes[index];
+  if (target === undefined) {
+    throw new InternalError(
+      'a VBA module stream read by its path is missing from the container tree',
+    );
+  }
+  const kept = isStream(target)
+    ? []
+    : [{name: target.name, children: withoutStream(target.children, rest)}];
+  return [...nodes.slice(0, index), ...kept, ...nodes.slice(index + 1)];
 }

@@ -4,16 +4,17 @@
 import {strict as assert} from 'node:assert';
 import {test} from 'node:test';
 
-import {strFromU8} from 'fflate';
+import {strFromU8, strToU8} from 'fflate';
 
-import type {CfbNode} from './cfb-writer.ts';
+import {type CfbNode, writeCompoundFile} from './cfb-writer.ts';
 import {CompoundFile} from './cfb.ts';
 import {VbaAuthorError, VbaParseError} from './errors.ts';
-import {decompressContainer} from './ms-ovba.ts';
+import {compressContainer, decompressContainer} from './ms-ovba.ts';
 import {addVbaReference, removeVbaModule} from './project-editor.ts';
 import {parseVbaProject} from './project.ts';
 import {
   ascii,
+  buildDirStream,
   buildNavigableProjectBin,
   CODE_PAGE,
   indexOfBytes,
@@ -22,8 +23,8 @@ import {
 } from './vba.test-support.ts';
 
 // Flatten what `CompoundFile.tree()` reaches into `/storage/stream` paths. `tree()` walks the sibling
-// tree a host navigates rather than the linear directory scan `names()` uses, so a stream the editors
-// unlinked but left in place does not appear here.
+// tree a host navigates rather than the linear directory scan, so a stream the editors unlinked but left
+// in place does not appear here.
 function streamPaths(nodes: readonly CfbNode[], prefix = ''): string[] {
   return nodes.flatMap((node) =>
     'data' in node
@@ -75,19 +76,22 @@ test('removeVbaModule removes a procedural module, preserving references and unt
   const after = new CompoundFile(removed);
   for (const name of ['ThisWorkbook', 'Class1']) {
     assert.deepEqual(
-      after.readStream(name),
-      before.readStream(name),
+      after.readStream(['VBA', name]),
+      before.readStream(['VBA', name]),
       `${name} rides through unchanged`,
     );
   }
-  assert.equal(after.readStream('Module1'), undefined, "Module1's stream is gone");
+  assert.equal(after.readStream(['VBA', 'Module1']), undefined, "Module1's stream is gone");
 
   // _VBA_PROJECT is preserved untouched: Excel runs the modules' existing p-code, and resetting the
   // cookie would crash the load.
-  assert.deepEqual(after.readStream('_VBA_PROJECT'), before.readStream('_VBA_PROJECT'));
+  assert.deepEqual(
+    after.readStream(['VBA', '_VBA_PROJECT']),
+    before.readStream(['VBA', '_VBA_PROJECT']),
+  );
 
-  const dirBefore = decompressContainer(before.readStream('dir')!);
-  const dirAfter = decompressContainer(after.readStream('dir')!);
+  const dirBefore = decompressContainer(before.readStream(['VBA', 'dir'])!);
+  const dirAfter = decompressContainer(after.readStream(['VBA', 'dir'])!);
   assert.ok(
     indexOfBytes(dirAfter, Uint8Array.from(refPayload)) >= 0,
     'the PROJECTREFERENCES record is preserved',
@@ -99,13 +103,13 @@ test('removeVbaModule removes a procedural module, preserving references and unt
     'MODULES_COUNT is decremented for the removed module',
   );
 
-  const projectText = strFromU8(after.readStream('PROJECT')!);
+  const projectText = strFromU8(after.readStream(['PROJECT'])!);
   assert.doesNotMatch(projectText, /^Module=Module1$/m, "Module1's declaration line is gone");
   assert.match(projectText, /^Document=ThisWorkbook\/&H00000000$/m, 'ThisWorkbook line survives');
   assert.match(projectText, /^Class=Class1$/m, 'Class1 line survives');
 
   assert.equal(
-    indexOfBytes(after.readStream('PROJECTwm')!, Uint8Array.from(ascii('Module1'))),
+    indexOfBytes(after.readStream(['PROJECTwm'])!, Uint8Array.from(ascii('Module1'))),
     -1,
     'PROJECTwm no longer carries the removed module name',
   );
@@ -182,6 +186,51 @@ test('removeVbaModule rejects a malformed container as a parse error', () => {
   assert.throws(() => removeVbaModule(Uint8Array.from([1, 2, 3, 4]), 'Module1'), VbaParseError);
 });
 
+// A module may be named `PROJECT`, the name of the root stream that declares every module. Found by
+// name, whichever came first in directory order won: the parse read the root text as a compressed
+// module and failed, or, the other way round, a removal wrote the module's bytes over the root text.
+test('a module named PROJECT parses in either directory order, and removing another keeps both streams', () => {
+  const source = 'Sub P()\r\nEnd Sub';
+  const dir = compressContainer(
+    Uint8Array.from(
+      buildDirStream(1252, [
+        {name: 'PROJECT', documentType: false, sourceBytes: [], pcodePrefixLen: 0},
+        {name: 'Module1', documentType: false, sourceBytes: [], pcodePrefixLen: 0},
+      ]),
+    ),
+  );
+  const declarations: CfbNode = {
+    name: 'PROJECT',
+    data: strToU8('Module=PROJECT\r\nModule=Module1\r\n'),
+  };
+  const vba: CfbNode = {
+    name: 'VBA',
+    children: [
+      {name: 'dir', data: dir},
+      {name: 'PROJECT', data: compressContainer(strToU8(source))},
+      {name: 'Module1', data: compressContainer(strToU8('Sub M()\r\nEnd Sub'))},
+    ],
+  };
+
+  for (const order of [
+    [declarations, vba],
+    [vba, declarations],
+  ]) {
+    const bin = writeCompoundFile(order);
+    assert.equal(parseVbaProject(bin).modules.find((m) => m.name === 'PROJECT')?.source, source);
+
+    const removed = removeVbaModule(bin, 'Module1');
+    const text = strFromU8(new CompoundFile(removed).readStream(['PROJECT'])!);
+    assert.match(text, /^Module=PROJECT$/m, 'the root PROJECT still declares the kept module');
+    assert.doesNotMatch(text, /^Module=Module1$/m);
+    assert.deepEqual(
+      parseVbaProject(removed).modules.map((m) => [m.name, m.source]),
+      [['PROJECT', source]],
+      'and the module named PROJECT keeps its own source',
+    );
+  }
+});
+
 // ── Structural edit: addVbaReference ─────────────────────────────────────────────────────────────────
 
 // Microsoft Scripting Runtime's real GUID/path: the exact reference this splice was verified against on
@@ -209,7 +258,7 @@ test('addVbaReference adds a registered reference to a project with no existing 
 
   const before = new CompoundFile(bin);
   const after = new CompoundFile(added);
-  const dirAfter = decompressContainer(after.readStream('dir')!);
+  const dirAfter = decompressContainer(after.readStream(['VBA', 'dir'])!);
   assert.ok(
     indexOfBytes(dirAfter, Uint8Array.from(ascii(SCRIPTING_LIBID))) >= 0,
     'the assembled Libid string is present in the dir stream',
@@ -222,12 +271,15 @@ test('addVbaReference adds a registered reference to a project with no existing 
 
   // No real Excel-authored PROJECT stream carries a Reference= line for a registered library reference
   // (verified against a genuine Excel-authored project) so neither PROJECT nor PROJECTwm changes here.
-  assert.deepEqual(after.readStream('PROJECT'), before.readStream('PROJECT'));
-  assert.deepEqual(after.readStream('PROJECTwm'), before.readStream('PROJECTwm'));
+  assert.deepEqual(after.readStream(['PROJECT']), before.readStream(['PROJECT']));
+  assert.deepEqual(after.readStream(['PROJECTwm']), before.readStream(['PROJECTwm']));
 
   // _VBA_PROJECT is preserved untouched: Excel runs the modules' existing p-code, and resetting the
   // cookie would crash the load.
-  assert.deepEqual(after.readStream('_VBA_PROJECT'), before.readStream('_VBA_PROJECT'));
+  assert.deepEqual(
+    after.readStream(['VBA', '_VBA_PROJECT']),
+    before.readStream(['VBA', '_VBA_PROJECT']),
+  );
 });
 
 test('addVbaReference adds a reference to an existing project, preserving an existing reference and every module byte-for-byte', () => {
@@ -240,14 +292,14 @@ test('addVbaReference adds a reference to an existing project, preserving an exi
   const after = new CompoundFile(added);
   for (const name of ['ThisWorkbook', 'Module1', 'Class1']) {
     assert.deepEqual(
-      after.readStream(name),
-      before.readStream(name),
+      after.readStream(['VBA', name]),
+      before.readStream(['VBA', name]),
       `${name} rides through unchanged`,
     );
   }
 
-  const dirBefore = decompressContainer(before.readStream('dir')!);
-  const dirAfter = decompressContainer(after.readStream('dir')!);
+  const dirBefore = decompressContainer(before.readStream(['VBA', 'dir'])!);
+  const dirAfter = decompressContainer(after.readStream(['VBA', 'dir'])!);
   assert.ok(
     indexOfBytes(dirAfter, Uint8Array.from(existingRefPayload)) >= 0,
     'the pre-existing reference is preserved',

@@ -289,7 +289,7 @@ test('Workbook.removeVbaModule removes a module from a read workbook and preserv
   wb.removeVbaModule('Module1');
 
   const reDir = decompressContainer(
-    new CompoundFile(partBytes(writeXlsx(wb), 'xl/vbaProject.bin')).readStream('dir')!,
+    new CompoundFile(partBytes(writeXlsx(wb), 'xl/vbaProject.bin')).readStream(['VBA', 'dir'])!,
   );
   assert.ok(
     indexOfBytes(reDir, Uint8Array.from(refPayload)) >= 0,
@@ -338,7 +338,7 @@ test('Workbook.addVbaReference adds a reference to a read workbook, preserving m
   });
 
   const reDir = decompressContainer(
-    new CompoundFile(partBytes(writeXlsx(wb), 'xl/vbaProject.bin')).readStream('dir')!,
+    new CompoundFile(partBytes(writeXlsx(wb), 'xl/vbaProject.bin')).readStream(['VBA', 'dir'])!,
   );
   assert.ok(
     indexOfBytes(reDir, Uint8Array.from(ascii('Scripting'))) >= 0,

@@ -92,25 +92,77 @@ export function buildModuleStream(m: ModuleSpec): Uint8Array {
   return out;
 }
 
-/** A minimal MS-CFB container. Every stream here is < 4096 bytes, so all live in the mini stream. */
-function buildCfb(streams: {name: string; data: Uint8Array}[]): Uint8Array {
+/** One stream of a fixture container. */
+interface FixtureStream {
+  readonly name: string;
+  readonly data: Uint8Array;
+}
+
+// A directory entry under construction: its index on disk, and the sibling-tree links a reader walks.
+interface FixtureEntry {
+  readonly index: number;
+  readonly name: string;
+  readonly type: number;
+  start: number;
+  size: number;
+  right: number;
+  child: number;
+}
+
+/**
+ * A minimal MS-CFB container holding `rootStreams` at the root and `vbaStreams` in a `VBA` storage, the
+ * layout [MS-OVBA] 2.2 fixes. Every stream here is < 4096 bytes, so all live in the mini stream. Each
+ * storage links its children as a chain of right siblings: a tree a reader can walk, though not the
+ * balanced, name-ordered one a host binary-searches, which `cfb-writer.ts` builds and this deliberately
+ * does not share.
+ */
+function buildCfb(
+  rootStreams: readonly FixtureStream[],
+  vbaStreams: readonly FixtureStream[],
+): Uint8Array {
   const SEC = 512;
   const MINI = 64;
+
+  const entries: FixtureEntry[] = [];
+  const add = (name: string, type: number, start = 0, size = 0): FixtureEntry => {
+    const entry = {
+      index: entries.length,
+      name,
+      type,
+      start,
+      size,
+      right: FREESECT,
+      child: FREESECT,
+    };
+    entries.push(entry);
+    return entry;
+  };
+  // The first child hangs off the storage, and each after it off the right of the one before.
+  const link = (storage: FixtureEntry, children: readonly FixtureEntry[]): void => {
+    let previous: FixtureEntry | undefined;
+    for (const child of children) {
+      if (previous === undefined) storage.child = child.index;
+      else previous.right = child.index;
+      previous = child;
+    }
+  };
 
   // Pack each stream into whole mini-sectors and chain them in the mini-FAT.
   const miniBytes: number[] = [];
   const miniFat: number[] = [];
-  const root = {name: 'Root Entry', type: 5, start: 0, size: 0};
-  const entries = [root];
-  for (const s of streams) {
+  const addStream = (s: FixtureStream): FixtureEntry => {
     assert.ok(s.data.length < 4096, 'fixture streams must be mini-stream sized');
     const startMini = miniBytes.length / MINI;
     const numMini = Math.max(1, Math.ceil(s.data.length / MINI));
     for (let k = 0; k < numMini; k++)
       miniFat.push(k < numMini - 1 ? startMini + k + 1 : ENDOFCHAIN);
     miniBytes.push(...s.data, ...new Array<number>(numMini * MINI - s.data.length).fill(0));
-    entries.push({name: s.name, type: 2, start: startMini, size: s.data.length});
-  }
+    return add(s.name, 2, startMini, s.data.length);
+  };
+  const root = add('Root Entry', 5);
+  const vba = add('VBA', 1);
+  link(root, [...rootStreams.map(addStream), vba]);
+  link(vba, vbaStreams.map(addStream));
 
   const dirSectors = Math.max(1, Math.ceil((entries.length * 128) / SEC));
   const miniFatSectors = miniFat.length > 0 ? Math.ceil((miniFat.length * 4) / SEC) : 0;
@@ -165,20 +217,20 @@ function buildCfb(streams: {name: string; data: Uint8Array}[]): Uint8Array {
     dv.setUint32(sectorOffset(fatSectorIdx) + i * 4, fat[i] as number, true);
 
   // Directory
-  entries.forEach((e, i) => {
-    const off = sectorOffset(dirStart) + i * 128;
+  for (const e of entries) {
+    const off = sectorOffset(dirStart) + e.index * 128;
     const name16 = utf16le(e.name);
     name16.forEach((b, j) => {
       buf[off + j] = b;
     });
     dv.setUint16(off + 64, name16.length + 2, true); // name length incl. null terminator
     buf[off + 66] = e.type;
-    dv.setUint32(off + 68, FREESECT, true); // left sibling  (tree unused by the reader)
-    dv.setUint32(off + 72, FREESECT, true); // right sibling
-    dv.setUint32(off + 76, FREESECT, true); // child
+    dv.setUint32(off + 68, FREESECT, true); // left sibling: every chain here runs right
+    dv.setUint32(off + 72, e.right, true); // right sibling
+    dv.setUint32(off + 76, e.child, true); // child
     dv.setUint32(off + 116, e.start, true);
     dv.setUint32(off + 120, e.size, true);
-  });
+  }
 
   // Mini-FAT
   if (miniFatSectors > 0) {
@@ -205,11 +257,10 @@ export const PROJECT_STREAM = [
 
 export function buildVbaProjectBin(codePage: number, modules: ModuleSpec[]): Uint8Array {
   const dir = storeCompress(Uint8Array.from(buildDirStream(codePage, modules)));
-  return buildCfb([
-    {name: 'PROJECT', data: strToU8(PROJECT_STREAM)},
-    {name: 'dir', data: dir},
-    ...modules.map((m) => ({name: m.name, data: buildModuleStream(m)})),
-  ]);
+  return buildCfb(
+    [{name: 'PROJECT', data: strToU8(PROJECT_STREAM)}],
+    [{name: 'dir', data: dir}, ...modules.map((m) => ({name: m.name, data: buildModuleStream(m)}))],
+  );
 }
 
 // A three-module project: a document code-behind, a procedural .bas, and a class module. The last two

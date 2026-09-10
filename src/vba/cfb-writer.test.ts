@@ -68,9 +68,9 @@ function inspect(bin: Uint8Array): {
 }
 
 // Navigate the directory as a host does, from the Root Entry's child down each storage's balanced
-// tree, collecting stream paths in traversal order. Independent of CompoundFile, which linear-scans
-// the directory and so would pass even over a broken tree; this asserts the tree Excel actually walks
-// is a valid, acyclic search tree that reaches every entry.
+// tree, collecting stream paths in traversal order. Independent of CompoundFile, whose own tree walk
+// would agree with this writer about a mistake the two shared; this asserts the tree Excel actually
+// walks is a valid, acyclic search tree that reaches every entry.
 function treeReachableStreams(bin: Uint8Array): string[] {
   const {entry} = inspect(bin);
   const out: string[] = [];
@@ -102,13 +102,13 @@ test('writeCompoundFile round-trips mixed small, large, and empty streams throug
     {name: 'empty', data: empty},
   ]);
   const cfb = new CompoundFile(bin);
-  assert.deepEqual(cfb.readStream('small'), small);
+  assert.deepEqual(cfb.readStream(['small']), small);
   assert.deepEqual(
-    cfb.readStream('big'),
+    cfb.readStream(['big']),
     large,
     'a stream past the mini cutoff round-trips via the regular FAT',
   );
-  assert.deepEqual(cfb.readStream('empty'), empty);
+  assert.deepEqual(cfb.readStream(['empty']), empty);
 });
 
 test('writeCompoundFile nests streams inside a storage and keeps the tree navigable', () => {
@@ -123,8 +123,8 @@ test('writeCompoundFile nests streams inside a storage and keeps the tree naviga
     },
   ]);
   const cfb = new CompoundFile(bin);
-  assert.deepEqual(cfb.readStream('dir'), Uint8Array.from([1, 2, 3]));
-  assert.deepEqual(cfb.readStream('Module1'), Uint8Array.from([4, 5, 6]));
+  assert.deepEqual(cfb.readStream(['VBA', 'dir']), Uint8Array.from([1, 2, 3]));
+  assert.deepEqual(cfb.readStream(['VBA', 'Module1']), Uint8Array.from([4, 5, 6]));
 
   assert.deepEqual(
     treeReachableStreams(bin).sort(),
@@ -149,8 +149,12 @@ test('the mini cutoff is the boundary the spec puts it at: 4095 mini, 4096 whole
   );
 
   const cfb = new CompoundFile(bin);
-  assert.deepEqual(cfb.readStream('under'), justUnder);
-  assert.deepEqual(cfb.readStream('atCutoff'), exactly, 'a stream at the cutoff reads back whole');
+  assert.deepEqual(cfb.readStream(['under']), justUnder);
+  assert.deepEqual(
+    cfb.readStream(['atCutoff']),
+    exactly,
+    'a stream at the cutoff reads back whole',
+  );
 });
 
 test("a storage's children are linked in the [MS-CFB] name order, not lexicographic order", () => {
@@ -173,7 +177,7 @@ test('a container with no children at all is still a valid, readable compound fi
   const bin = writeCompoundFile([]);
   const {entry} = inspect(bin);
   assert.equal(entry(0).child, NOSTREAM, 'the Root Entry links no children');
-  assert.deepEqual(new CompoundFile(bin).names(), []);
+  assert.deepEqual(new CompoundFile(bin).tree(), []);
 });
 
 test('the FAT sizes itself against a total that includes the FAT, at every crossing', () => {
@@ -189,7 +193,7 @@ test('the FAT sizes itself against a total that includes the FAT, at every cross
       Math.ceil(totalSectors / 128),
       `a ${sectors}-sector stream must leave the FAT sized for the whole container, itself included`,
     );
-    assert.deepEqual(new CompoundFile(bin).readStream('big'), data, `round-trip at ${sectors}`);
+    assert.deepEqual(new CompoundFile(bin).readStream(['big']), data, `round-trip at ${sectors}`);
   }
 });
 

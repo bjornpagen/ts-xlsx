@@ -849,7 +849,9 @@ The subsystem is built as encode/decode pairs over two formats plus a project la
   header, FAT, directory and mini-FAT, and reconstructs the whole storage/stream tree so the
   edit path can re-emit it with one stream swapped. The writer emits a v3 container whose
   storages are the name-ordered balanced red-black tree a *navigating* host (Excel) needs, not
-  just the linear scan our own reader would accept.
+  just the linear scan our own reader would accept. Streams are found and replaced by storage path
+  (`VBA/dir`, the root `PROJECT`), never by bare name, because a module and a UserForm's storage can
+  each repeat a name another storage already uses.
 - **MS-OVBA compression.** `ms-ovba.ts` (`decompressContainer` / `compressContainer`) is the
   chunked copy-token/literal-run codec Office uses for module source and the `dir` stream. It
   is *not* deflate. The compressor's contract is that its output re-expands byte-for-byte.

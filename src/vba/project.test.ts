@@ -77,3 +77,52 @@ test('vbaProjectSignatureKind reports undefined for a rel type naming an Object.
     'v3',
   );
 });
+
+// [MS-OVBA] puts `dir` and every module stream in the `VBA` storage and each UserForm's `f` and `o` in a
+// root storage of its own, so a stream name repeats across storages. Found by name, a module named `f`
+// read the UserForm's form data, which is not a compressed container at all.
+test("a module named like a stream in a UserForm's storage reads its own stream", () => {
+  const source = 'Sub F()\r\nEnd Sub';
+  const dir = compressContainer(
+    Uint8Array.from(
+      buildDirStream(1252, [{name: 'f', documentType: false, sourceBytes: [], pcodePrefixLen: 0}]),
+    ),
+  );
+  const bin = writeCompoundFile([
+    {
+      name: 'UserForm1',
+      children: [
+        {name: 'f', data: Uint8Array.of(0xde, 0xad, 0xbe, 0xef)},
+        {name: 'o', data: Uint8Array.of(0)},
+      ],
+    },
+    {name: 'PROJECT', data: strToU8('Module=f\r\n')},
+    {
+      name: 'VBA',
+      children: [
+        {name: 'dir', data: dir},
+        {name: 'f', data: compressContainer(strToU8(source))},
+      ],
+    },
+  ]);
+
+  assert.equal(parseVbaProject(bin).modules[0]?.source, source);
+});
+
+test('a container whose dir stream is not in the VBA storage fails closed', () => {
+  // Every stream at the root: the layout a reader that looked streams up by bare name accepted.
+  const dir = compressContainer(
+    Uint8Array.from(
+      buildDirStream(1252, [
+        {name: 'Demo', documentType: false, sourceBytes: [], pcodePrefixLen: 0},
+      ]),
+    ),
+  );
+  const bin = writeCompoundFile([
+    {name: 'PROJECT', data: strToU8('Module=Demo\r\n')},
+    {name: 'dir', data: dir},
+    {name: 'Demo', data: compressContainer(strToU8('Sub Demo()\r\nEnd Sub'))},
+  ]);
+
+  assert.throws(() => parseVbaProject(bin), VbaParseError);
+});

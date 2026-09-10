@@ -77,7 +77,7 @@ test('editXlsxVbaRemoveModule removes a module and preserves every other package
     project.modules.map((m) => m.name),
     ['ThisWorkbook', 'Class1'],
   );
-  const reDir = decompressContainer(new CompoundFile(bin).readStream('dir')!);
+  const reDir = decompressContainer(new CompoundFile(bin).readStream(['VBA', 'dir'])!);
   assert.ok(
     indexOfBytes(reDir, Uint8Array.from(refPayload)) >= 0,
     'the PROJECTREFERENCES record survives the splice',
@@ -170,7 +170,7 @@ test('editXlsxVbaAddReference adds a reference and preserves every other package
   }
 
   const bin = partBytes(edited, 'xl/vbaProject.bin');
-  const reDir = decompressContainer(new CompoundFile(bin).readStream('dir')!);
+  const reDir = decompressContainer(new CompoundFile(bin).readStream(['VBA', 'dir'])!);
   assert.ok(
     indexOfBytes(reDir, Uint8Array.from(ascii('Scripting'))) >= 0,
     'the new reference is present in the spliced project',

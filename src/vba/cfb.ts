@@ -1,7 +1,7 @@
 // Reader for the OLE2 / Compound File Binary format ([MS-CFB]).
 //
 // `vbaProject.bin` is a CFB container (the same "structured storage" behind legacy .doc/.xls). We read
-// streams by name and, for the edit-in-place path, reconstruct the whole storage/stream hierarchy so it
+// streams by storage path and, for the edit-in-place path, reconstruct the whole storage/stream hierarchy so it
 // can be re-emitted through the writer with one stream swapped, so this is a deliberate subset of
 // [MS-CFB]: header → FAT → directory, plus the mini-FAT for sub-cutoff streams, and the red-black
 // sibling tree each storage navigates.
@@ -17,6 +17,7 @@ import {
   MAX_REGULAR_SECTOR,
   MINI_STREAM_CUTOFF,
   NOSTREAM,
+  sameEntryName,
   TYPE_EMPTY,
   TYPE_ROOT,
   TYPE_STORAGE,
@@ -117,15 +118,15 @@ export class CompoundFile {
     this.#miniStream = this.#readViaFat(root.startSector, root.size);
   }
 
-  /** List every stream/storage name in the directory (order as stored). */
-  names(): string[] {
-    return this.#dir
-      .filter((e) => e.type === TYPE_STREAM || e.type === TYPE_STORAGE)
-      .map((e) => e.name);
-  }
-
   /**
-   * Read a stream's raw bytes by exact entry name, or `undefined` if absent.
+   * Read a stream's raw bytes by its storage path from the root (`['VBA', 'dir']`), or `undefined` when
+   * no stream sits there. Each segment is matched among one storage's children, as [MS-CFB] compares
+   * names, by walking the sibling tree that storage links.
+   *
+   * A path because a name is not an address. [MS-OVBA] puts `PROJECT` at the root, `dir` and every
+   * module stream in `VBA`, and each UserForm's `f` and `o` in a storage of its own, so a bare name
+   * repeats. Looked up by name, the first entry in directory order won: a module named `f` read a
+   * UserForm's form data, and an edit wrote a module named `PROJECT` over the root `PROJECT`.
    *
    * @returns bytes that may be a **view onto the caller's buffer** rather than a copy. A stream small
    *   enough to fit in one sector is assembled by `concat` from a single chunk, and `concat` hands a
@@ -135,10 +136,24 @@ export class CompoundFile {
    *   thing that is true until someone writes the first mutation, and then true only for large
    *   streams. Copy before mutating.
    */
-  readStream(name: string): Uint8Array | undefined {
-    const entry = this.#dir.find((e) => e.type === TYPE_STREAM && e.name === name);
-    if (!entry) return undefined;
-    return this.#readEntryData(entry);
+  readStream(path: readonly string[]): Uint8Array | undefined {
+    const rootIdx = this.#rootIndex();
+    const seen = new Set([rootIdx]);
+    let firstChild = (this.#dir[rootIdx] as DirEntry).child;
+    for (const [depth, segment] of path.entries()) {
+      const stream = depth === path.length - 1;
+      const entry = this.#childIndices(firstChild, seen, depth)
+        .map((idx) => this.#dir[idx] as DirEntry)
+        .find(
+          (e) =>
+            (stream ? e.type === TYPE_STREAM : e.type === TYPE_STORAGE) &&
+            sameEntryName(e.name, segment),
+        );
+      if (entry === undefined) return undefined;
+      if (stream) return this.#readEntryData(entry);
+      firstChild = entry.child;
+    }
+    return undefined;
   }
 
   /**
@@ -150,15 +165,32 @@ export class CompoundFile {
    * @returns nodes whose stream bytes carry {@link readStream}'s aliasing caveat.
    */
   tree(): CfbNode[] {
+    const rootIdx = this.#rootIndex();
+    return this.#buildSiblings((this.#dir[rootIdx] as DirEntry).child, new Set([rootIdx]));
+  }
+
+  #rootIndex(): number {
     const rootIdx = this.#dir.findIndex((e) => e.type === TYPE_ROOT);
     if (rootIdx < 0) throw new VbaParseError('compound file has no root storage entry');
-    const root = this.#dir[rootIdx] as DirEntry;
-    return this.#buildSiblings(root.child, new Set([rootIdx]));
+    return rootIdx;
   }
 
   #buildSiblings(firstChild: number, seen: Set<number>, depth = 0): CfbNode[] {
     if (depth > MAX_TREE_DEPTH) throw new VbaParseError('directory tree nests too deep');
-    const nodes: CfbNode[] = [];
+    return this.#childIndices(firstChild, seen, depth).map((idx) => {
+      const e = this.#dir[idx] as DirEntry;
+      return e.type === TYPE_STORAGE
+        ? {name: e.name, children: this.#buildSiblings(e.child, seen, depth + 1)}
+        : {name: e.name, data: this.#readEntryData(e)};
+    });
+  }
+
+  // The entries one storage links as its children, in the sibling tree's in-order sequence: the one
+  // walk both a path lookup and the whole-tree rebuild go through. `seen` spans the whole descent, so a
+  // link back to any entry already visited is a cycle, and `depth` carries the storage nesting in, so
+  // a tree deep in siblings and storages together is refused on the one bound.
+  #childIndices(firstChild: number, seen: Set<number>, depth: number): number[] {
+    const indices: number[] = [];
     const walk = (idx: number, siblingDepth: number): void => {
       if (idx >= MAX_REGULAR_SECTOR) return; // NOSTREAM / terminal marker → no such sibling
       if (siblingDepth > MAX_TREE_DEPTH) throw new VbaParseError('directory tree nests too deep');
@@ -168,15 +200,11 @@ export class CompoundFile {
       const e = this.#dir[idx] as DirEntry;
       if (e.type === TYPE_EMPTY) throw new VbaParseError('directory tree links an empty entry');
       walk(e.left, siblingDepth + 1);
-      if (e.type === TYPE_STORAGE) {
-        nodes.push({name: e.name, children: this.#buildSiblings(e.child, seen, depth + 1)});
-      } else {
-        nodes.push({name: e.name, data: this.#readEntryData(e)});
-      }
+      indices.push(idx);
       walk(e.right, siblingDepth + 1);
     };
     walk(firstChild, depth);
-    return nodes;
+    return indices;
   }
 
   #readEntryData(entry: DirEntry): Uint8Array {

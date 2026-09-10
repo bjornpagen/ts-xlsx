@@ -100,21 +100,26 @@ export const vba = {
     const originalCfb = new CompoundFile(originalBin);
     const addedCfb = new CompoundFile(addedBin);
     const untouchedModuleByteIdentical =
-      vbaIndexOfBytes(addedCfb.readStream('Module1')!, originalCfb.readStream('Module1')!) === 0 &&
-      addedCfb.readStream('Module1')!.length === originalCfb.readStream('Module1')!.length;
+      vbaIndexOfBytes(
+        addedCfb.readStream(['VBA', 'Module1'])!,
+        originalCfb.readStream(['VBA', 'Module1'])!,
+      ) === 0 &&
+      addedCfb.readStream(['VBA', 'Module1'])!.length ===
+        originalCfb.readStream(['VBA', 'Module1'])!.length;
 
-    const dirAfter = decompressContainer(addedCfb.readStream('dir')!);
+    const dirAfter = decompressContainer(addedCfb.readStream(['VBA', 'dir'])!);
     const existingReferencePreserved =
       vbaIndexOfBytes(dirAfter, Uint8Array.from(vbaAscii(VBA_FIXTURE_REF_MARKER))) >= 0;
     const newReferencePresent = vbaIndexOfBytes(dirAfter, Uint8Array.from(vbaAscii(newLibid))) >= 0;
 
     const projectStreamUnchanged =
-      vbaIndexOfBytes(addedCfb.readStream('PROJECT')!, originalCfb.readStream('PROJECT')!) === 0 &&
-      addedCfb.readStream('PROJECT')!.length === originalCfb.readStream('PROJECT')!.length;
+      vbaIndexOfBytes(addedCfb.readStream(['PROJECT'])!, originalCfb.readStream(['PROJECT'])!) ===
+        0 &&
+      addedCfb.readStream(['PROJECT'])!.length === originalCfb.readStream(['PROJECT'])!.length;
 
     const vbaProjectStreamPreserved = vbaBytesIdentical(
-      addedCfb.readStream('_VBA_PROJECT')!,
-      originalCfb.readStream('_VBA_PROJECT')!,
+      addedCfb.readStream(['VBA', '_VBA_PROJECT'])!,
+      originalCfb.readStream(['VBA', '_VBA_PROJECT'])!,
     );
 
     return {
@@ -147,32 +152,32 @@ export const vba = {
     const removedCfb = new CompoundFile(removedBin);
     const untouchedModuleByteIdentical =
       vbaIndexOfBytes(
-        removedCfb.readStream('ThisWorkbook')!,
-        originalCfb.readStream('ThisWorkbook')!,
+        removedCfb.readStream(['VBA', 'ThisWorkbook'])!,
+        originalCfb.readStream(['VBA', 'ThisWorkbook'])!,
       ) === 0 &&
-      removedCfb.readStream('ThisWorkbook')!.length ===
-        originalCfb.readStream('ThisWorkbook')!.length;
-    const removedModuleStreamGone = removedCfb.readStream('Module1') === undefined;
+      removedCfb.readStream(['VBA', 'ThisWorkbook'])!.length ===
+        originalCfb.readStream(['VBA', 'ThisWorkbook'])!.length;
+    const removedModuleStreamGone = removedCfb.readStream(['VBA', 'Module1']) === undefined;
 
     const referencePreserved =
       vbaIndexOfBytes(
-        decompressContainer(removedCfb.readStream('dir')!),
+        decompressContainer(removedCfb.readStream(['VBA', 'dir'])!),
         Uint8Array.from(vbaAscii(VBA_FIXTURE_REF_MARKER)),
       ) >= 0;
 
-    const projectText = strFromU8(removedCfb.readStream('PROJECT')!);
+    const projectText = strFromU8(removedCfb.readStream(['PROJECT'])!);
     const removedDeclLineGone = !/^Module=Module1$/m.test(projectText);
     const otherDeclLinesSurvive =
       /^Document=ThisWorkbook\/&H00000000$/m.test(projectText) &&
       /^Class=Class1$/m.test(projectText);
 
     const projectwmNoLongerHasModule1 =
-      vbaIndexOfBytes(removedCfb.readStream('PROJECTwm')!, Uint8Array.from(vbaAscii('Module1'))) <
+      vbaIndexOfBytes(removedCfb.readStream(['PROJECTwm'])!, Uint8Array.from(vbaAscii('Module1'))) <
       0;
 
     const vbaProjectStreamPreserved = vbaBytesIdentical(
-      removedCfb.readStream('_VBA_PROJECT')!,
-      originalCfb.readStream('_VBA_PROJECT')!,
+      removedCfb.readStream(['VBA', '_VBA_PROJECT'])!,
+      originalCfb.readStream(['VBA', '_VBA_PROJECT'])!,
     );
 
     return {
@@ -233,12 +238,15 @@ export const vba = {
     const originalCfb = new CompoundFile(originalBin);
     const untouchedModuleByteIdentical =
       rewrittenCfb !== undefined &&
-      vbaIndexOfBytes(rewrittenCfb.readStream('Class1')!, originalCfb.readStream('Class1')!) ===
-        0 &&
-      rewrittenCfb.readStream('Class1')!.length === originalCfb.readStream('Class1')!.length;
+      vbaIndexOfBytes(
+        rewrittenCfb.readStream(['VBA', 'Class1'])!,
+        originalCfb.readStream(['VBA', 'Class1'])!,
+      ) === 0 &&
+      rewrittenCfb.readStream(['VBA', 'Class1'])!.length ===
+        originalCfb.readStream(['VBA', 'Class1'])!.length;
 
     const rewrittenDir = rewrittenCfb
-      ? decompressContainer(rewrittenCfb.readStream('dir')!)
+      ? decompressContainer(rewrittenCfb.readStream(['VBA', 'dir'])!)
       : undefined;
     const originalReferencePreserved =
       rewrittenDir !== undefined &&
@@ -250,8 +258,8 @@ export const vba = {
     const vbaProjectStreamPreserved =
       rewrittenCfb !== undefined &&
       vbaBytesIdentical(
-        rewrittenCfb.readStream('_VBA_PROJECT')!,
-        originalCfb.readStream('_VBA_PROJECT')!,
+        rewrittenCfb.readStream(['VBA', '_VBA_PROJECT'])!,
+        originalCfb.readStream(['VBA', '_VBA_PROJECT'])!,
       );
 
     return {
