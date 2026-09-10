@@ -35,6 +35,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   nothing left to scroll set the frozen state before throwing, and a row wider than the grid wrote
   its first cells before throwing.
 
+- **A shared formula over a whole column or row read back aimed at the master's lines.** A clone
+  recovers its text by shifting the master's references, and only `A1`-shaped ones moved, so
+  `COUNTIF(A:A,A1)` filled one column right read back as `COUNTIF(A:A,B1)` where Excel shows
+  `COUNTIF(B:B,B1)`, and a save stored that. Column ranges (`A:C`) and row ranges (`1:5`) now shift
+  as cells do, each end only when it is relative, and a range pushed off the grid becomes `#REF!`.
+
 
 ## [3.1.0] — 2026-09-04
 

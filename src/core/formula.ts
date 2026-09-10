@@ -313,44 +313,90 @@ export function mangleFormula(formula: string): string {
   return mangleFunctions(mangleParams(formula));
 }
 
-// A relative cell reference to shift: an optional `$`, then 1–3 uppercase column letters, an optional
-// `$`, then the row digits (capped at seven; Excel's last row is 1048576). The column is uppercase-
-// only because Excel stores it that way and so a lowercase defined name is never mistaken for a
-// reference. The lookbehind rejects a reference glued to a preceding name character or '.', so the
-// `A1` inside `_xlfn.A1` or a defined name `FOO_A1` is left alone; the lookahead rejects one continued
-// by a name character, opening a call `(`, or preceding a sheet `!`: a token before `!` is the sheet
-// name (`Q1!A1`), not a cell. Applied per code run, where opaque regions have already been stripped.
-const CELL_REFERENCE = /(?<![A-Za-z0-9_.])(\$?)([A-Z]{1,3})(\$?)([0-9]{1,7})(?![A-Za-z0-9_.!(])/g;
+// The three reference shapes a shift moves, tried at each position in this order: a whole-column
+// range (`A:C`), a whole-row range (`1:5`), then a single cell (`A1`). Each axis takes an optional `$`.
+// Column letters are uppercase-only because Excel stores them that way, so a lowercase defined name is
+// never mistaken for one, and row digits stop at seven (Excel's last row is 1048576).
+//
+// The lookbehind rejects a reference glued to a preceding name character or '.', so the `A1` inside
+// `_xlfn.A1` or a defined name `FOO_A1` is left alone. The lookahead rejects one continued by a name
+// character, opening a call `(`, or preceding a sheet `!`: a token before `!` is the sheet name
+// (`Q1!A1`), not a cell. A sheet-qualified reference still shifts, because the `!` before it is not a
+// name character. Applied per code run, where opaque regions such as a `"10:30"` literal are gone.
+//
+// One pattern rather than a pass per shape, so a shifted result is never scanned again, and `A1:B2`
+// still resolves as two cells: a range alternative needs a bare letter run or a bare digit run on both
+// sides of its colon. Cells used to be the only shape, so `A:A` and `1:1` never moved.
+const SHIFTABLE_REFERENCE =
+  /(?<![A-Za-z0-9_.])(?:(\$?)([A-Z]{1,3}):(\$?)([A-Z]{1,3})|(\$?)([0-9]{1,7}):(\$?)([0-9]{1,7})|(\$?)([A-Z]{1,3})(\$?)([0-9]{1,7}))(?![A-Za-z0-9_.!(])/g;
 
 /**
- * Shift every relative cell reference in a formula by `colDelta` columns and `rowDelta` rows, leaving
+ * Shift every relative reference in a formula by `colDelta` columns and `rowDelta` rows, leaving
  * absolute (`$`-anchored) axes fixed. This is how a shared-formula clone recovers its own formula from
- * the master's: a master `A1*2` shared one row down reads back as `A2*2`, and `$A$1*B1` shared one row
- * and one column across as `$A$1*C2`. String literals, single-quoted sheet names, and bracketed
- * structured references are copied verbatim, and a sheet-qualified reference shifts the cell while its
- * sheet name is untouched. Function names and defined names carry no row digits, so they pass through.
+ * the master's: a master `A1*2` shared one row down reads back as `A2*2`, `$A$1*B1` shared one row and
+ * one column across as `$A$1*C2`, and `COUNTIF(A:A,A1)` shared one column right as `COUNTIF(B:B,B1)`.
+ * Whole-column and whole-row ranges shift at each relative end, as cells do. String literals,
+ * single-quoted sheet names, and bracketed structured references are copied verbatim, and a
+ * sheet-qualified reference shifts while its sheet name is untouched. Function names and defined names
+ * are not reference-shaped, so they pass through.
  */
 export function translateFormula(formula: string, colDelta: number, rowDelta: number): string {
   if (colDelta === 0 && rowDelta === 0) return formula;
+  // A reference the grid cannot hold becomes `#REF!` on either axis, which is what Excel writes for the
+  // same shift; the decode is tolerant so that answer is reachable at all. The deltas come from a
+  // file's own shared-formula geometry, so this is a read path, and an odd file aborting the whole
+  // sheet with an error outside the library's taxonomy is not an answer. Both axes used to do exactly
+  // that, in opposite ways. The column went through `columnToNumber`, which threw a bare `RangeError`
+  // before any guard could speak: the pattern matches three letters, so `ZZZ1` (column 18278) reached
+  // it, and a reference past XFD failed where a shift past XFD resolved. The row axis just did the
+  // arithmetic and emitted `A0` or `A-4`, which is not a reference at all.
+  const column = (anchor: string, letters: string): string | undefined => {
+    const decoded = tryColumnToNumber(letters);
+    if (decoded === undefined) return undefined;
+    const col = anchor === '$' ? decoded : decoded + colDelta;
+    return col < 1 || col > MAX_COLUMN ? undefined : `${anchor}${numberToColumn(col)}`;
+  };
+  const row = (anchor: string, digits: string): string | undefined => {
+    const index = anchor === '$' ? Number(digits) : Number(digits) + rowDelta;
+    return index < 1 || index > MAX_ROW ? undefined : `${anchor}${index}`;
+  };
+  const range = (first: string | undefined, last: string | undefined): string =>
+    first === undefined || last === undefined ? REF_ERROR : `${first}:${last}`;
+
   return scanFormula(formula, (code) =>
     code.replace(
-      CELL_REFERENCE,
-      (_match, colAbs: string, colLetters: string, rowAbs: string, rowDigits: string) => {
-        // A reference the grid cannot hold becomes `#REF!` on either axis, which is what Excel
-        // writes for the same shift; the decode is tolerant so that answer is reachable at all.
-        // The deltas come from a file's own shared-formula geometry, so this is a read path, and an
-        // odd file aborting the whole sheet with an error outside the library's taxonomy is not an
-        // answer. Both axes used to do exactly that, in opposite ways. The column went through
-        // `columnToNumber`, which threw a bare `RangeError` *before* the guard below could speak:
-        // `CELL_REFERENCE` matches three letters, so `ZZZ1` (column 18278) never reached it, and a
-        // reference past XFD failed where a shift past XFD resolved. The row axis just did the
-        // arithmetic and emitted `A0` or `A-4`, which is not a reference at all.
-        const decoded = tryColumnToNumber(colLetters);
-        if (decoded === undefined) return REF_ERROR;
-        const col = colAbs === '$' ? decoded : decoded + colDelta;
-        const row = rowAbs === '$' ? Number(rowDigits) : Number(rowDigits) + rowDelta;
-        if (col < 1 || col > MAX_COLUMN || row < 1 || row > MAX_ROW) return REF_ERROR;
-        return `${colAbs}${numberToColumn(col)}${rowAbs}${row}`;
+      SHIFTABLE_REFERENCE,
+      (
+        _match,
+        firstColumnAnchor: string | undefined,
+        firstColumn: string | undefined,
+        lastColumnAnchor: string | undefined,
+        lastColumn: string | undefined,
+        firstRowAnchor: string | undefined,
+        firstRow: string | undefined,
+        lastRowAnchor: string | undefined,
+        lastRow: string | undefined,
+        cellColumnAnchor: string | undefined,
+        cellColumn: string | undefined,
+        cellRowAnchor: string | undefined,
+        cellRow: string | undefined,
+      ) => {
+        // An anchor group is `''`, never `undefined`, whenever its alternative matched, so the
+        // `?? ''` only ever meets an alternative that did not.
+        if (firstColumn !== undefined && lastColumn !== undefined) {
+          return range(
+            column(firstColumnAnchor ?? '', firstColumn),
+            column(lastColumnAnchor ?? '', lastColumn),
+          );
+        }
+        if (firstRow !== undefined && lastRow !== undefined) {
+          return range(row(firstRowAnchor ?? '', firstRow), row(lastRowAnchor ?? '', lastRow));
+        }
+        const shiftedColumn = column(cellColumnAnchor ?? '', cellColumn ?? '');
+        const shiftedRow = row(cellRowAnchor ?? '', cellRow ?? '');
+        return shiftedColumn === undefined || shiftedRow === undefined
+          ? REF_ERROR
+          : `${shiftedColumn}${shiftedRow}`;
       },
     ),
   );

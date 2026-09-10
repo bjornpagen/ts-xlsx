@@ -250,6 +250,42 @@ test('translateFormula shifts both endpoints of a range independently', () => {
   assert.equal(translateFormula('A1:$B$2', 0, 5), 'A6:$B$2', 'the absolute endpoint stays');
 });
 
+// Filling `COUNTIF(A:A,A1)` right is exactly what Excel stores as a shared formula, and the clone used
+// to read back as `COUNTIF(A:A,B1)`: only `A1`-shaped references moved, so a whole-line range never did.
+test('translateFormula shifts a whole-column range, each end only where it is relative', () => {
+  assert.equal(
+    translateFormula('COUNTIF(A:A,A1)', 1, 1),
+    'COUNTIF(B:B,B2)',
+    'the range moves with the cell beside it',
+  );
+  assert.equal(translateFormula('SUM(A:A)', 1, 0), 'SUM(B:B)');
+  assert.equal(translateFormula('SUM($A:$A)', 1, 0), 'SUM($A:$A)', 'anchored at both ends');
+  assert.equal(translateFormula('SUM(A:$C)', 1, 0), 'SUM(B:$C)', 'anchored at one end');
+  assert.equal(translateFormula('SUM(A:A)', 0, 5), 'SUM(A:A)', 'a row shift cannot move a column');
+});
+
+test('translateFormula shifts a whole-row range, each end only where it is relative', () => {
+  assert.equal(translateFormula('SUM(1:1)', 0, 1), 'SUM(2:2)');
+  assert.equal(translateFormula('SUM($1:2)', 0, 1), 'SUM($1:3)', 'anchored at one end');
+  assert.equal(translateFormula('SUM(1:1)', 3, 0), 'SUM(1:1)', 'a column shift cannot move a row');
+});
+
+test('translateFormula shifts a sheet-qualified whole-line range but not the sheet name', () => {
+  assert.equal(translateFormula('SUM(Sheet1!A:A)', 1, 0), 'SUM(Sheet1!B:B)');
+  assert.equal(translateFormula("SUM('My Sheet'!1:1)", 0, 1), "SUM('My Sheet'!2:2)");
+});
+
+test('translateFormula answers #REF! for a whole-line range pushed off the grid', () => {
+  assert.equal(translateFormula('SUM(XFD:XFD)', 1, 0), 'SUM(#REF!)', 'past the last column');
+  assert.equal(translateFormula('SUM(1:1)', 0, -1), 'SUM(#REF!)', 'before the first row');
+  assert.equal(translateFormula('SUM(1048576:1048576)', 0, 1), 'SUM(#REF!)', 'past the last row');
+});
+
+test('translateFormula leaves a time in a string alone and still reads a cell range as two cells', () => {
+  assert.equal(translateFormula('IF(A1="10:30",1,0)', 0, 1), 'IF(A2="10:30",1,0)');
+  assert.equal(translateFormula('SUM(A1:B2)', 1, 1), 'SUM(B2:C3)');
+});
+
 test('translateFormula never touches a function name or a defined name', () => {
   assert.equal(translateFormula('SUM(A1:A3)', 0, 1), 'SUM(A2:A4)', 'SUM has no row digits');
   assert.equal(translateFormula('TaxRate*A1', 2, 2), 'TaxRate*C3', 'a defined name is left alone');
