@@ -41,7 +41,8 @@ class StreamedRow {
 get cells(): readonly Cell[];
 ```
 
-The cells this row materialised, for styling before it is committed.
+The cells `addRow` materialised, for styling before it is committed. A cell added to the row
+through [`WorksheetStreamWriter.getCell`](./streaming-writes.md#worksheetstreamwritergetcell) is not among them, and is committed all the same.
 
 #### `StreamedRow.commit`
 

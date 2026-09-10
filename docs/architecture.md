@@ -398,7 +398,10 @@ signature and a consumer could hold values whose types the package does not expo
 still compiled, and nobody should ever call it, because the sheet writer comes from
 `WorkbookStreamWriter.addWorksheet`. The constructor is now `private` with a static
 `WorksheetStreamWriter[INTERNAL].create`, and the flush plumbing is on the instance channel, so the
-two members are gone from the `.d.ts` and from the API reference.
+two members are gone from the `.d.ts` and from the API reference. `StreamedRow` is built the same way,
+through `StreamedRow[INTERNAL].create`, for a sharper reason than tidiness: a row names a number its
+writer hands out, and a caller-built one could commit a number the writer had not, evicting that row
+from the model with nothing written for it.
 
 The channel takes two shapes on purpose. `Workbook` and `Worksheet` carry a symbol-keyed *object* of
 operations, one allocation per book or sheet, which is nothing. `Cell` gets a symbol-keyed accessor

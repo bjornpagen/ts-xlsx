@@ -54,6 +54,7 @@ import type {
   XlsxParseError,
   XmlParseError,
 } from '../index.ts';
+import type {StreamedRow} from '../io/xlsx/write-stream.ts';
 import type {Equal, Expect, Extends} from './expect.ts';
 
 // decodeAddress yields the canonical CellAddress, whose col/row stay optional so a
@@ -113,6 +114,13 @@ export type UsedRangeContracts = [Expect<Equal<Worksheet['usedRange'], Range | u
 export type GridRectContracts = [
   Expect<Extends<Range, GridRect>>,
   Expect<Equal<TableRegion, GridRect>>,
+];
+
+// A streamed row comes only from its sheet writer, which alone knows which row numbers are still
+// open. A constructible one could commit a number the writer never handed out, evicting that row from
+// the model with nothing written for it, so a private constructor is the contract, not a style.
+export type StreamingConstructionContracts = [
+  Expect<Equal<Extends<typeof StreamedRow, new (...args: never) => unknown>, false>>,
 ];
 
 // Export-presence guards for the core feature types now on the barrel: importing each locks it into

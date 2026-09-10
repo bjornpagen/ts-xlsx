@@ -20,6 +20,11 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Changed
 
+- **BREAKING: `StreamedRow` can no longer be constructed directly.** Get one from
+  `WorksheetStreamWriter.addRow` or `addRows`, which was always the only meaningful source. A
+  constructed row named a number its writer never handed out, so `new StreamedRow([], sheet, 5).commit()`
+  evicted row 5 from the model and wrote nothing for it.
+
 - **`decodeRange` refuses a row outside `1..1048576` with a `RangeError`**, as it already refused a
   column past `XFD`. `decodeRange('A1:B1048577')` used to return a range naming a row that cannot
   exist, which every caller then had to notice for itself.
@@ -64,6 +69,11 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   `password="CC3D"` was rewritten without it and anyone could unprotect the sheet. And `sheet`
   defaults to false, but its absence read as protected, so a save locked a sheet the file had left
   open. Both now read as the file states.
+
+- **A cell added to an open streamed row through `getCell` was dropped when the row committed.** The
+  streaming writer rendered the cells `addRow` had returned and then evicted the whole row from the
+  model, so `addRow(['a', 'b'])` followed by `getCell('D1').value = 'x'` wrote A1 and B1 only, and a
+  hyperlink or note set that way went with it. A commit now renders the row as the model holds it.
 
 
 ## [3.1.0] — 2026-09-04

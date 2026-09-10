@@ -611,6 +611,44 @@ test('a styled row committed eagerly round-trips its fill through the shared sty
   );
 });
 
+// `addRow` hands back the cells it made, but the row stays open to `getCell` until it is committed,
+// and committing evicts every cell the model holds for it. Rendering only the cells `addRow` made
+// dropped the rest from the file, with nothing to say so.
+test('a cell added to an open row through getCell is committed with it, style included', async () => {
+  const writer = new WorkbookStreamWriter();
+  const sheet = writer.addWorksheet('S');
+  const row = sheet.addRow(['a', 'b']);
+  const added = sheet.getCell('D1');
+  added.value = 'added-through-getCell';
+  added.fill = {type: 'pattern', pattern: 'solid', fgColor: {argb: 'FFFF0000'}};
+  row.commit();
+  const bytes = await committed(writer);
+
+  assert.match(partText(bytes, 'xl/worksheets/sheet1.xml'), /<c r="D1"/);
+  const reread = readXlsx(bytes).getWorksheet('S');
+  assert.ok(reread);
+  assert.equal(reread.getCell('B1').value, 'b');
+  assert.equal(reread.getCell('D1').value, 'added-through-getCell');
+  const {fill} = reread.getCell('D1');
+  assert.ok(fill?.type === 'pattern' && fill.pattern === 'solid', 'the added cell kept its fill');
+});
+
+test('a hyperlink and a note set through getCell on an open row survive its commit', async () => {
+  const writer = new WorkbookStreamWriter();
+  const sheet = writer.addWorksheet('S');
+  const row = sheet.addRow(['a']);
+  sheet.getCell('B1').value = {text: 'link', hyperlink: 'https://example.com'};
+  sheet.getCell('C1').note = 'a note';
+  row.commit();
+
+  const reread = readXlsx(await committed(writer)).getWorksheet('S');
+  assert.ok(reread);
+  const link = reread.getCell('B1').value;
+  assert.ok(link !== null && typeof link === 'object' && 'hyperlink' in link, 'B1 is still a link');
+  assert.equal(link.hyperlink, 'https://example.com');
+  assert.equal(reread.getCell('C1').note, 'a note');
+});
+
 test('a live getCell row and a committed appended row serialise in ascending order and both reload', async () => {
   const writer = new WorkbookStreamWriter();
   const sheet = writer.addWorksheet('S');

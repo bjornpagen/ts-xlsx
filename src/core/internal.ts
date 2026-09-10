@@ -26,7 +26,9 @@
  * the same key, on the static side and the instance side respectively, because that class has the
  * identical problem one layer up. Its constructor took the writer's style registry and its
  * `flushedSheet()` returned the writer's flushed-row record, so seven internal types were named by a
- * published signature and none of them was a type a consumer could write down.
+ * published signature and none of them was a type a consumer could write down. `StreamedRow` is
+ * constructed through the same static key, because a row built outside its writer could commit, and
+ * so evict, a row number that writer never handed out.
  */
 export const INTERNAL: unique symbol = Symbol('ts-xlsx codec channel');
 

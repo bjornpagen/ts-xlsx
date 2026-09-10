@@ -141,13 +141,24 @@ export class StreamedRow {
   readonly #number: number;
   #committed = false;
 
-  constructor(cells: readonly Cell[], sheet: WorksheetStreamWriter | null, number: number) {
+  // Private, and reached from `WorksheetStreamWriter.addRow` through the static channel below. A
+  // public constructor let `new StreamedRow([], sheetWriter, n).commit()` evict row `n` from the model
+  // and write nothing for it: the number is the writer's to hand out, not a caller's to name.
+  private constructor(cells: readonly Cell[], sheet: WorksheetStreamWriter | null, number: number) {
     this.#cells = cells;
     this.#sheet = sheet;
     this.#number = number;
   }
 
-  /** The cells this row materialised, for styling before it is committed. */
+  /** The sheet writer's construction channel, keyed like its own; see `core/internal.ts`. */
+  static readonly [INTERNAL]: StreamedRowFactory = {
+    create(cells, sheet, number) {
+      return new StreamedRow(cells, sheet, number);
+    },
+  };
+
+  /** The cells `addRow` materialised, for styling before it is committed. A cell added to the row
+   * through {@link WorksheetStreamWriter.getCell} is not among them, and is committed all the same. */
   get cells(): readonly Cell[] {
     return this.#cells;
   }
@@ -157,8 +168,18 @@ export class StreamedRow {
   commit(): void {
     if (this.#committed) return;
     this.#committed = true;
-    this.#sheet?.[INTERNAL].flushRow(this.#number, this.#cells);
+    this.#sheet?.[INTERNAL].flushRow(this.#number);
   }
+}
+
+/**
+ * How a {@link StreamedRow} comes into being. A row belongs to the sheet writer that numbered it, and
+ * only that writer knows which number is still open. `sheet` is `null` for a writer that keeps every
+ * row live until the workbook commits, where committing a row has nothing to do. Reached as
+ * `StreamedRow[INTERNAL]`.
+ */
+export interface StreamedRowFactory {
+  create(cells: readonly Cell[], sheet: WorksheetStreamWriter | null, number: number): StreamedRow;
 }
 
 /**
@@ -231,16 +252,16 @@ export class WorksheetStreamWriter {
   /** Append one row of values after the last used row; the cells are returned for styling. */
   addRow(values: CellValue[]): StreamedRow {
     this.#assertOpen();
-    if (!this.#eager) return new StreamedRow(this.#sheet.addRow(values), null, 0);
+    if (!this.#eager) return StreamedRow[INTERNAL].create(this.#sheet.addRow(values), null, 0);
     const number = this.#nextRowNumber();
-    return new StreamedRow(this.#placeRow(number, values), this, number);
+    return StreamedRow[INTERNAL].create(this.#placeRow(number, values), this, number);
   }
 
   /** Append a batch of rows in one call, each landing directly below the previous. */
   addRows(rows: CellValue[][]): StreamedRow[] {
     this.#assertOpen();
     if (!this.#eager)
-      return this.#sheet.addRows(rows).map((cells) => new StreamedRow(cells, null, 0));
+      return this.#sheet.addRows(rows).map((cells) => StreamedRow[INTERNAL].create(cells, null, 0));
     return rows.map((values) => this.addRow(values));
   }
 
@@ -263,7 +284,12 @@ export class WorksheetStreamWriter {
     return cells;
   }
 
-  #flushRow(number: number, cells: readonly Cell[]): void {
+  // The row is read off the model as it stands now rather than as `addRow` left it: `getCell` may add
+  // cells to an open row, and the eviction below takes every cell the model holds for it, so a cell
+  // missing from what is rendered here would be gone from the file with nothing to say so.
+  #flushRow(number: number): void {
+    const row = this.#sheet.getRow(number);
+    const {cells} = row;
     for (const cell of cells) {
       if (isSharedFormulaValue(cell.value)) {
         throw new AuthoringError(
@@ -274,7 +300,7 @@ export class WorksheetStreamWriter {
       }
     }
     this.#columnDefaults ??= buildColumnDefaults(this.#sheet);
-    const properties = this.#sheet.getRow(number).properties;
+    const {properties} = row;
 
     // The row's outline level and hidden flag are read off here because eviction is about to take its
     // properties with it, and both feed whole-sheet derivations made long afterwards: `<sheetFormatPr
@@ -413,8 +439,8 @@ export class WorksheetStreamWriter {
   }
 
   readonly [INTERNAL]: WorksheetStreamWriterInternals = {
-    flushRow: (number, cells) => {
-      this.#flushRow(number, cells);
+    flushRow: (number) => {
+      this.#flushRow(number);
     },
     flushedSheet: () => this.#flushedSheet(),
   };
@@ -458,13 +484,15 @@ export interface WorksheetStreamWriterInternals {
   /**
    * Serialise an eagerly-committed row and release its cells from the model. Called by
    * {@link StreamedRow.commit}; the row's `<row>` XML is retained (interned into the workbook's live
-   * style registry so its ids stay valid) and the cell graph is dropped, bounding peak memory.
+   * style registry so its ids stay valid) and the cell graph is dropped, bounding peak memory. The
+   * row is rendered from every cell the model holds for it, including any `getCell` added after
+   * `addRow` returned.
    *
    * @throws {AuthoringError} if the row carries a shared-formula cell: a finished row cannot join the
    *   whole-sheet formula planning, so shared formulas must be authored through
    *   {@link WorksheetStreamWriter.getCell}.
    */
-  flushRow(number: number, cells: readonly Cell[]): void;
+  flushRow(number: number): void;
 
   /** The rows this writer flushed, or undefined if none. Handed to `buildPackageParts` at commit. */
   flushedSheet(): FlushedSheet | undefined;
