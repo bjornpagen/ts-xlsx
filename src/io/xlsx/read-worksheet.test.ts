@@ -24,6 +24,89 @@ function sheet(body: string) {
   return worksheet;
 }
 
+// ── Custom views ─────────────────────────────────────────────────────────────────────────────────────
+// `CT_CustomSheetView` repeats the sheet's own pane, breaks, margins, print options, page setup,
+// header/footer and autofilter under the same local names, and `<customSheetViews>` follows
+// `<sheetViews>` and `<autoFilter>` in the part. A saved view is Excel's, and it is not the sheet.
+
+const CUSTOM_VIEWS =
+  '<customSheetViews><customSheetView guid="{C3D4E5F6-0000-4000-8000-000000000001}">' +
+  '<pane xSplit="1" ySplit="1" topLeftCell="B2" activePane="bottomRight" state="frozen"/>' +
+  '<selection pane="bottomRight" activeCell="C3" sqref="C3"/>' +
+  '<rowBreaks count="1" manualBreakCount="1"><brk id="9" max="16383" man="1"/></rowBreaks>' +
+  '<colBreaks count="1" manualBreakCount="1"><brk id="4" max="1048575" man="1"/></colBreaks>' +
+  '<pageMargins left="2" right="2" top="2" bottom="2" header="1" footer="1"/>' +
+  '<printOptions gridLines="1"/>' +
+  '<pageSetup orientation="landscape"/>' +
+  '<headerFooter><oddHeader>view header</oddHeader></headerFooter>' +
+  '<autoFilter ref="A1:B9"/>' +
+  '</customSheetView></customSheetViews>';
+
+// Everything a custom view could have written onto the sheet, as plain data.
+function viewSettings(worksheet: ReturnType<typeof sheet>) {
+  return {
+    view: {...worksheet.view},
+    rowBreaks: [...worksheet.rowBreaks],
+    columnBreaks: [...worksheet.columnBreaks],
+    pageMargins: {...worksheet.pageMargins},
+    printOptions: {...worksheet.printOptions},
+    pageSetup: {...worksheet.pageSetup},
+    headerFooter: {...worksheet.headerFooter},
+    autoFilter: worksheet.autoFilter,
+  };
+}
+
+test('a custom view on a sheet with no settings of its own leaves the sheet without any', () => {
+  const plain = sheet('<sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetData/>');
+  const viewed = sheet(
+    `<sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetData/>${CUSTOM_VIEWS}`,
+  );
+  assert.deepEqual(viewSettings(viewed), viewSettings(plain));
+});
+
+test("a custom view neither overwrites the sheet's own settings nor adds to them", () => {
+  // The sheet's pane and filter come before the saved view and its breaks, margins and header after,
+  // so this covers both an overwrite and an append.
+  const own =
+    '<sheetViews><sheetView workbookViewId="0">' +
+    '<pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+    '<sheetData/><autoFilter ref="C1:D5"/>';
+  const tail =
+    '<pageMargins left="0.5" right="0.5" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>' +
+    '<headerFooter><oddFooter>sheet footer</oddFooter></headerFooter>' +
+    '<rowBreaks count="1" manualBreakCount="1"><brk id="3" max="16383" man="1"/></rowBreaks>';
+  assert.deepEqual(viewSettings(sheet(own + CUSTOM_VIEWS + tail)), viewSettings(sheet(own + tail)));
+});
+
+test('cells after a custom view still read', () => {
+  const worksheet = sheet(
+    `<sheetData/>${CUSTOM_VIEWS}<mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells>`,
+  );
+  assert.deepEqual([...worksheet.merges], ['A1:B1'], 'the skip ends where the views do');
+});
+
+// ── Whole-line filters ───────────────────────────────────────────────────────────────────────────────
+
+test('an autofilter over whole columns or whole rows reads as no filter, not as an abort', () => {
+  for (const ref of ['A:C', '1:5']) {
+    const worksheet = sheet(
+      `<sheetData><row r="1"><c r="A1"><v>7</v></c></row></sheetData><autoFilter ref="${ref}"/>`,
+    );
+    assert.equal(worksheet.autoFilter, undefined, ref);
+    assert.equal(worksheet.getCell('A1').value, 7, `${ref}: the cells are intact`);
+  }
+});
+
+// ── Header and footer text ───────────────────────────────────────────────────────────────────────────
+
+test('an empty header element sets nothing, and the element after it still reads its text', () => {
+  const worksheet = sheet(
+    '<sheetData/><headerFooter><oddHeader/><oddFooter>page &amp;P</oddFooter></headerFooter>',
+  );
+  assert.equal(worksheet.headerFooter.oddHeader, undefined);
+  assert.equal(worksheet.headerFooter.oddFooter, 'page &P');
+});
+
 test('customWidth="false" suppresses the width exactly as customWidth="0" does', () => {
   for (const spelling of ['0', 'false']) {
     const width = sheet(

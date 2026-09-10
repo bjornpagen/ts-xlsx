@@ -7,7 +7,7 @@
 // to (`<sheetPr>`, `<sheetView>`, `<sheetProtection>`, the print settings, the page breaks) are read
 // by `sheet-properties.ts`, beside the writer that emits them.
 
-import {tryDecodeRange} from '../../core/address.ts';
+import {boundedRect, tryDecodeRange} from '../../core/address.ts';
 import {
   type CustomFilterPredicate,
   type FilterColumn,
@@ -20,7 +20,7 @@ import {HEADER_FOOTER_ELEMENTS} from '../../core/page-setup.ts';
 import {assignStyleFacets} from '../../core/style.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
 import {decodeSpreadsheetText, numFinite, numInteger} from '../../xml/xml-attrs.ts';
-import {type SaxHandlers, type SaxPass} from '../../xml/xml-read.ts';
+import {type SaxHandlers, type SaxPass, TextCapture} from '../../xml/xml-read.ts';
 import {boolPresent, boolStrict, localName, type XmlAttributes} from '../../xml/xml-scan.ts';
 import {ColumnRecordBudget} from '../read-policy/column-budget.ts';
 import {admitting} from '../read-policy/read-repair.ts';
@@ -139,13 +139,13 @@ class AutoFilterAccumulator {
   commit(sheet: Worksheet): void {
     if (this.#ref === null) return;
     const decoded = tryDecodeRange(this.#ref);
-    const left = decoded?.left;
-    const right = decoded?.right;
+    const rect = decoded === undefined ? undefined : boundedRect(decoded);
     // A filter needs a bounded rectangle, so an unbounded or unreadable range leaves the sheet
     // without one; `canonicalizeAutoFilter` would refuse it anyway, and refusing here keeps the
-    // authoring guard a guard rather than a control-flow path.
-    if (left !== undefined && right !== undefined) {
-      const width = right - left + 1;
+    // authoring guard a guard rather than a control-flow path. All four corners, not the two
+    // columns: `ref="A:C"` has both and no rows, and it reached the setter and aborted the read.
+    if (rect !== undefined) {
+      const width = rect.right - rect.left + 1;
       sheet.autoFilter = {ref: this.#ref, columns: this.#columns.filter((c) => c.colId < width)};
     }
     this.#ref = null;
@@ -175,6 +175,17 @@ export function worksheetPass(
   const styleResolution = new CellStyleResolver();
   const columnBudget = new ColumnRecordBudget();
   const rowPosition = new RowPositionTracker();
+  // A `<headerFooter>` child's text, gathered whole: the `&`-prefixed section and format tokens
+  // (`&C&"Arial"&G`) are what a header image's `&G` and every other directive ride in.
+  const headerFooterText = new TextCapture(HEADER_FOOTER_ELEMENTS);
+  // How deep the parse is inside `<customSheetViews>`, 0 when outside it. Each saved view repeats the
+  // sheet's own pane, breaks, margins, print options, page setup, header/footer and autofilter under
+  // the same local names (`CT_CustomSheetView`), and the block follows the sheet's own `<sheetViews>`
+  // and `<autoFilter>`. Dispatched on name alone, a saved view replaced the sheet's pane and filter
+  // and joined its breaks. The model keeps no custom views, so the whole subtree is skipped. Counted
+  // on non-self-closing opens and on every close, which balances for an expanded `<x/>` too: that
+  // arrives as an open that is not self-closing followed by a close.
+  let customViewDepth = 0;
 
   // Commit the cell held in the accumulator, resolving its style from its own `s`, then its row's
   // (when customFormat), then its column's default: the order Excel applies, shared with the
@@ -189,12 +200,17 @@ export function worksheetPass(
   const handlers: SaxHandlers = {
     onOpen(name, attrs, selfClosing) {
       const local = localName(name);
+      if (customViewDepth > 0) {
+        if (!selfClosing) customViewDepth++;
+        return;
+      }
+      if (local === 'customSheetViews') {
+        if (!selfClosing) customViewDepth = 1;
+        return;
+      }
       if (cell.openElement(local, attrs, selfClosing)) return;
-      if (HEADER_FOOTER_CHILDREN.has(local)) {
-        // A `<headerFooter>` child carries its header/footer definition as text (the `&`-prefixed
-        // section/format tokens, e.g. `&C&"Arial"&G`). Capture the whole of it so a round-trip
-        // preserves a header image's `&G` picture token and every other formatting directive.
-        cell.capture();
+      if (isHeaderFooterElement(local)) {
+        headerFooterText.open(local, selfClosing);
         return;
       }
       switch (local) {
@@ -268,9 +284,15 @@ export function worksheetPass(
       }
     },
     onText(chunk) {
+      if (customViewDepth > 0) return;
       cell.appendChunk(chunk);
+      headerFooterText.text(chunk);
     },
     onClose(name) {
+      if (customViewDepth > 0) {
+        customViewDepth--;
+        return;
+      }
       const local = localName(name);
       const claimed = cell.closeElement(local);
       if (claimed === 'cell') {
@@ -278,12 +300,13 @@ export function worksheetPass(
         return;
       }
       if (claimed === 'claimed') return;
-      if (isHeaderFooterElement(local)) {
+      const headerFooter = headerFooterText.close(local);
+      if (headerFooter !== undefined && isHeaderFooterElement(local)) {
         // Header text carries the `_xHHHH_` convention, same as a cell value: Excel decodes it
         // here and re-emits it on save (measured: a patched `_x0001_` reads back over COM as
         // U+0001, and a `_x005F_x0041_` as the literal `_x0041_`). The decode is on the whole
         // element text, never on a SAX chunk. See {@link decodeSpreadsheetText}.
-        sheet.headerFooter[local] = decodeSpreadsheetText(cell.capturedText);
+        sheet.headerFooter[local] = decodeSpreadsheetText(headerFooter);
         return;
       }
       switch (local) {

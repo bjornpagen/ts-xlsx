@@ -182,22 +182,9 @@ export class CellAccumulator {
   }
 
   /**
-   * The text gathered since the current element opened. A caller reads it for the elements it
-   * captures itself (see {@link capture}); the machine reads it for its own.
-   */
-  get capturedText(): string {
-    return this.#text;
-  }
-
-  /** Gather the current element's text for the caller's own use, the way `<v>` and `<t>` do. */
-  capture(): void {
-    this.#capture = true;
-  }
-
-  /**
    * Drive one element open, and return whether it was one of the cell machine's own. Every open
    * resets the capture state first, which is true of both readers and of every element, not just
-   * these; a caller that captures its own text calls {@link capture} after this returns.
+   * these. A caller gathering text of its own uses a `TextCapture`, not this machine's buffer.
    */
   openElement(local: string, attrs: XmlAttributes, selfClosing: boolean): boolean {
     this.#text = '';

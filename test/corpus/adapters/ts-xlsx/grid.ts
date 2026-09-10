@@ -1056,6 +1056,56 @@ export const grid = {
     return {writeOk, writeError, reloadOk, colSpanCount};
   },
 
+  // Write a sheet carrying its own autofilter, row break, footer and margins, patch in a
+  // `<customSheetViews>` block whose saved view declares a frozen pane, different breaks, margins,
+  // print options, page setup, header and autofilter, and read it back → the sheet's settings as the
+  // model holds them, beside the same package read without the patch → { withView, withoutView,
+  // rewriteOk }. A saved view is Excel's own and is not the sheet: the two readings must match.
+  customSheetViewReport() {
+    const wb = new Workbook();
+    const sheet = wb.addWorksheet('S');
+    sheet.getCell('A1').value = 'header';
+    sheet.getCell('A2').value = 1;
+    sheet.autoFilter = 'A1:A2';
+    sheet.rowBreaks.push({id: 3, max: 16383, man: true});
+    sheet.headerFooter.oddFooter = 'sheet footer';
+    sheet.pageMargins.left = 0.5;
+    const written = writeXlsx(wb);
+    const views =
+      '<customSheetViews><customSheetView guid="{C3D4E5F6-0000-4000-8000-000000000001}">' +
+      '<pane xSplit="1" ySplit="1" topLeftCell="B2" activePane="bottomRight" state="frozen"/>' +
+      '<rowBreaks count="1" manualBreakCount="1"><brk id="9" max="16383" man="1"/></rowBreaks>' +
+      '<pageMargins left="2" right="2" top="2" bottom="2" header="1" footer="1"/>' +
+      '<printOptions gridLines="1"/><pageSetup orientation="landscape"/>' +
+      '<headerFooter><oddHeader>view header</oddHeader></headerFooter><autoFilter ref="A1:B9"/>' +
+      '</customSheetView></customSheetViews>';
+    const settings = (workbook: WorkbookInstance) => {
+      const s = workbook.getWorksheet('S')!;
+      return {
+        viewState: s.view.state ?? null,
+        topLeftCell: s.view.topLeftCell ?? null,
+        rowBreaks: s.rowBreaks.map((brk) => brk.id),
+        pageMargins: {...s.pageMargins},
+        printGridLines: s.printOptions.gridLines ?? null,
+        orientation: s.pageSetup.orientation ?? null,
+        headerFooter: {...s.headerFooter},
+        autoFilterRef: s.autoFilter?.ref ?? null,
+        a2: s.getCell('A2').value,
+      };
+    };
+    const withView = reloadPatched(written, {
+      // `CT_Worksheet` puts `<customSheetViews>` directly after `<autoFilter>`.
+      'xl/worksheets/sheet1.xml': (xml) => xml.replace(/(<autoFilter\b[^>]*\/>)/, `$1${views}`),
+    });
+    let rewriteOk = true;
+    try {
+      writeXlsx(withView);
+    } catch {
+      rewriteOk = false;
+    }
+    return {withView: settings(withView), withoutView: settings(readXlsx(written)), rewriteOk};
+  },
+
   // Read a fixture whose `<headerFooter>` children hold `_xHHHH_` escapes → { eager, roundtrip }, each a
   // map of the six header/footer slots to the text the model carries. `eager` is the fixture as read;
   // `roundtrip` is that model written back through our own writer and re-read, which is what holds the
