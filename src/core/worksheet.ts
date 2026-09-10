@@ -1107,7 +1107,16 @@ export class Worksheet {
   // Assigning a model replaces this sheet's content wholesale: the sheet becomes the model, with no
   // residue from whatever it held before. The registry's declaration order is the application order,
   // and it is load-bearing: see WORKSHEET_MODEL_FACETS.
+  //
+  // The whole model is applied to a detached sheet first, and only a model that applies there in full
+  // reaches this one. Replaying straight onto the reset sheet meant a facet that threw part-way (two
+  // merges overlapping, a validation naming no cells, a cell off the grid) left it emptied and half
+  // loaded. The rehearsal needs nothing a workbook owns, since no facet reaches past the sheet it is
+  // handed, and every check a facet makes is against state the reset clears, so the replay cannot
+  // fail where the rehearsal passed. It costs a second application, which a whole-sheet copy affords.
   set model(model: WorksheetModel) {
+    const rehearsal = new Worksheet(this.name, this.id);
+    for (const facet of WORKSHEET_MODEL_FACETS) facet.write(rehearsal, model);
     this.#resetContent();
     for (const facet of WORKSHEET_MODEL_FACETS) facet.write(this, model);
   }

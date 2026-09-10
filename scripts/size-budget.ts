@@ -89,7 +89,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
   // render a date do not carry four kilobytes of month names and grammar.
-  './csv': 216,
+  //
+  // Raised again, from 216, when a worksheet model assignment began rehearsing on a scratch sheet. The
+  // entry sat at exactly its budget, and those few lines in `core/worksheet.ts` put it a tenth over;
+  // the new figure restores a kilobyte of headroom against today's measurement.
+  './csv': 217,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //

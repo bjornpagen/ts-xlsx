@@ -106,6 +106,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   path longer than the 32,767 characters a Windows path can hold is now refused with `VbaAuthorError`,
   and the reference records are built as bytes.
 
+- **A worksheet model assignment that failed part-way left the destination emptied and half loaded.**
+  `dst.model = model` reset the sheet before replaying the model, so overlapping merges or a data
+  validation naming no cells threw with the sheet's own content already gone and part of the model
+  applied. The model is now applied to a scratch sheet first; an assignment that fails throws and
+  leaves the destination as it was.
+
 
 ## [3.1.0] — 2026-09-04
 

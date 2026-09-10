@@ -5,8 +5,9 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
+import {AuthoringError} from '../errors.ts';
 import {WORKSHEET_MODEL_FACETS} from './worksheet-model.ts';
-import {Worksheet} from './worksheet.ts';
+import {Worksheet, type WorksheetModel} from './worksheet.ts';
 
 // Every field of a WorksheetModel, populated, so a round-trip has something to lose in each of them.
 function populatedSheet(): Worksheet {
@@ -71,6 +72,40 @@ test('a round-trip through a sheet holding unrelated content leaves no residue',
   dst.model = src.model;
 
   assert.deepEqual(dst.model, src.model);
+});
+
+// Assigning a model resets the sheet and replays each field, and a field that threw part-way used to
+// leave the destination emptied and half loaded: its own content gone, the model's earlier fields
+// applied, the rest not.
+test('a model that cannot be applied throws and leaves the destination exactly as it was', () => {
+  const extent = (sheet: Worksheet): number[] | undefined => {
+    const range = sheet.usedRange;
+    return range && [range.top, range.left, range.bottom, range.right];
+  };
+  const valid = populatedSheet().model;
+  const broken: [string, WorksheetModel][] = [
+    ['overlapping merges', {...valid, merges: ['A1:B2', 'B2:C3']}],
+    [
+      'a data validation naming no cells',
+      {...valid, dataValidations: [{sqref: '', rule: {type: 'whole', formulae: [1]}}]},
+    ],
+  ];
+
+  for (const [what, model] of broken) {
+    const dst = new Worksheet('Dst', 2);
+    dst.getCell('A1').value = 'precious';
+    dst.getCell('Z9').value = 'far';
+    dst.mergeCells('X1:Y1');
+    const before = dst.model;
+    const extentBefore = extent(dst);
+
+    assert.throws(() => {
+      dst.model = model;
+    }, AuthoringError);
+
+    assert.deepEqual(dst.model, before, `${what}: the destination's content is untouched`);
+    assert.deepEqual(extent(dst), extentBefore, `${what}: and so is its extent`);
+  }
 });
 
 test('the exported model orders cells, rows, and columns ascending whatever order they were written', () => {

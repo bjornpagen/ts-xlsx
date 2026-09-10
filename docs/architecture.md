@@ -316,7 +316,9 @@ field declares its read and its write side by side along with the clone strategy
 order a model assignment applies: cells are placed before any merge exists, so a covered cell's
 value lands where the model says instead of being routed to a region master mid-load. The registry
 is proved exhaustive over `keyof WorksheetModel` at compile time, so a field added without a facet
-is a build error that names the field.
+is a build error that names the field. An assignment is applied to a detached scratch sheet first
+and reaches its target only once every facet has applied there, so a model that throws part-way
+leaves the target as it was.
 
 ### The harness is code, and is held to the same rules as the library
 
