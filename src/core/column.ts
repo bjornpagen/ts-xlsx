@@ -8,7 +8,7 @@
 // the six `CellStyle` facets as *defaults* for its cells, which is why the mirror below is twice the
 // length of the row's.
 
-import {assertColumnInBounds, encodeAddress, numberToColumn} from './address.ts';
+import {assertColumnInBounds, assertRowInBounds, numberToColumn} from './address.ts';
 import {AxisHandle} from './axis-handle.ts';
 import type {Cell} from './cell.ts';
 import {type AssertNever, INTERNAL} from './internal.ts';
@@ -163,7 +163,10 @@ export class Column extends AxisHandle<ColumnProperties> {
    * @throws {RangeError} if the row is not a positive integer.
    */
   getCell(row: number): Cell {
-    return this.#sheet.getCell(encodeAddress(this.index, row));
+    // Straight to the merge-resolving lookup, as `Range` goes, rather than through an A1 string that
+    // `getCell` would only decode again.
+    assertRowInBounds(row);
+    return this.#sheet[INTERNAL].masterAt(row, this.index);
   }
 
   /**

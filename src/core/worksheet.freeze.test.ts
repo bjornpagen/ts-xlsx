@@ -25,6 +25,15 @@ test('freeze(0, 2) pins two columns and no rows', () => {
   assert.strictEqual(sheet.view.topLeftCell, 'C1');
 });
 
+test('a freeze leaving nothing to scroll is refused and the previous view stands', () => {
+  const sheet = new Worksheet('S', 1);
+  sheet.freeze(2, 1);
+  const before = {...sheet.view};
+  assert.throws(() => sheet.freeze(1_048_576), RangeError);
+  assert.throws(() => sheet.freeze(0, 16_384), RangeError);
+  assert.deepEqual(sheet.view, before);
+});
+
 test('freeze(0, 0) is the same as unfreezing', () => {
   const sheet = new Worksheet('S', 1);
   sheet.freeze(2, 2);

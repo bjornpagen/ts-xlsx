@@ -99,8 +99,20 @@ test('tryDecodeCellRef answers undefined where decodeCellRef throws, on either e
   }
 });
 
-// The read side's question is not "does this parse" but "can this cell exist": `A0` and one row past
-// the last parse cleanly and then throw at the grid, which is the same abort one step later.
+test('decodeCellRef bounds the row where it already bounded the column', () => {
+  // A decoder that returned row 0 handed it to every caller, and `getCell('A0')` stored it before
+  // the cell constructor refused it, leaving a sheet that threw on every later read or write.
+  assert.throws(() => decodeCellRef('A0'), {
+    name: 'RangeError',
+    message: `row 0 is out of bounds: Excel supports 1..${MAX_ROW}`,
+  });
+  assert.throws(() => decodeCellRef(`A${MAX_ROW + 1}`), RangeError);
+  assert.throws(() => decodeAddress('0'), RangeError, 'a bare row is bounded too');
+  assert.throws(() => decodeRange(`A1:B${MAX_ROW + 1}`), RangeError, 'and a range endpoint');
+});
+
+// The read side's question is not "does this parse" but "can this cell exist", and the bound that
+// answers it now lives in the throwing decoder, so the tolerant one only has to catch.
 test('tryDecodeCellRef refuses a reference that parses but names no possible cell', () => {
   assert.deepEqual(tryDecodeCellRef(`XFD${MAX_ROW}`), {col: MAX_COLUMN, row: MAX_ROW});
   for (const reference of ['A0', `A${MAX_ROW + 1}`, 'ZZZZ1']) {

@@ -845,6 +845,7 @@ export class Worksheet {
    */
   spliceRows(start: number, count: number, ...inserts: RowInput[]): void {
     assertStartAndCount('splice', 'row', start, count);
+    assertSpliceFits('row', start, inserts.length);
     const inserted = inserts.map((values, i) => buildRowCells(start + i, values, this.#columns));
     this.#edits.spliceRows(start, count, inserted);
     this.#merges.invalidate();
@@ -885,15 +886,25 @@ export class Worksheet {
    * The bulk form of {@link addRow}.
    */
   addRows(rows: RowInput[]): Cell[][] {
-    let number = this.rowCount;
-    return rows.map((values) => {
-      number += 1;
-      return rowPlacements(values, this.#columns).map(([col, value]) => {
-        const cell = this.#cellAt(number, col);
+    const first = this.rowCount + 1;
+    // Every position resolved and bounded before the first write, so a batch that runs off the grid
+    // is refused whole. Writing as it went put `A1` in place before a 16,385-wide row threw.
+    const planned = rows.map((values, i) => {
+      const row = first + i;
+      const placements = rowPlacements(values, this.#columns);
+      for (const [col] of placements) {
+        assertAxisInBounds('row', row);
+        assertAxisInBounds('column', col);
+      }
+      return {row, placements};
+    });
+    return planned.map(({row, placements}) =>
+      placements.map(([col, value]) => {
+        const cell = this.#cellAt(row, col);
         cell.value = value;
         return cell;
-      });
-    });
+      }),
+    );
   }
 
   /**
@@ -901,7 +912,8 @@ export class Worksheet {
    * beneath them. `freeze(1)` pins a header row; `freeze(0, 1)` pins the first column. Passing both
    * zero clears the freeze (equivalent to {@link unfreeze}).
    *
-   * @throws {RangeError} if either split is a negative or non-integer count.
+   * @throws {RangeError} if either split is a negative or non-integer count, or leaves no row or
+   *   column of the grid to scroll. The view is left as it was.
    */
   freeze(ySplit = 1, xSplit = 0): void {
     if (!Number.isInteger(ySplit) || ySplit < 0 || !Number.isInteger(xSplit) || xSplit < 0) {
@@ -913,10 +925,13 @@ export class Worksheet {
       this.unfreeze();
       return;
     }
+    // Computed before anything is assigned, because it is what bounds both splits: a throw after
+    // `state` and the splits were set left a frozen view pointing at the previous freeze's pane.
+    const topLeftCell = encodeAddress(xSplit + 1, ySplit + 1);
     this.view.state = 'frozen';
     this.view.xSplit = xSplit;
     this.view.ySplit = ySplit;
-    this.view.topLeftCell = encodeAddress(xSplit + 1, ySplit + 1);
+    this.view.topLeftCell = topLeftCell;
   }
 
   /** Clear any frozen split, returning the sheet to a normal (fully scrolling) view. */
@@ -938,11 +953,13 @@ export class Worksheet {
    * row properties (height, hidden, outline level, row fill). It carries no merge of its own, so a
    * range can be merged onto a duplicated row afterwards.
    *
-   * @throws {RangeError} if `start` is not a positive integer or `count` is negative.
+   * @throws {RangeError} if `start` is not a positive integer or `count` is negative, or if a copy
+   *   would land past the last row. The sheet is left untouched.
    */
   duplicateRow(start: number, options: {count?: number; insert?: boolean} = {}): void {
     const {count = 1, insert = true} = options;
     assertStartAndCount('duplicate', 'row', start, count);
+    assertSpliceFits('row', start + 1, count);
     const source = this.#rows.get(start);
     const sourceProperties = this.#rowProperties.get(start);
     const snapshot = (destRow: number): Map<number, Cell> => {
@@ -991,6 +1008,7 @@ export class Worksheet {
    */
   spliceColumns(start: number, count: number, ...inserts: CellValue[][]): void {
     assertStartAndCount('splice', 'column', start, count);
+    assertSpliceFits('column', start, inserts.length);
     this.#edits.spliceColumns(start, count, inserts);
     this.#merges.invalidate();
     this.#extent.invalidate();
@@ -1032,15 +1050,25 @@ export class Worksheet {
    * value-less. The bulk form of {@link addColumn}.
    */
   addColumns(columns: CellValue[][]): Cell[][] {
-    let index = this.columnCount;
-    return columns.map((values) => {
-      index += 1;
-      return positionalPlacements(values).map(([row, value]) => {
-        const cell = this.#cellAt(row, index);
+    const first = this.columnCount + 1;
+    // Planned whole before the first write, as `addRows` is: a batch that runs off the grid is refused
+    // whole rather than leaving the cells it reached before the throw.
+    const planned = columns.map((values, i) => {
+      const col = first + i;
+      const placements = positionalPlacements(values);
+      for (const [row] of placements) {
+        assertAxisInBounds('column', col);
+        assertAxisInBounds('row', row);
+      }
+      return {col, placements};
+    });
+    return planned.map(({col, placements}) =>
+      placements.map(([row, value]) => {
+        const cell = this.#cellAt(row, col);
         cell.value = value;
         return cell;
-      });
-    });
+      }),
+    );
   }
 
   /**
@@ -1113,15 +1141,15 @@ export class Worksheet {
   }
 
   #cellAt(row: number, col: number): Cell {
-    let cols = this.#rows.get(row);
-    if (cols === undefined) {
-      cols = new Map<number, Cell>();
-      this.#rows.set(row, cols);
-    }
-    let cell = cols.get(col);
+    const cols = this.#rows.get(row);
+    let cell = cols?.get(col);
     if (cell === undefined) {
+      // Built before anything is stored: the constructor is what bounds both axes, and storing the
+      // row map first left a row off the grid behind a refused position, after which iterating or
+      // writing the sheet threw on every call.
       cell = new Cell(row, col);
-      cols.set(col, cell);
+      if (cols === undefined) this.#rows.set(row, new Map([[col, cell]]));
+      else cols.set(col, cell);
     }
     this.#extent.noteCell(row, col);
     return cell;
@@ -1214,6 +1242,14 @@ function assertStartAndCount(
   if (!Number.isInteger(count) || count < 0) {
     throw new RangeError(`${verb} count ${count} is invalid: it must be a non-negative integer`);
   }
+}
+
+// Where an edit's inserted lines land, `start` through `start + insertCount - 1`, checked before
+// anything moves. An inserted line carrying content is refused by the `Cell` it builds, but one
+// carrying none builds no cell: `spliceRows(1048576, 0, [], [])` left a row key past the grid, and
+// duplicating a height-only last row did the same, so the sheet threw on every later read or write.
+function assertSpliceFits(axis: 'row' | 'column', start: number, insertCount: number): void {
+  if (insertCount > 0) assertAxisInBounds(axis, start + insertCount - 1);
 }
 
 /**

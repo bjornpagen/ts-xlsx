@@ -112,9 +112,10 @@ export class GridEdits {
     const splice: AxisSplice = {axis: 'col', start, count, delta: inserts.length - count};
     // Built whole, then swapped in, the way `spliceRows` does it. Writing each row back inside the loop
     // meant a throw part-way left the sheet half-spliced: rows already visited shifted, the rest not,
-    // with no way for the caller to act on the error. `new Cell` still asserts its coordinates, so an
-    // insert landing past the last column or naming a row past the last one does throw; swapping at
-    // the end is what keeps that a refused edit rather than half of one.
+    // with no way for the caller to act on the error. `Worksheet.spliceColumns` refuses an insert that
+    // would land past the last column before calling here, and `new Cell` still refuses a value naming
+    // a row past the last one while the inserts are built; swapping at the end is what keeps that a
+    // refused edit rather than half of one.
     //
     // Refusing is the answer, not an omission, and it is deliberately not the clamp every *region* a
     // splice moves gets. Excel draws the same line: a region whose edge is pushed off the grid is

@@ -906,7 +906,8 @@ Freeze the top `ySplit` rows and left `xSplit` columns in place; the rest of the
 beneath them. `freeze(1)` pins a header row; `freeze(0, 1)` pins the first column. Passing both
 zero clears the freeze (equivalent to [`unfreeze`](./worksheet.md#worksheetunfreeze)).
 
-**Throws:** `RangeError` if either split is a negative or non-integer count.
+**Throws:** `RangeError` if either split is a negative or non-integer count, or leaves no row or
+column of the grid to scroll. The view is left as it was.
 
 #### `Worksheet.unfreeze`
 
@@ -932,7 +933,8 @@ Each copy is a faithful duplicate of the source: its cell values, its per-cell s
 row properties (height, hidden, outline level, row fill). It carries no merge of its own, so a
 range can be merged onto a duplicated row afterwards.
 
-**Throws:** `RangeError` if `start` is not a positive integer or `count` is negative.
+**Throws:** `RangeError` if `start` is not a positive integer or `count` is negative, or if a copy
+would land past the last row. The sheet is left untouched.
 
 #### `Worksheet.spliceColumns`
 

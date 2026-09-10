@@ -1,8 +1,31 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {MAX_ROW} from './address.ts';
+import {columnToNumber, MAX_COLUMN, MAX_ROW, numberToColumn} from './address.ts';
 import {Worksheet} from './worksheet.ts';
+
+function thrownMessage(run: () => unknown): string {
+  try {
+    run();
+  } catch (error) {
+    return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  }
+  return 'no throw';
+}
+
+test("a row's cell refuses a column off the grid in the words the column decoders use", () => {
+  const sheet = new Worksheet('S', 1);
+  const row = sheet.getRow(1);
+  assert.equal(
+    thrownMessage(() => row.getCell(MAX_COLUMN + 1)),
+    thrownMessage(() => numberToColumn(MAX_COLUMN + 1)),
+  );
+  assert.equal(
+    thrownMessage(() => row.getCell('XFE')),
+    thrownMessage(() => columnToNumber('XFE')),
+  );
+  assert.deepEqual([...sheet.rows()], [], 'and nothing was materialised');
+});
 
 test('a row handle is a live view, not a copy: two handles on one number agree', () => {
   const sheet = new Worksheet('S', 1);

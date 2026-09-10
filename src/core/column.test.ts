@@ -1,8 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {MAX_COLUMN} from './address.ts';
+import {MAX_COLUMN, MAX_ROW} from './address.ts';
 import {Worksheet} from './worksheet.ts';
+
+test("a column's cell refuses a row off the grid in the words the row guard uses", () => {
+  const sheet = new Worksheet('S', 1);
+  const column = sheet.getColumn(1);
+  assert.throws(() => column.getCell(MAX_ROW + 1), {
+    name: 'RangeError',
+    message: `row ${MAX_ROW + 1} is out of bounds: Excel supports 1..${MAX_ROW}`,
+  });
+  assert.throws(() => column.getCell(0), {
+    name: 'RangeError',
+    message: `row 0 is out of bounds: Excel supports 1..${MAX_ROW}`,
+  });
+  assert.deepEqual([...sheet.rows()], [], 'and nothing was materialised');
+});
 
 test('a column handle is a live view: two handles on one index agree', () => {
   const sheet = new Worksheet('S', 1);

@@ -12,6 +12,29 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ## [Unreleased]
 
+### Changed
+
+- **`decodeRange` refuses a row outside `1..1048576` with a `RangeError`**, as it already refused a
+  column past `XFD`. `decodeRange('A1:B1048577')` used to return a range naming a row that cannot
+  exist, which every caller then had to notice for itself.
+
+### Fixed
+
+- **A refused cell position left the sheet unreadable and unwritable.** `getCell('A0')`,
+  `getCell('A1048577')` and `addTable({ref: 'A0', …})` threw, but only after storing the row they
+  were refusing, so `rows()` and `writeXlsx` threw `row 0 is out of bounds` on every call from then
+  on. The position is now refused before anything is stored.
+
+- **A splice or duplicate that lands past the last line is refused before anything moves.**
+  Inserting empty rows at row 1048576 (`spliceRows(1048576, 0, [], [])`) or duplicating a
+  height-only last row left a line past the grid behind with the same result, a replacing
+  `duplicateRow` near the bottom wrote some copies before throwing, and `spliceColumns(16384, 0, [],
+  [])` reported success for columns that cannot exist.
+
+- **`freeze`, `addRows` and `addColumns` no longer apply half of a refused call.** A `freeze` with
+  nothing left to scroll set the frozen state before throwing, and a row wider than the grid wrote
+  its first cells before throwing.
+
 
 ## [3.1.0] — 2026-09-04
 

@@ -1,8 +1,61 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
+import {roundtrip} from '../io/xlsx/package.test-support.ts';
+import {MAX_COLUMN, MAX_ROW} from './address.ts';
 import {type CellValue, isSharedFormulaValue} from './value.ts';
+import {Workbook} from './workbook.ts';
 import {Worksheet} from './worksheet.ts';
+
+// ── A refused position leaves the sheet as it was ───────────────────────────────────────────────────
+
+test('a cell reference off the grid is refused and the sheet still reads and writes', () => {
+  for (const reference of ['A0', `A${MAX_ROW + 1}`]) {
+    const workbook = new Workbook();
+    const sheet = workbook.addWorksheet('S');
+    sheet.getCell('B2').value = 'kept';
+    assert.throws(() => sheet.getCell(reference), RangeError, reference);
+    assert.deepEqual(
+      [...sheet.rows()].map((row) => row.number),
+      [2],
+      `${reference}: no row was left behind`,
+    );
+    assert.equal(roundtrip(workbook).getWorksheet('S')?.getCell('B2').value, 'kept');
+  }
+});
+
+test('a table anchored off the grid is refused and the sheet still reads and writes', () => {
+  const workbook = new Workbook();
+  const sheet = workbook.addWorksheet('S');
+  assert.throws(
+    () => sheet.addTable({name: 'T', ref: 'A0', columns: [{name: 'h'}], rowCount: 1}),
+    RangeError,
+  );
+  assert.deepEqual(sheet.tables, []);
+  assert.deepEqual([...sheet.rows()], []);
+  assert.doesNotThrow(() => roundtrip(workbook));
+});
+
+test('a row running past the last column is refused before any of it is written', () => {
+  const sheet = new Worksheet('S', 1);
+  const wide: CellValue[] = [];
+  wide[0] = 'first';
+  wide[MAX_COLUMN] = 'past XFD';
+  assert.throws(() => sheet.addRow(wide), RangeError);
+  assert.equal(sheet.rowCount, 0);
+  assert.equal(sheet.hasCell(1, 1), false, 'not even the cell the row reached first');
+});
+
+test('a column running past the last row is refused before any of it is written', () => {
+  const sheet = new Worksheet('S', 1);
+  const tall: CellValue[] = [];
+  tall[0] = 'first';
+  tall[MAX_ROW] = 'past the bottom';
+  assert.throws(() => sheet.addColumn(tall), RangeError);
+  assert.equal(sheet.columnCount, 0);
+  assert.equal(sheet.hasCell(1, 1), false);
+  assert.deepEqual([...sheet.rows()], []);
+});
 
 // The master address a shared-formula clone at `ref` currently points at.
 function masterOf(sheet: Worksheet, ref: string): string {

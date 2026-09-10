@@ -396,6 +396,43 @@ test('an inserted column reaching past the last row is refused, the way addColum
   assert.equal(sheet.columnCount, 1);
 });
 
+test('an insert of empty lines past the last one is refused before anything moves', () => {
+  // An empty inserted row builds no cell, so the `Cell` constructor that refuses content past the
+  // edge never saw it: the splice left a row key past the grid and the sheet threw from then on.
+  const rows = new Workbook().addWorksheet('R');
+  rows.getCell('A1').value = 'a1';
+  assert.throws(() => rows.spliceRows(LAST_ROW, 0, [], []), {
+    name: 'RangeError',
+    message: `row ${LAST_ROW + 1} is out of bounds: Excel supports 1..${LAST_ROW}`,
+  });
+  assert.equal(rows.rowCount, 1);
+  assert.doesNotThrow(() => [...rows.rows()]);
+
+  // The column axis used to report success here, for columns that cannot exist.
+  const columns = new Workbook().addWorksheet('C');
+  columns.getCell('A1').value = 'a1';
+  assert.throws(() => columns.spliceColumns(LAST_COLUMN, 0, [], []), RangeError);
+  assert.equal(columns.columnCount, 1);
+});
+
+test('duplicating the last row has nowhere to put the copy, in either mode', () => {
+  for (const insert of [true, false]) {
+    const sheet = new Workbook().addWorksheet('S');
+    sheet.getRow(LAST_ROW).height = 20;
+    assert.throws(() => sheet.duplicateRow(LAST_ROW, {insert}), RangeError, `insert: ${insert}`);
+    assert.equal(sheet.rowCount, LAST_ROW, `insert: ${insert}`);
+    assert.doesNotThrow(() => [...sheet.rows()], `insert: ${insert}`);
+  }
+});
+
+test('a replacing duplicate that would run past the last row writes none of its copies', () => {
+  const sheet = new Workbook().addWorksheet('S');
+  sheet.getCell(`A${LAST_ROW - 1}`).value = 'source';
+  assert.throws(() => sheet.duplicateRow(LAST_ROW - 1, {count: 3, insert: false}), RangeError);
+  assert.equal(sheet.hasCell(LAST_ROW, 1), false, 'not even the copy that would have fitted');
+  assert.doesNotThrow(() => [...sheet.rows()]);
+});
+
 test('a table on the right edge keeps its anchor inside the grid', () => {
   // The unclamped increment could put the anchor past the last column, where `range`, `autoFilterRef`
   // and `region` all throw on read: a sheet that cannot be serialised or even inspected.

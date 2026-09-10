@@ -66,6 +66,7 @@ function decodeAddress(reference: string): CellAddress;
 ```
 
 **Throws:** `SyntaxError` if the reference mentions neither a column nor a row.
+**Throws:** `RangeError` if it names a column past `XFD` or a row outside `1..1048576`.
 
 ---
 
@@ -80,6 +81,9 @@ corners coincide.
 ```ts
 function decodeRange(reference: string): RangeAddress;
 ```
+
+**Throws:** `SyntaxError` if an endpoint is unparseable.
+**Throws:** `RangeError` if an endpoint names a column past `XFD` or a row outside `1..1048576`.
 
 ---
 

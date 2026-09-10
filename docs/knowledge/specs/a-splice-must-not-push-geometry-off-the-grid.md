@@ -64,7 +64,11 @@ Excel exactly for the region case, which is the common one: a whole-column valid
 For the content case this library already refuses, and by a different mechanism: relocating a cell
 constructs a `Cell` at the destination, and `assertRowInBounds` throws a `RangeError` before the row
 map is replaced, so a splice that would push a cell off the end fails with the sheet unchanged.
-Excel's message is friendlier; the outcome is the same.
+Excel's message is friendlier; the outcome is the same. An inserted line with no content builds no
+`Cell`, so it cannot lean on that: `spliceRows`, `spliceColumns` and `duplicateRow` check where their
+inserted lines land before anything moves. Before they did, `spliceRows(1048576, 0, [], [])` and a
+duplicate of a height-only last row each left a line key past the grid, and the sheet threw on every
+read or write after that.
 
 The column axis is decided by the same sentence, and it is worth writing down because the two
 answers look inconsistent side by side. `spliceColumns(16384, 0, a, b)` refuses with `column 16385 is

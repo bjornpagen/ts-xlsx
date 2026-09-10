@@ -13,7 +13,7 @@
 // Formatting is created on write, never on read. Asking for `sheet.getRow(500)` costs nothing and
 // does not extend the used range; assigning `height` is what materialises the record.
 
-import {assertRowInBounds, columnToNumber, encodeAddress} from './address.ts';
+import {assertColumnInBounds, assertRowInBounds, columnToNumber} from './address.ts';
 import {AxisHandle} from './axis-handle.ts';
 import type {Cell} from './cell.ts';
 import {type AssertNever, INTERNAL} from './internal.ts';
@@ -117,7 +117,10 @@ export class Row extends AxisHandle<RowProperties> {
    */
   getCell(column: number | string): Cell {
     const index = typeof column === 'number' ? column : columnToNumber(column);
-    return this.#sheet.getCell(encodeAddress(index, this.number));
+    // Straight to the merge-resolving lookup, as `Range` goes. Encoding an A1 string only for
+    // `getCell` to decode it again cost two conversions and checked nothing the guard does not.
+    assertColumnInBounds(index);
+    return this.#sheet[INTERNAL].masterAt(this.number, index);
   }
 
   /**

@@ -293,6 +293,8 @@ export class Table {
     try {
       anchor = decodeCellRef(options.ref);
     } catch (cause) {
+      // A position off the grid is already the precise answer, in the words every other door gives.
+      if (cause instanceof RangeError) throw cause;
       // The generic "not a single-cell reference" says less than naming the table, so it becomes
       // the cause of a message that does.
       throw new SyntaxError(

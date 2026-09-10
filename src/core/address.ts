@@ -226,6 +226,7 @@ function makeCellAddress(col: number | undefined, row: number | undefined): Cell
  * `$` signs are accepted and dropped; an absent axis is `undefined`.
  *
  * @throws {SyntaxError} if the reference mentions neither a column nor a row.
+ * @throws {RangeError} if it names a column past `XFD` or a row outside `1..1048576`.
  */
 export function decodeAddress(reference: string): CellAddress {
   const match = SINGLE_REF.exec(reference);
@@ -239,6 +240,10 @@ export function decodeAddress(reference: string): CellAddress {
   }
   const col = letters.length > 0 ? columnToNumber(letters) : undefined;
   const row = digits.length > 0 ? Number.parseInt(digits, 10) : undefined;
+  // Bounded here, beside the column `columnToNumber` already bounds. A decoder that let `A0` through
+  // handed every caller a row the grid does not have, and `getCell('A0')` stored that row before the
+  // `Cell` constructor refused it, leaving a sheet no later read or write could get past.
+  if (row !== undefined) assertRowInBounds(row);
   return {address: `${letters}${digits}`, col, row};
 }
 
@@ -257,6 +262,7 @@ export interface CellPosition {
  * Decode a reference that must name a single cell. Anchoring `$` signs are accepted and dropped.
  *
  * @throws {SyntaxError} if the reference is unparseable, or parses but omits an axis (`"A"`, `"1"`).
+ * @throws {RangeError} if it names a position off the grid (`"A0"`, `"XFE1"`).
  */
 export function decodeCellRef(reference: string): CellPosition {
   const {col, row} = decodeAddress(reference);
@@ -276,19 +282,13 @@ export function decodeCellRef(reference: string): CellPosition {
 // malformed `r`/`ref`/`sqref` in an untrusted package aborted the whole read with a native
 // `RangeError` or `SyntaxError`, outside the `XlsxError` taxonomy one `catch` clause answers.
 //
-// "Tolerant" here means *a reference naming something that can exist*, not merely one that parses:
-// `A0` and `A1048577` parse fine and then blow up at the grid, which is the same failure one step
-// later. Bounds are part of the question, so they are part of the answer.
+// "Tolerant" here means *a reference naming something that can exist*, not merely one that parses.
+// Both axes are bounded inside `decodeAddress`, so the throwing decoders already refuse `A0` and
+// `XFE1`, and these are nothing more than a `catch` around them: the rule is written once, and the
+// two temperaments cannot disagree about where the grid ends.
 //
-// The authoring decoders above keep throwing. `getCell('A0')` from a caller is a mistake at the
-// call, and the taxonomy deliberately reserves a native error for a single scalar out of range.
-
-/** Whether a row number a reference produced can name a line of the grid. Columns need no
- * companion: `columnToNumber` already refuses letters past `XFD`, so a decoded column is in
- * bounds or the decode threw. */
-function rowCanExist(row: number | undefined): boolean {
-  return row === undefined || (Number.isInteger(row) && row >= 1 && row <= MAX_ROW);
-}
+// The authoring decoders keep throwing. `getCell('A0')` from a caller is a mistake at the call, and
+// the taxonomy deliberately reserves a native error for a single scalar out of range.
 
 /**
  * {@link decodeCellRef} for a reference that came out of a file rather than out of a caller:
@@ -298,13 +298,11 @@ function rowCanExist(row: number | undefined): boolean {
  * there is nothing here".
  */
 export function tryDecodeCellRef(reference: string): CellPosition | undefined {
-  let position: CellPosition;
   try {
-    position = decodeCellRef(reference);
+    return decodeCellRef(reference);
   } catch {
     return undefined;
   }
-  return rowCanExist(position.row) ? position : undefined;
 }
 
 /**
@@ -337,19 +335,20 @@ export function boundedRect(range: RangeAddress): GridRect | undefined {
  * range is unbounded, not unreadable, and a caller that needs a bounded rectangle says so itself.
  */
 export function tryDecodeRange(reference: string): RangeAddress | undefined {
-  let range: RangeAddress;
   try {
-    range = decodeRange(reference);
+    return decodeRange(reference);
   } catch {
     return undefined;
   }
-  return rowCanExist(range.top) && rowCanExist(range.bottom) ? range : undefined;
 }
 
 /**
  * Decode a range reference (`A1:B2`, `$1:$1`, `Sheet1!$A:$A`) into its corners and
  * canonical dimensions. A single reference collapses to a degenerate range whose
  * corners coincide.
+ *
+ * @throws {SyntaxError} if an endpoint is unparseable.
+ * @throws {RangeError} if an endpoint names a column past `XFD` or a row outside `1..1048576`.
  */
 export function decodeRange(reference: string): RangeAddress {
   const prefix = SHEET_PREFIX.exec(reference);
