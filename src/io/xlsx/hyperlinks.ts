@@ -164,9 +164,10 @@ export function sheetHyperlinkPass(): CollectingPass<ParsedHyperlink[]> {
 }
 
 /** Fold parsed hyperlinks onto a sheet's cells, wrapping each cell's existing value (its visible
- * label) into a {@link HyperlinkValue}. `targetOf` resolves a relationship id to its raw Target: a
- * URL for the external links hyperlinks almost always are, so it must stay unresolved against the
- * package rather than being handed over as a part path. */
+ * label) into a {@link HyperlinkValue}. A link over a cell whose value is not text (a number, a date, a
+ * boolean, a formula) is dropped and the value kept. `targetOf` resolves a relationship id to its raw
+ * Target: a URL for the external links hyperlinks almost always are, so it must stay unresolved against
+ * the package rather than being handed over as a part path. */
 export function applyHyperlinks(
   sheet: Worksheet,
   links: readonly ParsedHyperlink[],
@@ -184,11 +185,15 @@ export function applyHyperlinks(
     if (decoded === undefined || decoded.tl.col === undefined || decoded.tl.row === undefined)
       continue;
     const cell = sheet.getCell(decoded.tl.address);
-    // The visible label is the cell's own value: a plain string, or rich text when the label
-    // carried per-run formatting. Any other value kind has no textual label, so it reads as empty.
+    // The visible label is the cell's own value: a plain string, or rich text when the label carried
+    // per-run formatting, and an empty cell labels its link with nothing. Any other value (a number, a
+    // date, a boolean, a formula, or a link already folded onto the cell) cannot become a label without
+    // being destroyed, and the model has nowhere to put a link beside it, so the value stays and the
+    // link goes: losing an attribute beats losing content.
     const cellValue = cell.value;
-    const text =
-      typeof cellValue === 'string' ? cellValue : isRichTextValue(cellValue) ? cellValue : '';
+    if (cellValue !== null && typeof cellValue !== 'string' && !isRichTextValue(cellValue))
+      continue;
+    const text = cellValue ?? '';
     // Record the extent only when the link genuinely spans more than the anchor, so an ordinary
     // single-cell link stays a plain value and the range survives verbatim for a multi-cell one.
     const spansRange = decoded.tl.address !== decoded.br.address;

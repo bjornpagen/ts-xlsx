@@ -9,10 +9,12 @@ import {
   optionalPartIn,
   partIn,
   partsWritten,
+  patchParts,
   roundtrip,
   SHEET1,
 } from './package.test-support.ts';
 import {readXlsx} from './read.ts';
+import {writeXlsx} from './write.ts';
 
 function hyperlinkOf(workbook: Workbook, sheet: string, ref: string) {
   const value = workbook.getWorksheet(sheet)?.getCell(ref).value;
@@ -149,6 +151,41 @@ test('a hyperlink relationship id does not collide with a table on the same shee
   // The link reads back intact despite sharing the rels part with the table.
   const back = hyperlinkOf(roundtrip(wb), 'S', 'A1');
   assert.equal(back.hyperlink, 'https://example.com');
+});
+
+test('a link over a number, boolean, formula or date keeps the value and drops the link', () => {
+  // OOXML stores a link beside the cell, so Excel lets one sit on any value. The model folds a link
+  // into the value with a text label, and doing that to a non-text cell replaced it with an empty
+  // label: the value, its type and its formula were gone, and a save wrote an empty string.
+  const wb = new Workbook();
+  const sheet = wb.addWorksheet('S');
+  const when = new Date(Date.UTC(2024, 0, 15));
+  sheet.getCell('A1').value = 42;
+  sheet.getCell('B1').value = true;
+  sheet.getCell('C1').value = {formula: '1+1', result: 2};
+  sheet.getCell('D1').value = when;
+  sheet.getCell('E1').value = 'label';
+  const links = ['A1', 'B1', 'C1', 'D1', 'E1', 'F1']
+    .map((ref) => `<hyperlink ref="${ref}" location="S!H1"/>`)
+    .join('');
+  const read = readXlsx(
+    patchParts(writeXlsx(wb), {
+      [SHEET1]: (xml) =>
+        xml.replace('</sheetData>', `</sheetData><hyperlinks>${links}</hyperlinks>`),
+    }),
+  );
+  const back = read.getWorksheet('S');
+  assert.ok(back);
+
+  assert.equal(back.getCell('A1').value, 42);
+  assert.equal(back.getCell('B1').value, true);
+  assert.deepEqual(back.getCell('C1').value, {formula: '1+1', result: 2});
+  const date = back.getCell('D1').value;
+  assert.ok(date instanceof Date && date.getTime() === when.getTime(), 'the date is still a date');
+
+  // A text label and an empty cell are exactly what a link folds onto, so those still become links.
+  assert.deepEqual(hyperlinkOf(read, 'S', 'E1'), {hyperlink: '#S!H1', text: 'label'});
+  assert.deepEqual(hyperlinkOf(read, 'S', 'F1'), {hyperlink: '#S!H1', text: ''});
 });
 
 test('a hyperlink spanning a range anchors on its top-left cell instead of crashing', () => {

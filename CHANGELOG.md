@@ -47,6 +47,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   wrote that back. Phonetic runs are now skipped wherever a string is read; the reading itself is
   dropped rather than modelled.
 
+- **A hyperlink over a number, date, boolean or formula erased the value.** A link folds into its
+  cell as a `HyperlinkValue` whose label is text, so reading a linked non-text cell replaced `42` with
+  an empty label, and a save wrote an empty string where the number was. The value is now kept and
+  the link dropped. Keeping both needs hyperlinks modelled beside cells rather than inside their
+  values, which is a separate change.
+
 
 ## [3.1.0] — 2026-09-04
 
