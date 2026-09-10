@@ -34,6 +34,7 @@ import {
   readPartRelationships,
 } from '../opc/read-opc.ts';
 import type {ReadPackageOptions} from '../opc/read-options.ts';
+import {admitting, repairedSheetNames} from '../read-policy/read-repair.ts';
 import type {XfStyle} from '../style/xf-style.ts';
 import {readXlsbPackage} from '../xlsb/read.ts';
 import type {SharedString} from './cell-value.ts';
@@ -64,7 +65,6 @@ import {
   readWorkbookTheme,
   worksheetReferencePass,
 } from './read-parts.ts';
-import {admitting, repairSheetName} from './read-repair.ts';
 import {parseSharedStrings} from './read-shared-strings.ts';
 import {parseStyleTable} from './read-styles.ts';
 import {
@@ -216,14 +216,9 @@ export function readXlsx(data: Uint8Array, options: ReadPackageOptions = {}): Wo
   // corrupt package as the caller's mistake, and dropping the sheet would take its cells, its place
   // in the order, and every `localSheetId` that indexes past it. `sheetOrder` therefore carries the
   // name the model ended up with, which is what a scoped defined name has to resolve against.
-  const takenSheetNames = new Set<string>();
-  for (const {name, relId, state} of sheets.result()) {
+  for (const {name, relId, state} of repairedSheetNames(sheets.result())) {
     const target = workbookRels.byId(relId)?.target;
-    const sheet = workbook.addWorksheet(
-      repairSheetName(name, takenSheetNames),
-      state === undefined ? undefined : {state},
-    );
-    takenSheetNames.add(sheet.name.toLowerCase());
+    const sheet = workbook.addWorksheet(name, state === undefined ? undefined : {state});
     sheetOrder.push(sheet.name);
     readSheet(sheet, target === undefined ? undefined : workbookRels.pathOf(target), context);
   }

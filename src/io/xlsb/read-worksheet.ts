@@ -24,6 +24,8 @@ import {unmangleFunctions} from '../../core/formula.ts';
 import {assignStyleFacets} from '../../core/style.ts';
 import type {CellValue, ErrorValue, FormulaResult} from '../../core/value.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
+import {ColumnRecordBudget, clampColumnSpan} from '../read-policy/column-budget.ts';
+import {admitting} from '../read-policy/read-repair.ts';
 import {applyXfToCell, type XfStyle} from '../style/xf-style.ts';
 import {decodeFormula, type FormulaScope, formulaAnchor} from './formula.ts';
 import {errorCodeFor, RecordReader} from './primitives.ts';
@@ -123,6 +125,7 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
   // waiting on one. Both are needed because `BrtArrFmla` follows the cells it speaks for.
   const groups = new Map<string, {rgce: Uint8Array; rgcb: Uint8Array}>();
   const deferred: DeferredFormula[] = [];
+  const columnBudget = new ColumnRecordBudget();
 
   for (const record of readRecords(part)) {
     const cellRecord = CELL_RECORDS.get(record.type);
@@ -131,22 +134,25 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
       reader.skip(6); // dxGCol, cchDefColWidth: the default *column* width, which the model does not read.
       defaultRowHeight = reader.u16();
     } else if (record.type === BRT.ColInfo) {
-      applyColumn(reader, sheet, xfStyles, columnStyle);
+      applyColumn(reader, sheet, xfStyles, columnStyle, columnBudget);
     } else if (record.type === BRT.RowHdr) {
       const header = applyRow(reader, sheet, defaultRowHeight);
       row = header.row;
       rowStyle = header.styleIndex;
     } else if (record.type === BRT.MergeCell) {
       const {rowFirst, rowLast, colFirst, colLast} = reader.range();
+      // A merge overlapping one already read is refused by the model; as in the XML reader, the one
+      // bad range is dropped and the rest of the sheet's geometry still reads.
       if (inGrid(colFirst, rowFirst) && inGrid(colLast, rowLast)) {
-        sheet.mergeCells(
-          encodeRect({
-            top: rowFirst + 1,
-            left: colFirst + 1,
-            bottom: rowLast + 1,
-            right: colLast + 1,
-          }),
-        );
+        const ref = encodeRect({
+          top: rowFirst + 1,
+          left: colFirst + 1,
+          bottom: rowLast + 1,
+          right: colLast + 1,
+        });
+        admitting(() => {
+          sheet.mergeCells(ref);
+        });
       }
     } else if (record.type === BRT.ArrFmla) {
       const {rowFirst, colFirst} = reader.range();
@@ -332,6 +338,7 @@ function applyColumn(
   sheet: Worksheet,
   xfStyles: ReadonlyArray<XfStyle>,
   columnStyle: Map<number, number>,
+  budget: ColumnRecordBudget,
 ): void {
   const first = reader.u32();
   const last = reader.u32();
@@ -351,12 +358,14 @@ function applyColumn(
   ) {
     return;
   }
-  // The loop bound comes from the file, so it is clamped to the grid before it is one: an unclamped
-  // run declaring four billion columns is a denial of service, not a wide sheet.
-  const lastInGrid = Math.min(last, MAX_COLUMN_INDEX);
-  if (first > lastInGrid) return;
-  for (let index = first; index <= lastInGrid; index++) {
-    const column = sheet.getColumn(index + 1);
+  // The loop bound comes from the file, so it goes through the rule every reader shares before it is
+  // one: clamped to the grid, because a run declaring four billion columns is a denial of service and
+  // not a wide sheet, and charged to the sheet's budget, because a thousand full-width runs are the
+  // same attack spelled a thousand times.
+  const span = clampColumnSpan(first + 1, last + 1, budget);
+  if (span === undefined) return;
+  for (let index = span.first; index <= span.last; index++) {
+    const column = sheet.getColumn(index);
     // The stored width is taken whether or not the file marks it user-set, matching the XML reader:
     // a `<col>`/`BrtColInfo` exists only for a column that differs from the sheet default in *some*
     // way, and it always states the width that column actually has.
@@ -365,7 +374,8 @@ function applyColumn(
     if (outlineLevel > 0) column.outlineLevel = outlineLevel;
     if ((flags & COLUMN_COLLAPSED) !== 0) column.collapsed = true;
     if (style !== undefined) assignStyleFacets(column, style);
-    if (styleIndex > 0) columnStyle.set(index, styleIndex);
+    // Keyed zero-based, as the cell records that look it up count columns.
+    if (styleIndex > 0) columnStyle.set(index - 1, styleIndex);
   }
 }
 

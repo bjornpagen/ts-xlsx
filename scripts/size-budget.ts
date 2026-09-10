@@ -79,7 +79,7 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //
   // Raised from 395 when the reader stopped handing file-derived names straight to the model's
-  // authoring guards. `io/xlsx/read-repair.ts` and `xml/xml-chars.ts` are the two new modules, ~2 KB
+  // authoring guards. `io/read-policy/read-repair.ts` and `xml/xml-chars.ts` are the two new modules, ~2 KB
   // between them, and both are on the untrusted-input path rather than beside it: without them a
   // corrupt package raised an `AuthoringError` blaming the caller, or a native `SyntaxError` the
   // taxonomy cannot see at all. This entry had 2.2 KB left in it, which is a rounding error and not

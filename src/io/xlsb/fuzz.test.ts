@@ -74,10 +74,14 @@ function readOrFailClosed(archive: Uint8Array, label: string): void {
     ) {
       return;
     }
-    // A model-level rejection (a sheet name a mutation made invalid or duplicated) is a legitimate
-    // closed failure too: it is the model refusing bad data, not the parser losing its footing.
+    // An `authoring` failure is never a closed one on this path. That code blames the caller, and the
+    // caller here did nothing but open a file: a sheet name a mutation duplicated, a merge it made
+    // overlap, reaches the model through the read repair or it is a missing repair.
     assert.ok(
-      error instanceof Error && !(error instanceof TypeError) && !(error instanceof RangeError),
+      error instanceof Error &&
+        !(error instanceof TypeError) &&
+        !(error instanceof RangeError) &&
+        (error as {code?: unknown}).code !== 'authoring',
       `${label}: expected a typed, closed failure but got ${String(error)}`,
     );
     return;

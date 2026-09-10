@@ -24,10 +24,10 @@ import {
   type PartRelationships,
   readPartRelationships,
 } from '../opc/read-opc.ts';
+import {admitting} from '../read-policy/read-repair.ts';
 import {type ParsedComment, parseComments} from './comments.ts';
 import {drawingHasUnmodeledContent, parseDrawing} from './images.ts';
 import {parsePivotTable} from './read-pivot.ts';
-import {admitting} from './read-repair.ts';
 import {parseTable} from './tables.ts';
 import {parseThemeColorScheme, parseThemeFontScheme} from './theme-xml.ts';
 import {buildCommentThreads, parsePersons, parseThreadedComments} from './threaded-comments.ts';

@@ -214,7 +214,7 @@ Two rules, one gate each. A name inside a message goes through `quoted()` from
 `src/errors.ts`, never an inline `JSON.stringify`; run `pnpm run error-messages:check`, or
 just let the `invariants` gate do it. And a *file* may never provoke an `authoring` failure
 or a native `RangeError`/`SyntaxError`: if you are handing a file-derived value to a model
-method that validates, it goes through `src/io/xlsx/read-repair.ts` -- `repairSheetName`
+method that validates, it goes through `src/io/read-policy/read-repair.ts` -- `repairSheetName`
 where there is an obviously right rewrite, `admitting` where the honest answer is that the
 file does not really carry that feature. The check that proves it is a corpus case shaped
 like `a-hostile-name-costs-that-name-not-the-read`: patch one attribute of a written

@@ -28,6 +28,7 @@ import {coerceNumericLiteral} from '../../xml/xml-attrs.ts';
 import {type CollectingPass, type SaxHandlers, TextCapture} from '../../xml/xml-read.ts';
 import {boolStrict, localName} from '../../xml/xml-scan.ts';
 import {checkedToken, escapeAttr, escapeText, textAttr} from '../../xml/xml.ts';
+import {admitting} from '../read-policy/read-repair.ts';
 // The x14/xm extension namespaces and `DATA_VALIDATION_EXT_URI` are declared inline on the elements
 // that need them, exactly as Excel writes them, so the block is self-contained and the worksheet root
 // needs no extra namespace declaration.
@@ -37,7 +38,6 @@ import {
   isMainNamespaceElement,
   XM_NS,
 } from './namespaces.ts';
-import {admitting} from './read-repair.ts';
 import {x14Ext} from './x14-ext.ts';
 
 // The typed validations whose literal operands are numbers; `list`/`custom` operands stay strings.

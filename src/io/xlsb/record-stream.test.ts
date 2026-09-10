@@ -3,25 +3,7 @@ import {test} from 'node:test';
 
 import {XlsbParseError} from './errors.ts';
 import {readRecords} from './record-stream.ts';
-
-// Frame a record the way [MS-XLSB] 2.1.4 says a writer must, so the tests state the *encoding* under
-// test rather than a hand-copied byte soup: 7 bits per prefix byte, high bit meaning "one more".
-function frame(type: number, payload: Uint8Array): Uint8Array {
-  const header: number[] = [];
-  if (type < 0x80) header.push(type);
-  else header.push((type & 0x7f) | 0x80, (type >> 7) & 0x7f);
-  let size = payload.length;
-  do {
-    const piece = size & 0x7f;
-    size >>>= 7;
-    header.push(size > 0 ? piece | 0x80 : piece);
-  } while (size > 0);
-  return Uint8Array.from([...header, ...payload]);
-}
-
-function concat(...parts: Uint8Array[]): Uint8Array {
-  return Uint8Array.from(parts.flatMap((part) => [...part]));
-}
+import {concat, frame} from './records.test-support.ts';
 
 test('a one-byte type and one-byte size frame a short record', () => {
   const records = [...readRecords(frame(2, Uint8Array.of(1, 2, 3)))];

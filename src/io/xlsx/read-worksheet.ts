@@ -22,12 +22,13 @@ import type {Worksheet} from '../../core/worksheet.ts';
 import {decodeSpreadsheetText, numFinite, numInteger} from '../../xml/xml-attrs.ts';
 import {type SaxHandlers, type SaxPass} from '../../xml/xml-read.ts';
 import {boolPresent, boolStrict, localName, type XmlAttributes} from '../../xml/xml-scan.ts';
+import {ColumnRecordBudget} from '../read-policy/column-budget.ts';
+import {admitting} from '../read-policy/read-repair.ts';
 import type {XfStyle} from '../style/xf-style.ts';
 import {CellAccumulator} from './cell-accumulator.ts';
 import {CellStyleResolver} from './cell-style-resolution.ts';
 import type {SharedString} from './cell-value.ts';
-import {ColumnRecordBudget, takeColumnSpan} from './column-budget.ts';
-import {admitting} from './read-repair.ts';
+import {takeColumnSpan} from './column-span.ts';
 import {RowPositionTracker} from './row-position.ts';
 import {
   applySheetProperties,

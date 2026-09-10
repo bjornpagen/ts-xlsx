@@ -23,6 +23,7 @@ import {quoted} from '../../errors.ts';
 import {UnsupportedFormatError} from '../opc/errors.ts';
 import {openSpreadsheetPackage, packageAccessors, readPartRelationships} from '../opc/read-opc.ts';
 import type {ReadPackageOptions} from '../opc/read-options.ts';
+import {admitting, repairedSheetNames} from '../read-policy/read-repair.ts';
 import {XlsbParseError} from './errors.ts';
 import {decodeFormula, type ExternSheetRef, type FormulaScope} from './formula.ts';
 import {RecordReader} from './primitives.ts';
@@ -103,14 +104,19 @@ export function readXlsbPackage(
 
   const declaration = readWorkbookPart(workbookPart);
   workbook.dateEpoch = declaration.dateEpoch;
+  // Repaired before anything cites them, exactly as the XML reader does: `addWorksheet` refuses a
+  // duplicate, over-long or forbidden name that a file is free to carry, and a 3-D reference or a
+  // scoped defined name resolves its sheet by position, so the scope has to hold the names the model
+  // actually ended up with.
+  const sheets = repairedSheetNames(declaration.sheets);
   const scope: FormulaScope = {
-    sheetNames: declaration.sheets.map((sheet) => sheet.name),
+    sheetNames: sheets.map((sheet) => sheet.name),
     externSheets: declaration.externSheets,
     selfSupBook: declaration.selfSupBook,
     names: declaration.names.map((name) => name.name),
   };
 
-  for (const declared of declaration.sheets) {
+  for (const declared of sheets) {
     const sheet = workbook.addWorksheet(declared.name, {state: declared.state});
     const target = declared.relId === undefined ? undefined : rels.byId(declared.relId)?.target;
     const part = target === undefined ? undefined : partBytes(rels.pathOf(target));
@@ -123,7 +129,12 @@ export function readXlsbPackage(
         dateEpoch: declaration.dateEpoch,
       });
   }
-  for (const defined of definedNames(declaration, scope)) workbook.defineName(defined);
+  // A name the model refuses, such as an empty one, is a name the file does not really carry.
+  for (const defined of definedNames(declaration, scope)) {
+    admitting(() => {
+      workbook.defineName(defined);
+    });
+  }
   return workbook;
 }
 

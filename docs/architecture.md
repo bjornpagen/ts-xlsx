@@ -108,6 +108,7 @@ order:
 | xml | escaping, emission and a hostile-input-safe SAX reader (`src/xml/`), with no spreadsheet knowledge |
 | opc container | ZIP inflation under a bound, magic-byte sniffing, the relationship graph and part paths (`src/io/opc/`) |
 | resolved format | `XfStyle` and what applying an xf to a cell means, shared by both codecs (`src/io/style/`) |
+| read policy | the rules every reader obeys about a foreign file and no codec owns: read repair and the column budget (`src/io/read-policy/`) |
 | xlsx read/write | OOXML parse and serialize; the hardest, highest-value code in the tree |
 | xlsb read | the binary BIFF12 serialisation of the same model, read-only so far (`src/io/xlsb/`) |
 | streaming | bounded-memory row streaming, both reads and an incremental workbook writer |
@@ -117,10 +118,13 @@ order:
 That order is a real constraint, not a description: `scripts/check-layering.ts` (a gate in
 `verify --full`) fails the build on an import that runs up it. The rules it carries are that
 `src/errors.ts` reaches nothing, `src/xml/` reaches nothing above it, `src/core/` never reaches a
-serialisation, `src/io/opc/` and `src/io/style/` sit below every codec, and the two codecs are
-peers, so `src/io/xlsb/` may not import `src/io/xlsx/`. Co-located tests are exempt, since a test
-import is not a dependency of the graph we ship. Shared code that tempts a codec to reach sideways
-belongs in `opc` or `style`; that is what those directories are for.
+serialisation, `src/io/opc/`, `src/io/style/` and `src/io/read-policy/` sit below every codec, and
+the two codecs are peers, so `src/io/xlsb/` may not import `src/io/xlsx/`. Co-located tests are
+exempt, since a test import is not a dependency of the graph we ship. Shared code that tempts a codec
+to reach sideways belongs in `opc` (the container), `style` (the resolved format) or `read-policy`
+(what a reader does with a file the model would refuse); that is what those directories are for. A
+rule left inside one codec is a rule the other does not follow: the BIFF12 reader went without read
+repair and without a column budget for as long as both lived in `src/io/xlsx/`.
 
 ### The two model classes delegate their state, they do not accumulate it
 
@@ -497,7 +501,8 @@ monolith, split along the OOXML package's own divisions so a change touches one 
   of text elements out of a part; a parser that interleaves capture with per-element state of its own
   stays bespoke. The same rule reaches past the grammar to the *decisions* the two readers make about
   a row and a column: `row-position.ts` owns where a `<row>` sits when it declares no `r`, and
-  `takeColumnSpan` (beside `ColumnRecordBudget`) owns which columns a `<col min max>` reaches. Both
+  `takeColumnSpan` (`column-span.ts`, in front of `clampColumnSpan` and `ColumnRecordBudget` in
+  `src/io/read-policy/column-budget.ts`) owns which columns a `<col min max>` reaches. Both
   were a line each, copied into both readers, and both copies had drifted: one reader inferred a
   missing row number positionally while the other dropped the row's formatting, and one tested a span
   starting past the grid while the other relied on the budget's contract to catch it by accident. A
@@ -612,7 +617,8 @@ the lower layer's text is itself the hazard (a zip library's message can name an
 The reader is held to the other half of that line: **a file is never allowed to raise an
 `authoring` failure, and never a native one.** A model method validates what it is given, and a
 reader that hands it a file-derived name is asking the model to judge the *file* through a guard
-written about the *caller*. `src/io/xlsx/read-repair.ts` is the single seam where that is resolved,
+written about the *caller*. `src/io/read-policy/read-repair.ts` is the single seam where that is
+resolved, for both codecs,
 and it offers exactly two answers. `repairSheetName` rewrites a name the way Excel repairs it, for
 the case where the rule is a naming rule and dropping the thing would cost more than the name (a
 sheet takes its cells, its position, and every `localSheetId` indexing past it with it). `admitting`

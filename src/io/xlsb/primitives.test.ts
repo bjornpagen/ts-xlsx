@@ -3,27 +3,10 @@ import {test} from 'node:test';
 
 import {XlsbParseError} from './errors.ts';
 import {errorCodeFor, RecordReader} from './primitives.ts';
+import {wide, word} from './records.test-support.ts';
 
 function bytes(...values: number[]): Uint8Array {
   return Uint8Array.from(values);
-}
-
-// A little-endian 32-bit word, the way every RkNumber sits in a record.
-function word(value: number): Uint8Array {
-  const out = new Uint8Array(4);
-  new DataView(out.buffer).setUint32(0, value >>> 0, true);
-  return out;
-}
-
-// An XLWideString: a 4-byte character count then the UTF-16LE code units.
-function wide(text: string): Uint8Array {
-  const out = new Uint8Array(4 + text.length * 2);
-  const view = new DataView(out.buffer);
-  view.setUint32(0, text.length, true);
-  for (let index = 0; index < text.length; index++) {
-    view.setUint16(4 + index * 2, text.charCodeAt(index), true);
-  }
-  return out;
 }
 
 test('fixed-width integers and doubles read little-endian and advance the cursor', () => {

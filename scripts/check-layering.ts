@@ -88,6 +88,11 @@ const RULES: readonly Rule[] = [
     because: 'the resolved-format model is shared by the codecs, not owned by one',
   },
   {
+    layer: 'src/io/read-policy',
+    forbidden: ['src/io/xlsx', 'src/io/xlsb', 'src/io/csv'],
+    because: 'a rule every reader obeys belongs to no codec, so it may not reach into one',
+  },
+  {
     layer: 'src/io/xlsb',
     forbidden: ['src/io/xlsx'],
     because:

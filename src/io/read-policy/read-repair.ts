@@ -1,4 +1,4 @@
-// What the reader does when a file describes something the model refuses.
+// What a reader does when a file describes something the model refuses.
 //
 // The taxonomy says an `AuthoringError` "is always the calling code that is wrong, never the input
 // file; a malformed file raises a 'malformed-input' error instead" (`src/errors.ts`). The read path
@@ -9,8 +9,11 @@
 // XlsxError) … }`, the one-line answer the taxonomy promises, does not see them at all, so the
 // caller cannot tell "your file is broken" from "my own code threw".
 //
-// Excel repairs every one of those inputs on load, and that is the standard this module holds the
-// reader to. There are two ways to meet it and they are not interchangeable:
+// Excel repairs every one of those inputs on load, and that is the standard this module holds every
+// reader to. It sits below both codecs because the rule binds both: while it lived inside the XML
+// codec the layering gate kept the BIFF12 reader from importing it, and that reader handed sheet
+// names, merges and defined names to the model unrepaired. There are two ways to meet the standard
+// and they are not interchangeable:
 //
 //   - {@link repairSheetName}, where the model's rule is a *naming* rule and there is an obviously
 //     right answer. A tab has to be called something, and a sheet dropped for its name would take
@@ -51,6 +54,23 @@ export function repairSheetName(name: string, taken: ReadonlySet<string>): strin
   if (base.length === 0) return firstFree((n) => `Sheet${n}`, taken);
   if (!taken.has(base.toLowerCase())) return base;
   return firstFree((n) => withSuffix(base, ` (${n})`), taken, 2);
+}
+
+/**
+ * A workbook's declared sheets in order, each carrying the name the model will accept: repaired by
+ * {@link repairSheetName} against every name repaired before it.
+ *
+ * Both codecs declare their sheets as an ordered list and both have to know the repaired names before
+ * anything cites a sheet by position, since a scoped defined name and a 3-D reference both index into
+ * that order. The loop threading the taken set through the list is one loop, so it is written once.
+ */
+export function repairedSheetNames<T extends {readonly name: string}>(declared: readonly T[]): T[] {
+  const taken = new Set<string>();
+  return declared.map((entry) => {
+    const name = repairSheetName(entry.name, taken);
+    taken.add(name.toLowerCase());
+    return {...entry, name};
+  });
 }
 
 /** An apostrophe at either edge cannot be told from the quoting of a sheet-qualified reference. */
