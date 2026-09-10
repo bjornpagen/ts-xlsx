@@ -80,6 +80,13 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   drawing, so the writer planned a second one for the picture and referenced only that. `addImage`,
   `addImageAnchor`, `importImages` and the writer now refuse with an `AuthoringError` naming the sheet.
 
+- **`readSheetRows` and `readWorkbookStream` decoded a cell with no format under no format at all.**
+  Every cell falls back to the workbook's default format, xf 0, and `readXlsx` applied it, so in a
+  workbook whose default format is a date a bare cell read as a `Date` through `readXlsx` and as a
+  serial such as `45000` through the streaming readers. All three cell readers now resolve a cell's
+  format through one rule. A streamed cell still reports a `style` only when it, its row or its column
+  declares one.
+
 
 ## [3.1.0] — 2026-09-04
 

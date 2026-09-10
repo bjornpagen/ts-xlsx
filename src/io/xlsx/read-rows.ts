@@ -22,13 +22,14 @@ import type {DateEpoch} from '../../core/date.ts';
 import type {CellValue} from '../../core/value.ts';
 import {Workbook} from '../../core/workbook.ts';
 import {AuthoringError, quoted} from '../../errors.ts';
+import {numInteger} from '../../xml/xml-attrs.ts';
 import {closeEmptyElements, parseXmlPasses} from '../../xml/xml-read.ts';
 import {boolStrict, localName, type XmlAttributes, xmlEvents} from '../../xml/xml-scan.ts';
 import {openSpreadsheetPackage, readPartRelationships} from '../opc/read-opc.ts';
 import {unsupportedWorkbookPart} from '../opc/sniff-format.ts';
 import {ColumnRecordBudget} from '../read-policy/column-budget.ts';
+import {CellStyleResolver} from '../style/cell-style-resolution.ts';
 import {CellAccumulator} from './cell-accumulator.ts';
-import {CellStyleResolver} from './cell-style-resolution.ts';
 import type {SharedString} from './cell-value.ts';
 import {takeColumnSpan} from './column-span.ts';
 import {XlsxParseError} from './errors.ts';
@@ -53,9 +54,10 @@ export interface ReadSheetRowsOptions extends ReadPackageOptions {
 }
 
 /**
- * The resolved style facets of a streamed cell: its own `<c s>` cell format, flattened exactly as
- * the buffered reader resolves it. Present only when the cell carries a format; a consumer can copy
- * these straight onto a writer cell to preserve its look through a streaming read→write.
+ * The resolved style facets of a streamed cell: its own `<c s>` format, failing that its row's (when
+ * the row is marked `customFormat`), failing that its column's, flattened exactly as the buffered
+ * reader resolves it. Present only when the cell, its row or its column declares a format; a consumer
+ * can copy these straight onto a writer cell to preserve its look through a streaming read→write.
  *
  * @unpublished A named commitment this surface is not ready to make. `entries/xlsx.ts` records the
  * decision: the streaming reader's granular output shapes stay inferred structural types while the
@@ -76,7 +78,8 @@ export interface StreamedCell {
   readonly address: string;
   /** The decoded value, identical to what `readXlsx` would produce for the same cell. */
   readonly value: CellValue;
-  /** The cell's resolved style facets, or absent when the cell carries no format of its own. */
+  /** The cell's resolved style facets, including a format it inherits from its row or column; absent
+   * when none of the three declares one. */
   readonly style?: StreamedCellStyle;
 }
 
@@ -351,17 +354,22 @@ function* scanSheet(
 
   const finalizeCell = (): void => {
     if (cell.ref === '' || cell.col < 0 || !rowInGrid) return;
-    // Through the shared resolution, not the cell's own `s` alone. `decodeCellContent` reads `numFmt`
-    // off the resolved style to tell a date serial from a plain number, so reading only `s` decoded a
-    // cell under a date-formatted column to a different *type* than the buffered reader did.
-    const styleIndex = styleResolution.indexFor(cell.col, cell.styleIndex);
-    const style = styleIndex >= 0 ? xfStyles[styleIndex] : undefined;
+    // Through the shared resolution, xf 0 included, not the cell's own `s` alone. `decodeCellContent`
+    // reads `numFmt` off the resolved style to tell a date serial from a plain number, so anything less
+    // decodes a cell to a different *type* than the buffered reader does.
+    const style = styleResolution.styleFor(cell.col, cell.styleIndex, xfStyles);
     const value = cell.decode(sharedStrings, style);
     // A blank or purely style-only cell decodes to null; a data read wants only cells that carry
     // something (a formula object, an empty string, a false, and a 0 all count; only null drops).
     if (value !== null) {
       const {col, ref} = cell;
-      cells.push(style ? {col, address: ref, value, style} : {col, address: ref, value});
+      // xf 0 is every cell's floor rather than a format anything declared, so repeating it on each
+      // streamed cell would tell a consumer nothing; the style is reported when something declared it.
+      cells.push(
+        style !== undefined && styleResolution.declaresFormat(col, cell.styleIndex)
+          ? {col, address: ref, value, style}
+          : {col, address: ref, value},
+      );
     }
   };
 
@@ -383,7 +391,10 @@ function* scanSheet(
           ({number: rowNumber, inGrid: rowInGrid} = rowPosition.open(event.attrs));
           rowHidden = boolStrict(event.attrs.hidden);
           cell.openRow(rowInGrid ? rowNumber : -1);
-          styleResolution.openRow(event.attrs);
+          styleResolution.openRow(
+            numInteger(event.attrs.s, 0) ?? -1,
+            boolStrict(event.attrs.customFormat),
+          );
           cells = [];
           break;
         }
@@ -426,7 +437,7 @@ function collectColumn(
   const {first: min, last} = span;
   // The span's cell-format default, which a bare `<c>` in these columns inherits: the streaming
   // reader ignored it entirely, which is what made it decode a date column's cells as numbers.
-  styleResolution.noteColumnSpan(min, last, attrs);
+  styleResolution.noteColumnSpan(min, last, numInteger(attrs.style, 0) ?? -1);
   if (!boolStrict(attrs.hidden)) return;
   for (let index = min; index <= last; index++) hiddenColumns.add(index);
 }

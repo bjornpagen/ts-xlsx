@@ -26,6 +26,7 @@ import type {CellValue, ErrorValue, FormulaResult} from '../../core/value.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
 import {ColumnRecordBudget, clampColumnSpan} from '../read-policy/column-budget.ts';
 import {admitting} from '../read-policy/read-repair.ts';
+import {CellStyleResolver} from '../style/cell-style-resolution.ts';
 import {applyXfToCell, type XfStyle} from '../style/xf-style.ts';
 import {decodeFormula, type FormulaScope, formulaAnchor} from './formula.ts';
 import {errorCodeFor, RecordReader} from './primitives.ts';
@@ -67,8 +68,10 @@ const formula = (
 const CELL_RECORDS: ReadonlyMap<number, CellRecord> = new Map<number, CellRecord>([
   // Formatted but empty. The style is already applied; the value is genuinely none.
   [BRT.CellBlank, value(() => null)],
-  [BRT.CellRk, value((r, c) => asNumberOrDate(r.rk(), c.numFmt, c.epoch))],
-  [BRT.CellReal, value((r, c) => asNumberOrDate(r.f64(), c.numFmt, c.epoch))],
+  // A number under a date format is a date serial, surfaced as a Date so an `.xlsb` reads the value
+  // its `.xlsx` twin does. The rule is `core/date.ts`'s, shared with the XML decoders.
+  [BRT.CellRk, value((r, c) => coerceDateSerial(r.rk(), c.numFmt, c.epoch))],
+  [BRT.CellReal, value((r, c) => coerceDateSerial(r.f64(), c.numFmt, c.epoch))],
   [BRT.CellBool, value((r) => r.u8() !== 0)],
   // An unrecognised error byte keeps the cell non-empty without inventing an error the model does not
   // define; there is no text form to fall back to as there is in XML.
@@ -79,7 +82,7 @@ const CELL_RECORDS: ReadonlyMap<number, CellRecord> = new Map<number, CellRecord
   [BRT.CellIsst, value((r, c) => c.sharedStrings[r.u32()] ?? '')],
   // A formula's cached numeric result honours the cell's date format exactly as a bare number does,
   // so a date-valued formula reads back as a Date rather than a serial.
-  [BRT.FmlaNum, formula((r, c) => asNumberOrDate(r.f64(), c.numFmt, c.epoch))],
+  [BRT.FmlaNum, formula((r, c) => coerceDateSerial(r.f64(), c.numFmt, c.epoch))],
   [BRT.FmlaBool, formula((r) => r.u8() !== 0)],
   [BRT.FmlaError, formula((r) => errorValueOrNull(r.u8()) ?? undefined)],
   [BRT.FmlaString, formula((r) => r.wideString())],
@@ -112,11 +115,10 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
   // The open row, one-based as the model counts them. -1 means none is open, which a cell record
   // arriving before any row header (a malformed sheet) is dropped against rather than guessed at.
   let row = -1;
-  // A row that declares a format supplies the default for its cells that carry none, as a column
-  // does; the next row header replaces it.
-  let rowStyle = -1;
-  // A column's format is the last fallback. Column records always precede the cell table.
-  const columnStyle = new Map<number, number>();
+  // Which format a cell takes: its own, its row's, its column's, then xf 0, by the rule both XML
+  // readers drive too. Column records precede the cell table and a row header precedes its cells,
+  // which is the order the resolver is fed in; the next row header replaces the open row's format.
+  const styleResolution = new CellStyleResolver();
   // The sheet's default row height, in twips. Every row header restates its height whether or not the
   // row has one of its own, so the default is what tells the two apart. See {@link applyRow}.
   // `BrtWsFmtInfo` precedes the cell table, so it is always known by the time a row is read.
@@ -134,11 +136,11 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
       reader.skip(6); // dxGCol, cchDefColWidth: the default *column* width, which the model does not read.
       defaultRowHeight = reader.u16();
     } else if (record.type === BRT.ColInfo) {
-      applyColumn(reader, sheet, xfStyles, columnStyle, columnBudget);
+      applyColumn(reader, sheet, xfStyles, styleResolution, columnBudget);
     } else if (record.type === BRT.RowHdr) {
       const header = applyRow(reader, sheet, defaultRowHeight);
       row = header.row;
-      rowStyle = header.styleIndex;
+      styleResolution.openRow(header.styleIndex, header.customFormat);
     } else if (record.type === BRT.MergeCell) {
       const {rowFirst, rowLast, colFirst, colLast} = reader.range();
       // A merge overlapping one already read is refused by the model; as in the XML reader, the one
@@ -162,7 +164,7 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
         rgcb: reader.bytes(reader.u32()),
       });
     } else if (cellRecord !== undefined) {
-      const member = readCellRecord(cellRecord, reader, {...context, row, rowStyle, columnStyle});
+      const member = readCellRecord(cellRecord, reader, {...context, row, styleResolution});
       if (member !== undefined) deferred.push(member);
     }
   }
@@ -202,8 +204,7 @@ export interface WorksheetReadContext {
 interface CellRecordContext extends WorksheetReadContext {
   /** The open row, one-based; -1 when none is, which is a malformed sheet. */
   readonly row: number;
-  readonly rowStyle: number;
-  readonly columnStyle: ReadonlyMap<number, number>;
+  readonly styleResolution: CellStyleResolver;
 }
 
 /**
@@ -219,17 +220,15 @@ function readCellRecord(
   reader: RecordReader,
   context: CellRecordContext,
 ): DeferredFormula | undefined {
-  const {sheet, sharedStrings, xfStyles, scope, dateEpoch, row, rowStyle, columnStyle} = context;
+  const {sheet, sharedStrings, xfStyles, scope, dateEpoch, row, styleResolution} = context;
   // A cell record arriving before any row header is dropped rather than guessed at.
   if (row <= 0) return undefined;
   const {column, styleIndex} = reader.cell();
   if (!inGrid(column, row - 1)) return undefined;
-  // A cell's own format wins, then its row's, then its column's: the order Excel applies. Index 0 is
-  // the default xf, which BIFF12 writes where XML simply omits `s`, so it means "no format of my own"
-  // and lets the row/column default through.
-  const resolved =
-    styleIndex > 0 ? styleIndex : rowStyle >= 0 ? rowStyle : (columnStyle.get(column) ?? -1);
-  const style = resolved >= 0 ? xfStyles[resolved] : xfStyles[0];
+  // BIFF12 writes ixfe 0 where XML omits `s` and has no other way to say "none", so 0 is read as no
+  // format of the cell's own and lets its row's and column's through. The record cannot tell that
+  // from a cell that meant xf 0 on a formatted row, which therefore reads with the row's format.
+  const style = styleResolution.styleFor(column + 1, styleIndex > 0 ? styleIndex : -1, xfStyles);
   const cell = sheet.getCell(encodeAddress(column + 1, row));
   applyXfToCell(cell, style);
 
@@ -282,31 +281,21 @@ function inGrid(column: number, row: number): boolean {
   return column >= 0 && column <= MAX_COLUMN_INDEX && row >= 0 && row <= MAX_ROW_INDEX;
 }
 
-// A number stored under a date format is a date serial: surface it as a Date so a date read from an
-// `.xlsb` is the same value the `.xlsx` twin yields, not a bare number. The rule itself lives in
-// `core/date.ts`, shared with the two `.xlsx` decoders that ask it.
-function asNumberOrDate(
-  value: number,
-  numFmt: string | undefined,
-  epoch: DateEpoch,
-): number | Date {
-  return coerceDateSerial(value, numFmt, epoch);
-}
-
 // `BrtRowHdr` ([MS-XLSB] 2.4.770): the row index, its default format, its height, and a byte of
-// layout flags. Returns the open row (one-based) and the style index its cells inherit.
+// layout flags. Returns the open row (one-based), the format it names, and whether its cells inherit
+// that format.
 function applyRow(
   reader: RecordReader,
   sheet: Worksheet,
   defaultRowHeight: number,
-): {row: number; styleIndex: number} {
+): {row: number; styleIndex: number; customFormat: boolean} {
   const index = reader.u32();
   const styleIndex = reader.u32();
   const height = reader.u16();
   reader.skip(1); // fExtraAsc/fExtraDsc: border padding, a rendering hint the model does not carry.
   const flags = reader.u8();
   // A row beyond the grid closes the open row without opening another, so its cells are dropped too.
-  if (index > MAX_ROW_INDEX) return {row: -1, styleIndex: -1};
+  if (index > MAX_ROW_INDEX) return {row: -1, styleIndex: -1, customFormat: false};
 
   const row = index + 1;
   const handle = sheet.getRow(row);
@@ -321,8 +310,8 @@ function applyRow(
   const outlineLevel = flags & ROW_OUTLINE_LEVEL;
   if (outlineLevel > 0) handle.outlineLevel = outlineLevel;
   if ((flags & ROW_COLLAPSED) !== 0) handle.collapsed = true;
-  // The row's format applies only when it says so, mirroring XML's `customFormat="1"` gate.
-  return {row, styleIndex: (flags & ROW_CUSTOM_FORMAT) !== 0 ? styleIndex : -1};
+  // The flag is XML's `customFormat="1"`: without it the row's format is not its cells'.
+  return {row, styleIndex, customFormat: (flags & ROW_CUSTOM_FORMAT) !== 0};
 }
 
 const TWIPS_PER_POINT = 20;
@@ -337,7 +326,7 @@ function applyColumn(
   reader: RecordReader,
   sheet: Worksheet,
   xfStyles: ReadonlyArray<XfStyle>,
-  columnStyle: Map<number, number>,
+  styleResolution: CellStyleResolver,
   budget: ColumnRecordBudget,
 ): void {
   const first = reader.u32();
@@ -374,9 +363,9 @@ function applyColumn(
     if (outlineLevel > 0) column.outlineLevel = outlineLevel;
     if ((flags & COLUMN_COLLAPSED) !== 0) column.collapsed = true;
     if (style !== undefined) assignStyleFacets(column, style);
-    // Keyed zero-based, as the cell records that look it up count columns.
-    if (styleIndex > 0) columnStyle.set(index - 1, styleIndex);
   }
+  // ixfe 0 is the default xf here as on a cell, so only a nonzero one is a format the column's cells take.
+  if (styleIndex > 0) styleResolution.noteColumnSpan(span.first, span.last, styleIndex);
 }
 
 // Column width is stored in 1/256ths of a character, where XML states the character count directly.

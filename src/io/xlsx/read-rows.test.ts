@@ -13,6 +13,25 @@ function rows(data: Uint8Array, options?: Parameters<typeof readSheetRows>[1]): 
   return [...readSheetRows(data, options)];
 }
 
+// xf 0 is the format of every cell nothing else formats, and a workbook can make it a date format. The
+// streaming reader stopped short of it, so the same bare cell was a Date through readXlsx and a serial
+// number through readSheetRows.
+test('a cell with no format of its own decodes under xf 0 in both readers, and reports no style', () => {
+  const data = foreignPackage({
+    'xl/styles.xml':
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<cellXfs count="1"><xf numFmtId="14"/></cellXfs></styleSheet>',
+    [SHEET1]: foreignSheet('<row r="1"><c r="A1"><v>45000</v></c></row>'),
+  });
+  const buffered = readXlsx(data).worksheets[0]?.getCell('A1').value;
+  assert.ok(buffered instanceof Date, 'the buffered read is a date');
+  const [cell] = rows(data)[0]?.cells ?? [];
+  assert.ok(cell);
+  assert.ok(cell.value instanceof Date, 'and so is the streamed one');
+  assert.equal(cell.value.getTime(), buffered.getTime());
+  assert.equal(cell.style, undefined, 'xf 0 is a floor, not a format the cell declared');
+});
+
 test('yields rows in order, non-empty cells only, with decoded values', () => {
   const wb = new Workbook();
   const sheet = wb.addWorksheet('S');

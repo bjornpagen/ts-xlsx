@@ -107,7 +107,7 @@ order:
 | core model | `Workbook` / `Worksheet` / `Row` / `Column` / `Cell`, addresses and styles: the in-memory document |
 | xml | escaping, emission and a hostile-input-safe SAX reader (`src/xml/`), with no spreadsheet knowledge |
 | opc container | ZIP inflation under a bound, magic-byte sniffing, the relationship graph and part paths (`src/io/opc/`) |
-| resolved format | `XfStyle` and what applying an xf to a cell means, shared by both codecs (`src/io/style/`) |
+| resolved format | `XfStyle`, what applying an xf to a cell means, and which xf a cell resolves to, shared by both codecs (`src/io/style/`) |
 | read policy | the rules every reader obeys about a foreign file and no codec owns: read repair and the column budget (`src/io/read-policy/`) |
 | xlsx read/write | OOXML parse and serialize; the hardest, highest-value code in the tree |
 | xlsb read | the binary BIFF12 serialisation of the same model, read-only so far (`src/io/xlsb/`) |
@@ -695,7 +695,8 @@ formats share an OPC/ZIP container, a relationship graph, and a style model, and
 the office-document parts are spelled: XML in `.xlsx`, BIFF12 record streams in `.xlsb`. The code
 follows that split exactly, and the directory layout states it. The bounded inflater, magic-byte
 probe and OPC/relationship resolution live in `src/io/opc/`, and the resolved-format table
-(`XfStyle`, its built-in number formats, and `applyXfToCell`) in `src/io/style/`. Both sit *above*
+(`XfStyle`, its built-in number formats, `applyXfToCell`, and the cell → row → column → xf 0
+resolution every cell reader drives) in `src/io/style/`. Both sit *above*
 the codecs rather than inside either. Only the part parsers live apart in `src/io/xlsb/`:
 `record-stream.ts` (the record framing), `primitives.ts` (RkNumber, length-prefixed strings,
 colours), `formula.ts` and `ptg-functions.ts` (the Ptg token stream a binary formula is stored as,

@@ -24,9 +24,9 @@ import {type SaxHandlers, type SaxPass, TextCapture} from '../../xml/xml-read.ts
 import {boolPresent, boolStrict, localName, type XmlAttributes} from '../../xml/xml-scan.ts';
 import {ColumnRecordBudget} from '../read-policy/column-budget.ts';
 import {admitting} from '../read-policy/read-repair.ts';
+import {CellStyleResolver} from '../style/cell-style-resolution.ts';
 import type {XfStyle} from '../style/xf-style.ts';
 import {CellAccumulator} from './cell-accumulator.ts';
-import {CellStyleResolver} from './cell-style-resolution.ts';
 import type {SharedString} from './cell-value.ts';
 import {takeColumnSpan} from './column-span.ts';
 import {RowPositionTracker} from './row-position.ts';
@@ -187,14 +187,17 @@ export function worksheetPass(
   // arrives as an open that is not self-closing followed by a close.
   let customViewDepth = 0;
 
-  // Commit the cell held in the accumulator, resolving its style from its own `s`, then its row's
-  // (when customFormat), then its column's default: the order Excel applies, shared with the
-  // streaming reader so the two cannot decode the same cell to different types. Runs on `</c>` close,
-  // including the synthesized close of a self-closing `<c/>` formatted-but-empty cell.
+  // Commit the cell held in the accumulator under the style it resolves to: its own `s`, then its row's
+  // (when customFormat), then its column's, then xf 0. That is the order Excel applies and the one rule
+  // the streaming and BIFF12 readers share, so no two of them decode the same cell to different types.
+  // Runs on `</c>` close, including the synthesized close of a self-closing `<c/>` formatted-but-empty
+  // cell.
   const finalizeCellFromState = (): void => {
-    const styleIndex = styleResolution.indexFor(cell.col, cell.styleIndex);
-    const style = styleIndex >= 0 ? xfStyles[styleIndex] : xfStyles[0];
-    cell.finalize(sheet, sharedStrings, style);
+    cell.finalize(
+      sheet,
+      sharedStrings,
+      styleResolution.styleFor(cell.col, cell.styleIndex, xfStyles),
+    );
   };
 
   const handlers: SaxHandlers = {
@@ -224,7 +227,7 @@ export function worksheetPass(
           // reading the row's cells either way (that is what keeps it in step with the element
           // stream), and a positional `<c>` still has to resolve against a row number.
           cell.openRow(inGrid ? number : -1);
-          styleResolution.openRow(attrs);
+          styleResolution.openRow(numInteger(attrs.s, 0) ?? -1, boolStrict(attrs.customFormat));
           break;
         }
         case 'mergeCell':
@@ -360,7 +363,7 @@ function applyColumn(
   // Record the column's style so a bare cell in it can inherit the full column format on read. Noted
   // over the whole affordable span rather than per index inside the loop above, which is the same
   // work said once.
-  styleResolution.noteColumnSpan(min, last, attrs);
+  styleResolution.noteColumnSpan(min, last, numInteger(attrs.style, 0) ?? -1);
 }
 
 function applyRow(sheet: Worksheet, number: number, attrs: XmlAttributes): void {
