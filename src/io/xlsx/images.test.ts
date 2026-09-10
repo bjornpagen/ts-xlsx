@@ -4,7 +4,15 @@ import {test} from 'node:test';
 import {isOneCellAnchor} from '../../core/image.ts';
 import {Workbook} from '../../core/workbook.ts';
 import {imageContentType} from './images.ts';
-import {partIn, partsWritten, partText, roundtrip} from './package.test-support.ts';
+import {
+  partIn,
+  partMatching,
+  partsWritten,
+  partText,
+  patchParts,
+  roundtrip,
+} from './package.test-support.ts';
+import {readXlsx} from './read.ts';
 import {writeXlsx} from './write.ts';
 
 // A 1×1 transparent PNG: enough bytes to prove the media round-trips verbatim.
@@ -92,6 +100,57 @@ test('a two-cell anchor honors its editAs mode and defaults to oneCell', () => {
   const parts = partsWritten(wb);
   assert.match(partIn(parts, 'xl/drawings/drawing1.xml'), /<xdr:twoCellAnchor editAs="absolute">/);
   assert.match(partIn(parts, 'xl/drawings/drawing2.xml'), /<xdr:twoCellAnchor editAs="oneCell">/);
+});
+
+// A written package whose one drawing part `edit` rewrites, beside the rewritten drawing's text.
+function withDrawing(edit: (xml: string) => string): {pkg: Uint8Array; drawing: string} {
+  const written = writeXlsx(anchored());
+  const drawing = edit(partText(written, 'xl/drawings/drawing1.xml'));
+  return {pkg: patchParts(written, {'xl/drawings/drawing1.xml': () => drawing}), drawing};
+}
+
+// The schema default for a two-cell anchor's `editAs` is `twoCell`, which is what a file omitting the
+// attribute means. Read as absent, it was written back with the authoring default, `oneCell`, and a
+// picture that resized with its cells only moved with them after a save.
+test('a two-cell anchor a file wrote without editAs reads as twoCell and is written back so', () => {
+  const {pkg} = withDrawing((xml) => xml.replace(' editAs="oneCell"', ''));
+  const read = readXlsx(pkg);
+  const anchor = read.getWorksheet('S')?.images[0]?.anchor;
+  assert.ok(anchor && !isOneCellAnchor(anchor));
+  assert.equal(anchor.editAs, 'twoCell');
+  assert.match(
+    partText(writeXlsx(read), 'xl/drawings/drawing1.xml'),
+    /<xdr:twoCellAnchor editAs="twoCell">/,
+  );
+});
+
+// A drawing holding anything the image model cannot write back is kept whole. The list of such content
+// missed an absolute anchor and a linked picture, so a drawing holding either beside a modeled picture
+// was written back from that picture alone.
+test('a drawing with an absolutely anchored picture beside a modeled one is preserved whole', () => {
+  const absolute =
+    '<xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="9525" cy="9525"/>' +
+    '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="9" name="Absolute"/><xdr:cNvPicPr/></xdr:nvPicPr>' +
+    '<xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>' +
+    '<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>' +
+    '<xdr:clientData/></xdr:absoluteAnchor>';
+  const {pkg, drawing} = withDrawing((xml) => xml.replace('</xdr:wsDr>', `${absolute}</xdr:wsDr>`));
+
+  const read = readXlsx(pkg);
+  assert.equal(read.getWorksheet('S')?.images.length, 0, 'no picture is modeled from it');
+  assert.equal(partMatching(writeXlsx(read), /^xl\/drawings\/drawing\d+\.xml$/), drawing);
+});
+
+test('a drawing with a linked picture beside an embedded one is preserved whole', () => {
+  const {pkg, drawing} = withDrawing((xml) => {
+    const anchor = xml.match(/<xdr:twoCellAnchor\b[\s\S]*<\/xdr:twoCellAnchor>/)?.[0] ?? '';
+    const linked = anchor.replace('r:embed="rId1"', 'r:link="rId1"');
+    return xml.replace('</xdr:wsDr>', `${linked}</xdr:wsDr>`);
+  });
+
+  const read = readXlsx(pkg);
+  assert.equal(read.getWorksheet('S')?.images.length, 0, 'no picture is modeled from it');
+  assert.equal(partMatching(writeXlsx(read), /^xl\/drawings\/drawing\d+\.xml$/), drawing);
 });
 
 test('an anchored picture carries no absolute spPr transform that would override the anchor', () => {

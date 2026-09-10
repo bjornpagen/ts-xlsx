@@ -133,6 +133,15 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   Excel does. The `PageBreak` documentation said a break precedes line `id`, where Excel counts `id`
   as the last line before the break (a break above row 20 is `id: 19`); it now says so.
 
+- **A picture anchored between cells without `editAs` stopped resizing with them after a save, and a
+  drawing holding an absolutely anchored or linked picture lost it.** The schema default for a
+  two-cell anchor's `editAs` is `twoCell`, but an absent attribute read as none and was written back as
+  this library's authoring default, `oneCell`. And the reader decided whether a drawing was fully
+  modeled from a list of content to skip that missed `absoluteAnchor` and a linked `<a:blip r:link>`,
+  so such a drawing was rewritten from its other pictures alone. An absent `editAs` now reads as
+  `twoCell`, and a drawing is modeled only when every anchor holds exactly one embedded picture;
+  anything else keeps the drawing whole.
+
 
 ## [3.1.0] — 2026-09-04
 

@@ -73,8 +73,9 @@ type ImageAnchor = TwoCellAnchor | OneCellAnchor;
 <sub>type</sub>
 
 How a two-cell-anchored image tracks edits to the cells it spans. `twoCell` moves and resizes with
-them; `oneCell` moves but keeps its size; `absolute` is pinned to the page and does neither. Excel
-defaults to `oneCell` when the attribute is omitted.
+them; `oneCell` moves but keeps its size; `absolute` is pinned to the page and does neither. The
+schema default, which a file omitting the attribute means, is `twoCell`; an image authored here
+without one is written as `oneCell`, which is this library's own default.
 
 ```ts
 type ImageEditAs = 'oneCell' | 'twoCell' | 'absolute';

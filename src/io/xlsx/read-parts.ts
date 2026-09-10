@@ -25,7 +25,7 @@ import {
   readPartRelationships,
 } from '../opc/read-opc.ts';
 import {admitting} from '../read-policy/read-repair.ts';
-import {drawingHasUnmodeledContent, parseDrawing} from './images.ts';
+import {parseDrawing} from './images.ts';
 import {type ParsedComment, parseComments} from './read-comments.ts';
 import {parsePivotTable} from './read-pivot.ts';
 import {parseTable} from './tables.ts';
@@ -158,14 +158,16 @@ export function readSheetImages(
   if (drawingPath === undefined) return;
   const drawingXml = partText(drawingPath);
   if (drawingXml === undefined) return;
-  // A drawing that also holds a chart or shape is preserved whole (see readSheetPreservedReferences),
-  // so its pictures must not be modeled here: modeling them would leave the sheet with images, which
-  // suppresses that preservation and drops the chart. Leaving `sheet.images` empty routes the entire
+  const {anchors, fullyModeled} = parseDrawing(drawingXml);
+  // A drawing holding anything the image model cannot write back (a chart, a shape, a picture anchored
+  // to the page or linked rather than embedded) is preserved whole (see readSheetPreservedReferences),
+  // so none of its pictures are modeled here: modeling them would leave the sheet with images, which
+  // suppresses that preservation and drops the rest. Leaving `sheet.images` empty routes the entire
   // drawing, pictures included, through byte-preservation, keeping every anchor faithful.
-  if (drawingHasUnmodeledContent(drawingXml)) return;
+  if (!fullyModeled) return;
   const drawingRels = readPartRelationships(drawingPath, partText);
 
-  for (const anchor of parseDrawing(drawingXml)) {
+  for (const anchor of anchors) {
     const embedded = drawingRels.byId(anchor.embed);
     if (embedded === undefined) continue;
     const mediaPath = drawingRels.pathOf(embedded.target);

@@ -12,7 +12,7 @@ import {
   isOneCellAnchor,
 } from '../../core/image.ts';
 import {enumToken, numFinite} from '../../xml/xml-attrs.ts';
-import {openElements, parseXml, TextCapture} from '../../xml/xml-read.ts';
+import {parseXml, TextCapture} from '../../xml/xml-read.ts';
 import {localName} from '../../xml/xml-scan.ts';
 import {checkedToken, numAttr, numberText, XML_DECLARATION} from '../../xml/xml.ts';
 import {relAttr, RELATIONSHIPS_NS} from '../opc/namespaces.ts';
@@ -153,7 +153,8 @@ export function drawingRelsXml(mediaTargets: readonly string[]): string {
 }
 
 /** An image anchor parsed from a drawing part, with the `r:embed` id that names its media. A two-cell
- * anchor carries `to` (and may carry `editAs`); a one-cell anchor carries `ext` instead. */
+ * anchor carries `to` and its `editAs`, the schema default filled in; a one-cell anchor carries `ext`
+ * instead. */
 export interface ParsedImageAnchor {
   readonly from: AnchorPoint;
   readonly to?: AnchorPoint;
@@ -169,17 +170,54 @@ function blankPoint(): PointDraft {
   return {col: 0, row: 0, colOff: 0, rowOff: 0};
 }
 
-/** Parse a drawing part into its image anchors (both `<xdr:twoCellAnchor>` and `<xdr:oneCellAnchor>`).
- * Anchors that are not pictures (a chart, a shape) carry no `<a:blip r:embed>` and are skipped, so a
- * mixed drawing yields only its images. */
-export function parseDrawing(xml: string): ParsedImageAnchor[] {
+/** A drawing part as the reader sees it: the picture anchors it could model, and whether those anchors
+ * are the whole of it. */
+export interface ParsedDrawing {
+  readonly anchors: readonly ParsedImageAnchor[];
+  /**
+   * Whether every anchor is a two-cell or one-cell anchor holding exactly one embedded picture. When it
+   * is not, writing the drawing back from `anchors` would leave the rest out, so the reader keeps the
+   * whole part byte for byte instead.
+   */
+  readonly fullyModeled: boolean;
+}
+
+// What a drawing can hold that the image model cannot write back: a chart (`graphicFrame`), a shape or
+// text box (`sp`), a connector (`cxnSp`), a group (`grpSp`), ink (`contentPart`), an anchor pinned to
+// the page rather than the grid (`absoluteAnchor`), and a markup-compatibility wrapper
+// (`AlternateContent`), whose branches spell one object twice.
+const UNMODELED_CONTENT: ReadonlySet<string> = new Set([
+  'graphicFrame',
+  'sp',
+  'cxnSp',
+  'grpSp',
+  'contentPart',
+  'absoluteAnchor',
+  'AlternateContent',
+]);
+
+/**
+ * Parse a drawing part into its picture anchors (`<xdr:twoCellAnchor>` and `<xdr:oneCellAnchor>`), and
+ * decide in the same scan whether they are the whole drawing. It is fully modeled only when every
+ * anchor holds exactly one picture whose bytes are embedded; anything else in it, including a picture
+ * that links its image rather than embedding it, has no place in the image model.
+ *
+ * This used to be two scans: one listing the content the model skips, and this one. The list missed
+ * an absolute anchor and a linked picture, so a drawing holding either counted as modeled and lost them
+ * on write. What an anchor holds is now judged by what the parse found in it, one embedded picture or
+ * not, so no kind of anchor content can slip past unnamed; the list left names only the anchor kinds
+ * and wrappers this parse does not otherwise open an anchor for.
+ */
+export function parseDrawing(xml: string): ParsedDrawing {
   const anchors: ParsedImageAnchor[] = [];
+  let fullyModeled = true;
   let from: PointDraft | null = null;
   let to: PointDraft | null = null;
   let ext: Extent | undefined;
   let editAs: ImageEditAs | undefined;
   let rotation: number | undefined;
   let embed: string | undefined;
+  let pictures = 0;
   // The point (<xdr:from> or <xdr:to>) whose coordinate children are currently streaming in.
   let target: PointDraft | null = null;
   // Depth inside <xdr:pic>, so the anchor-level <xdr:ext> is not confused with the <a:ext> nested in
@@ -191,15 +229,26 @@ export function parseDrawing(xml: string): ParsedImageAnchor[] {
   parseXml(xml, {
     onOpen(name, attrs, selfClosing, scope) {
       const local = localName(name);
-      if (local === 'twoCellAnchor' || local === 'oneCellAnchor') {
+      if (UNMODELED_CONTENT.has(local)) {
+        fullyModeled = false;
+      } else if (local === 'twoCellAnchor' || local === 'oneCellAnchor') {
         from = blankPoint();
         to = local === 'twoCellAnchor' ? blankPoint() : null;
         ext = undefined;
         rotation = undefined;
         embed = undefined;
-        editAs = enumToken(attrs.editAs, isImageEditAs);
+        pictures = 0;
+        // `twoCell` is the schema default, so it is what a file omitting the attribute means, and what
+        // one spelling it with a token outside the enumeration is read as. Left undefined, it was
+        // written back with this library's authoring default, `oneCell`, and the picture stopped
+        // resizing with its cells.
+        editAs =
+          local === 'twoCellAnchor'
+            ? (enumToken(attrs.editAs, isImageEditAs) ?? 'twoCell')
+            : undefined;
       } else if (local === 'pic') {
         picDepth++;
+        pictures++;
       } else if (local === 'xfrm' && picDepth > 0) {
         // The picture's own rotation: the one spPr transform that can't be derived from the anchor.
         const rot = numFinite(attrs.rot);
@@ -219,6 +268,8 @@ export function parseDrawing(xml: string): ParsedImageAnchor[] {
         // is not in the namespace at all.
         const value = relAttr(scope, attrs, 'embed');
         if (value !== undefined) embed = value;
+        // A linked picture names its image through a relationship the model holds no field for.
+        if (relAttr(scope, attrs, 'link') !== undefined) fullyModeled = false;
       } else if (target !== null) {
         coord.open(local, selfClosing);
       }
@@ -237,14 +288,16 @@ export function parseDrawing(xml: string): ParsedImageAnchor[] {
       } else if (local === 'pic') {
         picDepth--;
       } else if (local === 'twoCellAnchor' || local === 'oneCellAnchor') {
-        if (from !== null && embed !== undefined) {
-          const rot = rotation !== undefined ? {rotation} : {};
-          if (to !== null) {
-            const mode = editAs !== undefined ? {editAs} : {};
-            anchors.push({from: {...from}, to: {...to}, ...mode, ...rot, embed});
-          } else if (ext !== undefined) {
-            anchors.push({from: {...from}, ext, ...rot, embed});
-          }
+        const rot = rotation !== undefined ? {rotation} : {};
+        if (from === null || embed === undefined || pictures !== 1) {
+          fullyModeled = false;
+        } else if (to !== null) {
+          const mode = editAs !== undefined ? {editAs} : {};
+          anchors.push({from: {...from}, to: {...to}, ...mode, ...rot, embed});
+        } else if (ext !== undefined) {
+          anchors.push({from: {...from}, ext, ...rot, embed});
+        } else {
+          fullyModeled = false;
         }
         from = null;
         to = null;
@@ -252,28 +305,7 @@ export function parseDrawing(xml: string): ParsedImageAnchor[] {
       }
     },
   });
-  return anchors;
-}
-
-// Anchor content a drawing can hold that the image model does not interpret: a chart
-// (`<xdr:graphicFrame>`), a shape or text box (`<xdr:sp>`), a connector (`<xdr:cxnSp>`), or a group
-// (`<xdr:grpSp>`). A drawing carrying any of these is preserved whole rather than modeled, so it is
-// not re-serialised from its pictures alone (which would silently drop the chart/shape).
-const UNMODELED_DRAWING_CONTENT = new Set<string>(['graphicFrame', 'sp', 'cxnSp', 'grpSp']);
-
-/** Whether a drawing part holds anchor content beyond plain pictures: a chart, shape, connector, or
- * group. Excel packs every one of a sheet's anchors into a single drawing part, so a sheet with both a
- * picture and a chart yields a mixed drawing; modeling only its pictures and re-serialising from them
- * would drop the chart. The reader uses this to fall back to whole-drawing byte-preservation instead. */
-export function drawingHasUnmodeledContent(xml: string): boolean {
-  // Pulled rather than pushed, so the answer stops the scan. The push adapter runs a parse to
-  // completion whatever a handler learns, so this walked every element of the part to reach a verdict
-  // its first match already decided; a drawing is scanned twice on read (here and by `parseDrawing`),
-  // and this half now stops at the first shape.
-  for (const {local} of openElements(xml)) {
-    if (UNMODELED_DRAWING_CONTENT.has(local)) return true;
-  }
-  return false;
+  return {anchors, fullyModeled};
 }
 
 const COORDINATES = new Set<string>(['col', 'colOff', 'row', 'rowOff']);

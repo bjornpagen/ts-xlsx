@@ -297,6 +297,44 @@ export const images = {
     };
   },
 
+  // Write sheet `S` with one picture, add an absolutely anchored picture to its drawing, read it and
+  // write it again → { imagesModeled, anchorKinds, drawingKept }: how many pictures the read modeled,
+  // the anchor element names of each drawing part the rewrite carries, and whether that rewrite holds
+  // exactly one drawing identical to the one read.
+  absoluteAnchorDrawingReport() {
+    const absolute =
+      '<xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="9525" cy="9525"/>' +
+      '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="9" name="Absolute"/><xdr:cNvPicPr/></xdr:nvPicPr>' +
+      '<xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>' +
+      '<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>' +
+      '<xdr:clientData/></xdr:absoluteAnchor>';
+    const source = new Workbook();
+    anchorSpecImage(
+      source.addWorksheet('S'),
+      source.addImage({buffer: ONE_PX_PNG, extension: 'png'}),
+      'A1:B2',
+    );
+    let patched = '';
+    const read = reloadPatched(writeXlsx(source), {
+      'xl/drawings/drawing1.xml': (xml) => {
+        patched = xml.replace('</xdr:wsDr>', `${absolute}</xdr:wsDr>`);
+        return patched;
+      },
+    });
+    const drawings = Object.entries(partMapOf(writeXlsx(read)))
+      .filter(([name]) => /^xl\/drawings\/drawing\d+\.xml$/.test(name))
+      .map(([, xml]) => xml);
+    return {
+      imagesModeled: read.getWorksheet('S')?.images.length ?? null,
+      anchorKinds: drawings.map((xml) =>
+        [...xml.matchAll(/<xdr:(twoCellAnchor|oneCellAnchor|absoluteAnchor)\b/g)].map(
+          (match) => match[1] ?? '',
+        ),
+      ),
+      drawingKept: drawings.length === 1 && drawings[0] === patched,
+    };
+  },
+
   // Anchor two images, then remove one by its media id → { supported, before, after, removedGone,
   // othersSurvive }. Removal must drop exactly the targeted image and leave the rest anchored.
   removeImageReport(range = 'A1:B2') {

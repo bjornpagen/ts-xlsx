@@ -59,7 +59,7 @@ test('an extended data validation keeps an empty <xm:f/> and <xm:sqref/> from ea
 });
 
 test("a drawing anchor keeps an empty <xdr:col/> from taking the next coordinate's text", () => {
-  const anchors = parseDrawing(
+  const {anchors} = parseDrawing(
     '<xdr:wsDr><xdr:twoCellAnchor>' +
       '<xdr:from><xdr:col/><xdr:colOff>0</xdr:colOff><xdr:row>4</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>' +
       '<xdr:to><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>9</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>' +

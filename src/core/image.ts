@@ -26,8 +26,9 @@ export interface AnchorPoint {
 export const PX_TO_EMU = 9525;
 
 /** How a two-cell-anchored image tracks edits to the cells it spans. `twoCell` moves and resizes with
- * them; `oneCell` moves but keeps its size; `absolute` is pinned to the page and does neither. Excel
- * defaults to `oneCell` when the attribute is omitted. */
+ * them; `oneCell` moves but keeps its size; `absolute` is pinned to the page and does neither. The
+ * schema default, which a file omitting the attribute means, is `twoCell`; an image authored here
+ * without one is written as `oneCell`, which is this library's own default. */
 export type ImageEditAs = 'oneCell' | 'twoCell' | 'absolute';
 
 /** Narrow a raw `<xdr:twoCellAnchor editAs>` token to a known {@link ImageEditAs}. */
