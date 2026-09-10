@@ -17,7 +17,7 @@
 import {strToU8, zip, zipSync} from 'fflate';
 
 import type {Workbook} from '../../core/workbook.ts';
-import type {Worksheet} from '../../core/worksheet.ts';
+import {refuseImagesBesideKeptDrawing, type Worksheet} from '../../core/worksheet.ts';
 import {AuthoringError, InternalError, quoted} from '../../errors.ts';
 import {isRelType} from '../../rel-type.ts';
 import {relativePartPath, relsPathFor, THEME_PART_PATH} from '../opc/part-paths.ts';
@@ -241,6 +241,9 @@ function planSheet(context: {
 
   let drawing: DrawingPlan | null = null;
   if (sheet.images.length > 0) {
+    // The authoring doors refuse this already; every write path comes through here, so this is the
+    // guarantee that a kept drawing is never left unreferenced by a planned one.
+    refuseImagesBesideKeptDrawing(sheet);
     const images: ImagePlan[] = sheet.images.map((image, j) => {
       const {number, image: registered} = media.resolve(image.imageId);
       return {
@@ -335,8 +338,9 @@ function numbersOf(
 }
 
 // Resolve one sheet's tail reference ids (the `<drawing>`/`<legacyDrawing>`/`<legacyDrawingHF>`/
-// `<picture>` slots and the slicer list) from its plan. A preserved `<drawing>` and a modeled one are
-// mutually exclusive, so the drawing slot takes whichever exists; a comment's VML rides the legacy-
+// `<picture>` slots and the slicer list) from its plan. A preserved `<drawing>` and a modeled one never
+// share a sheet (`planSheet` refuses one that has both), so the drawing slot takes whichever exists; a
+// comment's VML rides the legacy-
 // drawing slot; and each preserved slicer surfaces its rel id so the `<x14:slicerList>` can reactivate
 // the widget rather than orphan its part.
 function resolveSheetReferences(plan: SheetPlan): SheetReferences {

@@ -13,7 +13,13 @@ import {
 } from './package-facts.ts';
 import {fixtureBytes, readFixture, readXlsx, Workbook, writeXlsx} from './runtime.ts';
 import {anchorSpecImage, buildFrom, ONE_PX_PNG} from './spec-model.ts';
-import {attrsOf, hexBytes, imageXmlWellFormed, parseAnchorSide} from './xml-probes.ts';
+import {
+  attrsOf,
+  hexBytes,
+  imageXmlWellFormed,
+  parseAnchorSide,
+  reloadPatched,
+} from './xml-probes.ts';
 
 export const images = {
   // Build a workbook whose sheets place images at the spec's ranges, write it, and report the
@@ -313,6 +319,54 @@ export const images = {
       othersSurvive = ids.includes(id2);
     }
     return {supported, before, after, removedGone, othersSurvive};
+  },
+
+  // Write sheet `S` with one picture, put a vector shape into its drawing, and read it back, so the
+  // drawing is kept whole with no picture modelled. Then try to anchor a picture there → { keptShape,
+  // imagesModeled, addError, shapeAfterAttempt }: whether a plain save keeps the shape, how many
+  // pictures the read modelled, the add's error message or null, and whether a save after the
+  // attempt still carries the shape. "Carries" means in the drawing the saved sheet's `<drawing>`
+  // element references: a drawing part left in the package with nothing pointing at it is lost too.
+  pictureBesideKeptDrawingReport() {
+    const shape =
+      '<xdr:twoCellAnchor><xdr:from><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>3</xdr:row>' +
+      '<xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>5</xdr:col><xdr:colOff>0</xdr:colOff>' +
+      '<xdr:row>6</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:sp macro="" textlink="">' +
+      '<xdr:nvSpPr><xdr:cNvPr id="99" name="Rectangle 1"/><xdr:cNvSpPr/></xdr:nvSpPr>' +
+      '<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:sp>' +
+      '<xdr:clientData/></xdr:twoCellAnchor>';
+    const source = new Workbook();
+    const pictured = source.addWorksheet('S');
+    anchorSpecImage(pictured, source.addImage({buffer: ONE_PX_PNG, extension: 'png'}), 'A1:B2');
+    const read = reloadPatched(writeXlsx(source), {
+      'xl/drawings/drawing1.xml': (xml) => xml.replace('</xdr:wsDr>', `${shape}</xdr:wsDr>`),
+    });
+    const hasShape = (): boolean => {
+      const parts = partMapOf(writeXlsx(read));
+      const relId = attrsOf(
+        (parts['xl/worksheets/sheet1.xml'] ?? '').match(/<drawing\b[^>]*\/>/)?.[0] ?? '<drawing/>',
+      )['r:id'];
+      const relationship = [
+        ...(parts['xl/worksheets/_rels/sheet1.xml.rels'] ?? '').matchAll(
+          /<Relationship\b[^>]*\/>/g,
+        ),
+      ]
+        .map(([element]) => attrsOf(element))
+        .find((attrs) => attrs.Id === relId);
+      const target = relationship?.Target?.replace(/^\.\.\//, 'xl/');
+      return target !== undefined && /<xdr:sp\b/.test(parts[target] ?? '');
+    };
+    const sheet = read.getWorksheet('S');
+    if (sheet === undefined) throw new Error('the patched package lost sheet S');
+    const keptShape = hasShape();
+    const imagesModeled = sheet.images.length;
+    let addError: string | null = null;
+    try {
+      anchorSpecImage(sheet, read.addImage({buffer: ONE_PX_PNG, extension: 'png'}), 'D1:E2');
+    } catch (error) {
+      addError = messageOf(error);
+    }
+    return {keptShape, imagesModeled, addError, shapeAfterAttempt: hasShape()};
   },
 
   // Anchor an image and append rows in both orders → { imageFirst, rowsFirst }, each { rowCount,

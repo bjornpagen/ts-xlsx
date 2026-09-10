@@ -6,7 +6,7 @@
 // the cell grid, because a column or row can carry formatting while holding no cells.
 // Merges and views layer on in later slices.
 
-import {AuthoringError} from '../errors.ts';
+import {AuthoringError, quoted} from '../errors.ts';
 import {tokenSet} from '../token-set.ts';
 import {assertAxisInBounds, decodeCellRef, encodeAddress, tryDecodeCellRef} from './address.ts';
 import {type AutoFilter, canonicalizeAutoFilter} from './autofilter.ts';
@@ -682,6 +682,7 @@ export class Worksheet {
       | {readonly tl: AnchorPoint; readonly br: AnchorPoint; readonly editAs?: ImageEditAs}
       | {readonly tl: AnchorPoint; readonly ext: {readonly width: number; readonly height: number}},
   ): void {
+    refuseImagesBesideKeptDrawing(this);
     this.#images.add(imageId, anchor);
   }
 
@@ -691,6 +692,7 @@ export class Worksheet {
    * a drawing part without a lossy pixel round-trip.
    */
   addImageAnchor(imageId: number, anchor: ImageAnchor): void {
+    refuseImagesBesideKeptDrawing(this);
     this.#images.addAnchor(imageId, anchor);
   }
 
@@ -1224,6 +1226,27 @@ export class Worksheet {
       return cells;
     },
   };
+}
+
+/**
+ * Refuse a picture on a sheet whose drawing was kept whole from a file.
+ *
+ * A drawing holding a chart, shape or other object the model does not interpret is carried byte for
+ * byte, and none of its anchors are modelled. A worksheet references one drawing, so a modelled picture
+ * would need a second drawing the sheet cannot point at, and writing it would drop the kept one's
+ * content without a word. Called wherever a picture can reach a sheet, and by the writer, which is the
+ * guarantee for any path that skips the others.
+ *
+ * @throws {AuthoringError} if the sheet keeps such a drawing.
+ */
+export function refuseImagesBesideKeptDrawing(sheet: Worksheet): void {
+  if (sheet.preservedReferences.some((reference) => reference.element === 'drawing')) {
+    throw new AuthoringError(
+      `sheet ${quoted(sheet.name)} keeps a drawing whose content (a chart, shape or other object) this ` +
+        'library preserves but does not model, so a picture cannot be added to it: a sheet has one ' +
+        'drawing, and writing the picture would drop what the kept one holds',
+    );
+  }
 }
 
 // The bounds contract every splice-shaped edit shares: a 1-based start and a non-negative count.

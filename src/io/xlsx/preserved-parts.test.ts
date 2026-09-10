@@ -1,6 +1,9 @@
 import {strict as assert} from 'node:assert';
 import {test} from 'node:test';
 
+import {INTERNAL} from '../../core/internal.ts';
+import {Workbook} from '../../core/workbook.ts';
+import {AuthoringError} from '../../errors.ts';
 import {
   msRelationship,
   partBytes,
@@ -64,12 +67,17 @@ const HF_VML =
 const WORKBOOK_RELS = 'xl/_rels/workbook.xml.rels';
 const SHEET1_RELS = 'xl/worksheets/_rels/sheet1.xml.rels';
 
+// A picture's bytes. Nothing here decodes them, so a PNG signature is enough.
+const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+const PICTURE_AT_A1 = {tl: {col: 0, row: 0}, ext: {width: 10, height: 10}};
+
 function partNames(pkg: Uint8Array): string[] {
   return Object.keys(partsOf(pkg));
 }
 
-test('a worksheet drawing holding only a vector shape survives read→write', () => {
-  const src = typedForeignPackage({
+// Sheet `S`, whose one drawing holds a vector shape and nothing the model draws.
+function shapeDrawingPackage(): Uint8Array {
+  return typedForeignPackage({
     '[Content_Types].xml': contentTypes(
       '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>',
     ),
@@ -77,8 +85,10 @@ test('a worksheet drawing holding only a vector shape survives read→write', ()
     [SHEET1_RELS]: rels(relationship('rId1', 'drawing', '../drawings/drawing1.xml')),
     'xl/drawings/drawing1.xml': SHAPE_DRAWING,
   });
+}
 
-  const out = writeXlsx(readXlsx(src));
+test('a worksheet drawing holding only a vector shape survives read→write', () => {
+  const out = writeXlsx(readXlsx(shapeDrawingPackage()));
 
   assert.ok(
     partNames(out).some((n) => /xl\/drawings\/drawing\d+\.xml$/.test(n)),
@@ -100,6 +110,43 @@ test('a worksheet drawing holding only a vector shape survives read→write', ()
     /<xdr:sp\b/,
     'idempotent across a second round-trip',
   );
+});
+
+// A worksheet references one drawing. A kept one and a picture the model draws would need two, and the
+// writer referenced only the new one, so the chart or shape was dropped from the file without a word.
+test('a picture cannot be added beside a kept drawing, and the refusal leaves the sheet as it was', () => {
+  const workbook = readXlsx(shapeDrawingPackage());
+  const sheet = workbook.requireWorksheet('S');
+  const refusal = (error: unknown): boolean =>
+    error instanceof AuthoringError &&
+    error.message.includes('sheet "S"') &&
+    error.message.includes('does not model');
+  const id = workbook.addImage({buffer: PNG, extension: 'png'});
+  assert.throws(() => sheet.addImage(id, PICTURE_AT_A1), refusal);
+
+  // An import replaces a sheet's pictures and background, so it must refuse before clearing either.
+  sheet.addBackgroundImage(id);
+  const source = new Workbook();
+  const pictured = source.addWorksheet('P');
+  pictured.addImage(source.addImage({buffer: PNG, extension: 'png'}), PICTURE_AT_A1);
+  assert.throws(() => workbook.importImages(sheet, source.exportImages(pictured)), refusal);
+  assert.equal(sheet.backgroundImageId, id, 'the refused import cleared nothing');
+
+  assert.equal(sheet.images.length, 0);
+  assert.match(partText(writeXlsx(workbook), 'xl/drawings/drawing1.xml'), /<xdr:sp\b/);
+});
+
+test('the writer refuses a picture beside a kept drawing, however the two came to share a sheet', () => {
+  const kept = readXlsx(shapeDrawingPackage())
+    .requireWorksheet('S')
+    .preservedReferences.find((reference) => reference.element === 'drawing');
+  assert.ok(kept);
+  const workbook = new Workbook();
+  const sheet = workbook.addWorksheet('S');
+  sheet.addImage(workbook.addImage({buffer: PNG, extension: 'png'}), PICTURE_AT_A1);
+  // Only a codec reaches this channel. It stands in for any path that skips the authoring refusal.
+  sheet[INTERNAL].addPreservedReference(kept);
+  assert.throws(() => writeXlsx(workbook), AuthoringError);
 });
 
 test('a drawing holding both a picture and a chart preserves the chart across read→write', () => {

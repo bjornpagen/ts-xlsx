@@ -75,6 +75,11 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   model, so `addRow(['a', 'b'])` followed by `getCell('D1').value = 'x'` wrote A1 and B1 only, and a
   hyperlink or note set that way went with it. A commit now renders the row as the model holds it.
 
+- **Adding a picture to a sheet whose drawing holds a chart or shape dropped the chart or shape.** Such
+  a drawing is kept byte for byte with none of its anchors modelled, and a worksheet references one
+  drawing, so the writer planned a second one for the picture and referenced only that. `addImage`,
+  `addImageAnchor`, `importImages` and the writer now refuse with an `AuthoringError` naming the sheet.
+
 
 ## [3.1.0] — 2026-09-04
 
