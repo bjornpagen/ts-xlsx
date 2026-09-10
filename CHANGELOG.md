@@ -142,6 +142,11 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   `twoCell`, and a drawing is modeled only when every anchor holds exactly one embedded picture;
   anything else keeps the drawing whole.
 
+- **An error value whose code was not an Excel error wrote markup into the sheet.** A cell's error code,
+  and a formula's cached error result, went into `<v>` unescaped on the claim that the codes are a closed
+  set, which nothing checked: `{error: '</v></c><evil/>'}`, smuggled past the type, closed the cell and
+  wrote an element of its own. A code outside `ERROR_CODES` is now refused with `AuthoringError`.
+
 
 ## [3.1.0] — 2026-09-04
 

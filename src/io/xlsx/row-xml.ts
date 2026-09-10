@@ -16,6 +16,7 @@ import {
   type FormulaResult,
   detectValueType,
   isDataTableFormulaValue,
+  isErrorCode,
   isErrorValue,
   isFormulaValue,
   isHyperlinkValue,
@@ -26,6 +27,7 @@ import type {ColumnProperties, RowProperties, Worksheet} from '../../core/worksh
 import {AuthoringError, InternalError} from '../../errors.ts';
 import {
   boolAttr,
+  checkedToken,
   escapeAttr,
   escapeSpreadsheetText,
   escapeText,
@@ -347,9 +349,13 @@ function valueBody(value: Cell['value'] | FormulaResult, epoch: DateEpoch): Cell
       ? UNWRITABLE
       : {type: '', v: numberText(dateToSerial(value, epoch))};
   }
-  // The error codes are a closed set of canonical spellings (see ERROR_CODES) with no XML-special
-  // characters, so the code goes into the `<v>` unescaped.
-  if (isErrorValue(value)) return {type: 'e', v: value.error};
+  // The code goes into `<v>` unescaped, which is sound only for the canonical spellings in ERROR_CODES.
+  // `isErrorValue` asks for an `error` key and nothing more, so the set is checked here, as every closed
+  // token is at the write boundary: a code smuggled past the type closed the cell and wrote markup of
+  // its own into the sheet.
+  if (isErrorValue(value)) {
+    return {type: 'e', v: checkedToken(value.error, isErrorCode, 'cell error value')};
+  }
   return undefined;
 }
 

@@ -11,6 +11,7 @@ import {test} from 'node:test';
 
 import {zipSync} from 'fflate';
 
+import {ERROR_CODES} from '../../core/value.ts';
 import {
   partIn,
   partsWritten as partsOf,
@@ -114,6 +115,36 @@ test('<customFilter> refuses a foreign comparison operator', () => {
       ],
     } as never;
   });
+});
+
+// A cell error's code goes into `<v>` unescaped, and `isErrorValue` asks only for an `error` key, so a
+// code smuggled past the type wrote markup into the sheet: `{error: '</v></c><evil/>'}` closed the
+// cell and opened an element of its own. A cached formula error takes the same path.
+test('a cell error value and a cached formula error refuse a code outside ERROR_CODES', () => {
+  refuses((wb) => {
+    wb.getWorksheet('S')!.getCell('B1').value = {error: ESCAPE} as never;
+  });
+  refuses((wb) => {
+    wb.getWorksheet('S')!.getCell('B1').value = {
+      formula: '1/0',
+      result: {error: '#WHATEVER!'},
+    } as never;
+  });
+});
+
+test('every error code still writes, as a value and as a cached formula result', () => {
+  const wb = sheeted();
+  const sheet = wb.getWorksheet('S')!;
+  for (const [index, error] of ERROR_CODES.entries()) {
+    sheet.getCell(`B${index + 1}`).value = {error};
+    sheet.getCell(`C${index + 1}`).value = {formula: 'NA()', result: {error}};
+  }
+
+  const back = roundtrip(wb).getWorksheet('S');
+  for (const [index, error] of ERROR_CODES.entries()) {
+    assert.deepEqual(back?.getCell(`B${index + 1}`).value, {error});
+    assert.deepEqual(back?.getCell(`C${index + 1}`).value, {formula: 'NA()', result: {error}});
+  }
 });
 
 test('the tokens the enumerations do allow still round-trip', () => {
