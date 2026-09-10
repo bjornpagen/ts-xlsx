@@ -33,7 +33,7 @@ import {
 } from '../../core/protection.ts';
 import type {OutlineProperties, SheetView, Worksheet} from '../../core/worksheet.ts';
 import {numFinite, numInteger} from '../../xml/xml-attrs.ts';
-import {boolPresent, boolStrict, boolTristate, type XmlAttributes} from '../../xml/xml-scan.ts';
+import {boolStrict, boolTristate, type XmlAttributes} from '../../xml/xml-scan.ts';
 import {
   boolAttr,
   checkedToken,
@@ -392,16 +392,17 @@ export function applySheetProperties(local: string, attrs: XmlAttributes, sheet:
       break;
     case 'outlinePr':
       // A `<sheetPr>` child.
-      if (attrs.summaryBelow !== undefined)
-        sheet.outline.summaryBelow = boolPresent(attrs.summaryBelow);
-      if (attrs.summaryRight !== undefined)
-        sheet.outline.summaryRight = boolPresent(attrs.summaryRight);
+      // An unrecognised token is dropped rather than read as present-and-true and written as `"1"`.
+      for (const flag of ['summaryBelow', 'summaryRight'] as const) {
+        const value = boolTristate(attrs[flag]);
+        if (value !== undefined) sheet.outline[flag] = value;
+      }
       break;
     case 'sheetView':
       // Excel omits `showGridLines` when the grid is on, so only a present-and-false attribute is
       // recorded. Leaving it unset otherwise is what keeps a re-write from fabricating the
       // attribute on every sheet that never mentioned it.
-      if (attrs.showGridLines !== undefined && !boolPresent(attrs.showGridLines)) {
+      if (boolTristate(attrs.showGridLines) === false) {
         sheet.view.showGridLines = false;
       }
       break;
@@ -423,7 +424,9 @@ export function applySheetProperties(local: string, attrs: XmlAttributes, sheet:
     case 'pageSetUpPr':
       // The fit-to-page flag, a `<sheetPr>` child. Recorded only when the attribute is present, so a
       // `<pageSetUpPr>` present for other reasons (e.g. `autoPageBreaks`) leaves `fitToPage` unset.
-      if (attrs.fitToPage !== undefined) sheet.pageSetup.fitToPage = boolPresent(attrs.fitToPage);
+      if (boolTristate(attrs.fitToPage) !== undefined) {
+        sheet.pageSetup.fitToPage = boolStrict(attrs.fitToPage);
+      }
       break;
     case 'printOptions':
       applyPrintOptions(sheet.printOptions, attrs);

@@ -7,10 +7,11 @@
 // range height minus the header row (present unless `headerRowCount="0"`) and the totals row (present
 // only when `totalsRowCount` is positive), so reconstructing one from the other is lossless.
 
-import {encodeAddress, MAX_COLUMN, tryDecodeRange} from '../../core/address.ts';
+import {encodeAddress, tryDecodeRange} from '../../core/address.ts';
 import {
   isTotalsRowFunction,
   type Table,
+  TABLE_STYLE_FLAGS,
   type TableColumn,
   type TableOptions,
   type TableStyleInfo,
@@ -18,7 +19,7 @@ import {
 } from '../../core/table.ts';
 import {numInteger} from '../../xml/xml-attrs.ts';
 import {parseXml, TextCapture} from '../../xml/xml-read.ts';
-import {boolPresent, localName} from '../../xml/xml-scan.ts';
+import {boolTristate, localName} from '../../xml/xml-scan.ts';
 import {boolAttr, checkedToken, escapeAttr, escapeText, XML_DECLARATION} from '../../xml/xml.ts';
 import {NS} from './relationships.ts';
 
@@ -60,13 +61,17 @@ function tableStyleInfoXml(style: TableStyleInfo | undefined): string {
   if (style === undefined) return DEFAULT_TABLE_STYLE;
   let attrs = '';
   if (style.name !== undefined) attrs += ` name="${escapeAttr(style.name)}"`;
-  attrs +=
-    boolAttr('showFirstColumn', style.showFirstColumn) +
-    boolAttr('showLastColumn', style.showLastColumn) +
-    boolAttr('showRowStripes', style.showRowStripes) +
-    boolAttr('showColumnStripes', style.showColumnStripes);
+  attrs += TABLE_STYLE_FLAGS.map((flag) => boolAttr(flag, style[flag])).join('');
   return `<tableStyleInfo${attrs}/>`;
 }
+
+// A `<tableColumn>` as the reader accumulates it: its attributes, then a `<totalsRowFormula>` child.
+type TableColumnDraft = {
+  name: string;
+  totalsRowLabel?: string;
+  totalsRowFunction?: TotalsRowFunction;
+  totalsRowFormula?: string;
+};
 
 function tableColumnXml(column: TableColumn, id: number): string {
   let attrs = `id="${id}" name="${escapeAttr(column.name)}"`;
@@ -100,12 +105,10 @@ export function parseTable(xml: string): TableOptions | undefined {
   let totalsRowShown: boolean | undefined; // Absent unless the part states the attribute.
   let style: TableStyleInfo | undefined; // Absent unless the part carries a `<tableStyleInfo>`.
   let hasAutoFilter = false; // Only present when the part carries an `<autoFilter>` element.
-  const columns: {
-    name: string;
-    totalsRowLabel?: string;
-    totalsRowFunction?: TotalsRowFunction;
-    totalsRowFormula?: string;
-  }[] = [];
+  const columns: TableColumnDraft[] = [];
+  // The column a `<totalsRowFormula>` belongs to. Unset while inside a column that was skipped, so
+  // its formula lands nowhere rather than on the column before it.
+  let currentColumn: TableColumnDraft | undefined;
 
   // A `<totalsRowFormula>` is a text child of the current `<tableColumn>`, so it is captured across
   // open/text/close rather than from an attribute. `calculatedColumnFormula` is a sibling child of
@@ -125,9 +128,9 @@ export function parseTable(xml: string): TableOptions | undefined {
           headerRowCount = numInteger(attrs.headerRowCount, 0) ?? headerRowCount;
           totalsRowCount = numInteger(attrs.totalsRowCount, 0) ?? totalsRowCount;
           // Capture the flag verbatim so it re-emits exactly (or, absent, stays absent) rather
-          // than being normalised.
-          if (attrs.totalsRowShown !== undefined)
-            totalsRowShown = boolPresent(attrs.totalsRowShown);
+          // than being normalised. An unrecognised token is dropped: read as present-and-true, it
+          // was written back as `"1"`.
+          totalsRowShown = boolTristate(attrs.totalsRowShown);
           break;
         case 'autoFilter':
           hasAutoFilter = true;
@@ -137,25 +140,20 @@ export function parseTable(xml: string): TableOptions | undefined {
           // preserving the round-trip: the writer re-emits only the attributes we actually saw.
           const captured: {-readonly [K in keyof TableStyleInfo]: TableStyleInfo[K]} = {};
           if (attrs.name !== undefined) captured.name = attrs.name;
-          if (attrs.showFirstColumn !== undefined)
-            captured.showFirstColumn = boolPresent(attrs.showFirstColumn);
-          if (attrs.showLastColumn !== undefined)
-            captured.showLastColumn = boolPresent(attrs.showLastColumn);
-          if (attrs.showRowStripes !== undefined)
-            captured.showRowStripes = boolPresent(attrs.showRowStripes);
-          if (attrs.showColumnStripes !== undefined) {
-            captured.showColumnStripes = boolPresent(attrs.showColumnStripes);
+          for (const flag of TABLE_STYLE_FLAGS) {
+            const value = boolTristate(attrs[flag]);
+            if (value !== undefined) captured[flag] = value;
           }
           style = captured;
           break;
         }
         case 'tableColumn': {
-          if (attrs.name === undefined) break;
-          const column: {
-            name: string;
-            totalsRowLabel?: string;
-            totalsRowFunction?: TotalsRowFunction;
-          } = {name: attrs.name};
+          if (attrs.name === undefined) {
+            currentColumn = undefined;
+            break;
+          }
+          const column: TableColumnDraft = {name: attrs.name};
+          currentColumn = column;
           if (attrs.totalsRowLabel !== undefined) column.totalsRowLabel = attrs.totalsRowLabel;
           // An unrecognised totalsRowFunction is dropped rather than trusted in verbatim: the token
           // is a closed OOXML enumeration, so a foreign value is malformed input, not a future Excel
@@ -180,11 +178,10 @@ export function parseTable(xml: string): TableOptions | undefined {
     onClose(elementName) {
       const formula = totalsFormula.close(localName(elementName));
       if (formula === undefined) return;
-      // Attach to the column currently being parsed, the last one pushed. Excel writes the child
-      // only for `totalsRowFunction="custom"`, so a formula on any other column is meaningless, but
-      // preserving whatever the part carried keeps the round-trip faithful rather than second-guessing.
-      const column = columns[columns.length - 1];
-      if (column !== undefined) column.totalsRowFormula = formula;
+      // Attach to the column currently being parsed. Excel writes the child only for
+      // `totalsRowFunction="custom"`, so a formula on any other column is meaningless, but preserving
+      // whatever the part carried keeps the round-trip faithful rather than second-guessing.
+      if (currentColumn !== undefined) currentColumn.totalsRowFormula = formula;
     },
   });
 
@@ -195,13 +192,17 @@ export function parseTable(xml: string): TableOptions | undefined {
   // also what keeps the `Table` constructor's authoring-facing throw out of the reader's path.
   const decoded = tryDecodeRange(ref);
   if (decoded === undefined) return undefined;
-  const {top, left, bottom} = decoded;
-  if (top === undefined || left === undefined || bottom === undefined) return undefined;
-  // The anchor is inside the grid, but the columns counted off it need not be: a part is free to
-  // declare more `<tableColumn>`s than there is room for to the right of its own `ref`. That is the
-  // same unreadable table the constructor now refuses, and refusing it is an authoring-facing throw
-  // this path must not raise, so the table is dropped whole like one with an unreadable anchor.
-  if (left + columns.length - 1 > MAX_COLUMN) return undefined;
+  const {top, left, bottom, right} = decoded;
+  if (top === undefined || left === undefined || bottom === undefined || right === undefined) {
+    return undefined;
+  }
+  // The model lays its columns out from the anchor, one per `<tableColumn>`, so the columns must fill
+  // the ref's width exactly. A column skipped for want of a name used to shift every column after it
+  // one place left, shrinking the range and handing the next column's totals formula to the previous
+  // one; a part declaring more columns than its ref is wide could also run past the grid. Either way
+  // the table is not the one the part describes, so it is dropped whole like one with an unreadable
+  // anchor.
+  if (columns.length !== right - left + 1) return undefined;
 
   const headerRow = headerRowCount !== 0;
   const totalsRow = totalsRowCount > 0;

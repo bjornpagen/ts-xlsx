@@ -597,7 +597,9 @@ corners itself.
 
 That leaves each feature to decide what "drop" means for it, and both readings are in the tree.
 A table is dropped *whole* when its `ref` is unreadable, for the `<cfRule>` reason: the anchor is
-the coordinate every other field is read relative to. A `sqref` is dropped *per area*, because its
+the coordinate every other field is read relative to. It is dropped whole too when its column count
+differs from the `ref` width, since the model lays columns out one per `<tableColumn>` from the anchor
+and a missing one would shift every column after it. A `sqref` is dropped *per area*, because its
 areas are independent and one unreadable area says nothing about its neighbours. Where the
 authoring path shares the code, the guard stays on the authoring side and the reader filters before
 reaching it, so `addDataValidation` still refuses a range naming no cells while a file carrying one

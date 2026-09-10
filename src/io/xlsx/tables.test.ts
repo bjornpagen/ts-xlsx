@@ -52,6 +52,53 @@ test('a table read back from a written package exposes its name, columns, and re
   assert.equal(table.options.ref, 'A1', 'the anchor reconstructs to the top-left cell');
 });
 
+const tablePart = (ref: string, columns: string, style = ''): string =>
+  '<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="1" name="T" ' +
+  `displayName="T" ref="${ref}" totalsRowCount="1"><tableColumns>${columns}</tableColumns>${style}</table>`;
+
+// A `<tableColumn>` with no name was skipped with nothing checking the count, so the columns after it
+// shifted one place left: removing the third column's name from an A1:C3 table read back columns a
+// and b, the range A1:B3, and b owning the third column's `SUM(T[c])`.
+test('a nameless column drops the table rather than shifting its columns and totals formula', () => {
+  const custom = (name: string) =>
+    `<tableColumn id="3"${name} totalsRowFunction="custom"><totalsRowFormula>SUM(T[c])</totalsRowFormula></tableColumn>`;
+  const columns = '<tableColumn id="1" name="a"/><tableColumn id="2" name="b"/>';
+
+  const whole = parseTable(tablePart('A1:C3', columns + custom(' name="c"')));
+  assert.deepEqual(
+    whole?.columns.map((column) => [column.name, column.totalsRowFormula]),
+    [
+      ['a', undefined],
+      ['b', undefined],
+      ['c', 'SUM(T[c])'],
+    ],
+    'control: with the name present the formula sits on its own column',
+  );
+  assert.equal(parseTable(tablePart('A1:C3', columns + custom(''))), undefined);
+});
+
+test('a table whose column count differs from its ref width is dropped whole', () => {
+  const two = '<tableColumn id="1" name="a"/><tableColumn id="2" name="b"/>';
+  assert.ok(parseTable(tablePart('A1:B3', two)), 'control: two columns across a two-wide ref');
+  assert.equal(
+    parseTable(tablePart('A1:C3', two)),
+    undefined,
+    'fewer columns than the ref is wide',
+  );
+  assert.equal(parseTable(tablePart('A1:A3', two)), undefined, 'more columns than the ref is wide');
+});
+
+// `boolPresent` read `"yes"` as present-and-true, so the writer turned it into `"1"`.
+test('an unrecognised boolean token on a table or its style info is dropped, not read as true', () => {
+  const two = '<tableColumn id="1" name="a"/><tableColumn id="2" name="b"/>';
+  const style =
+    '<tableStyleInfo name="TableStyleLight1" showRowStripes="yes" showFirstColumn="0"/>';
+  const part = tablePart('A1:B3', two, style).replace('totalsRowCount="1"', 'totalsRowShown="yes"');
+  const options = parseTable(part);
+  assert.deepEqual(options?.style, {name: 'TableStyleLight1', showFirstColumn: false});
+  assert.equal(options?.totalsRowShown, undefined);
+});
+
 test('a loaded table exposes its data-row count, not an empty rows array', () => {
   const [table] = roundtripTable({
     name: 'T',

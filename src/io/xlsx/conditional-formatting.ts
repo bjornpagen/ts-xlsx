@@ -38,7 +38,7 @@ import {
   type SaxHandlers,
   TextCapture,
 } from '../../xml/xml-read.ts';
-import {boolPresent, boolStrict, localName} from '../../xml/xml-scan.ts';
+import {boolPresent, boolStrict, boolTristate, localName} from '../../xml/xml-scan.ts';
 import {
   boolAttr,
   checkedToken,
@@ -542,8 +542,9 @@ function newDraft(attrs: Record<string, string>): RuleDraft {
     stdDev: numInteger(attrs.stdDev),
     percent: boolStrict(attrs.percent),
     bottom: boolStrict(attrs.bottom),
-    // aboveAverage defaults to true in OOXML; only an explicit "0" means below-average.
-    aboveAverage: attrs.aboveAverage === undefined ? undefined : boolPresent(attrs.aboveAverage),
+    // aboveAverage defaults to true in OOXML; only an explicit "0"/"false" means below-average, and an
+    // unrecognised token is dropped, which leaves that default in force.
+    aboveAverage: boolTristate(attrs.aboveAverage),
     equalAverage: boolStrict(attrs.equalAverage),
     dxfId: parseIndexAttr(attrs.dxfId),
     iconSet: undefined,

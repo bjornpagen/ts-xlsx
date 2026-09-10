@@ -207,6 +207,16 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   separate field list, so two fills written identically (a solid fill that states the default
   background, a gradient with `degree: 0`) no longer take two entries in the stylesheet.
 
+- **A table with a nameless column was read shifted.** The column was skipped with nothing checking
+  the count, so every later column moved one place left, the range shrank by a column, and a totals
+  formula landed on the column before its own. A table whose column count differs from its `ref` width
+  is now dropped whole, as one with an unreadable `ref` already was.
+
+- **Optional booleans read an unrecognised token as `true`.** `totalsRowShown` and the
+  `tableStyleInfo` banding flags on a table, `summaryBelow`/`summaryRight`, `fitToPage` and
+  `showGridLines` on a sheet, and a conditional format's `aboveAverage` read `"yes"` as on, so the
+  writer turned it into `"1"`. Such a token is now dropped.
+
 
 ## [3.1.0] — 2026-09-04
 

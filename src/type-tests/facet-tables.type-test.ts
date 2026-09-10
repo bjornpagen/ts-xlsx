@@ -37,7 +37,10 @@ import type {
   EveryGradientStopFieldIsCloned,
   EveryPatternFillFieldIsCloned,
 } from '../core/style.ts';
-import type {EveryTableStyleInfoFieldIsCloned} from '../core/table.ts';
+import type {
+  EveryTableStyleFlagIsDeclared,
+  EveryTableStyleInfoFieldIsCloned,
+} from '../core/table.ts';
 import type {EveryWorksheetModelFieldHasAFacet} from '../core/worksheet-model.ts';
 import type {EverySlotIsInSchemaOrder} from '../io/xlsx/theme-xml.ts';
 import type {Equal, Expect} from './expect.ts';
@@ -58,6 +61,8 @@ export type FacetTableExhaustiveness = [
   Expect<Equal<EveryHeaderFooterElementIsDeclared, never>>,
   // The sheet-protection flags, turned into `<sheetProtection>` attributes and back from one table.
   Expect<Equal<EverySheetProtectionFlagIsDeclared, never>>,
+  // A table's banding flags, turned into `<tableStyleInfo>` attributes and back from one table.
+  Expect<Equal<EveryTableStyleFlagIsDeclared, never>>,
   // A list, not a record, so it owes the other half of its proof explicitly: BIFF12 indexes the fill
   // patterns, so the enumeration is needed in order and an ordered list can omit a member silently.
   Expect<Equal<EveryFillPatternIsOrdered, never>>,

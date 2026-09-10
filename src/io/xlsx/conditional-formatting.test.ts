@@ -557,8 +557,9 @@ test('an iconSet with no named family emits the element without an empty iconSet
 });
 
 // `gradient` and `aboveAverage` are both default-true xsd:booleans, so a producer that spells false
-// the long way must turn them off exactly as the digit does, and an unrecognised token, on a
-// default-true attribute, still reads as true rather than as absent.
+// the long way must turn them off exactly as the digit does, and an unrecognised token leaves the
+// default in force: the x14 gradient reads it as on, and `aboveAverage` drops it, which the writer
+// (emitting only `aboveAverage="0"`) spells the same way as on.
 
 test('x14 gradient="false" turns the bar flat exactly as gradient="0" does', () => {
   const written = sheetXml(writeXlsx(dataBarBook({gradient: true})));
@@ -582,7 +583,11 @@ test('aboveAverage="false" reads as below-average; garbage stays above, absence 
   assert.equal(read(' aboveAverage="0"'), false);
   assert.equal(read(' aboveAverage="false"'), false, 'the long spelling turns it off too');
   assert.equal(read(' aboveAverage="1"'), true);
-  assert.equal(read(' aboveAverage="yes"'), true, 'a default-true attribute reads garbage as on');
+  assert.equal(
+    read(' aboveAverage="yes"'),
+    undefined,
+    'an unrecognised token is dropped, leaving the default above-average in force',
+  );
   assert.equal(read(''), undefined, 'an absent attribute stays absent, not present-and-true');
 });
 

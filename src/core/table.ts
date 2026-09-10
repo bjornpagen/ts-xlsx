@@ -108,6 +108,21 @@ export type EveryTableStyleInfoFieldIsCloned = AssertNever<
   Exclude<keyof Required<TableStyleInfo>, keyof typeof STYLE_INFO_CLONE>
 >;
 
+/** The `<tableStyleInfo>` banding flags, in CT_TableStyleInfo attribute order. Each is an optional
+ * OOXML boolean, so the list is the whole of what the reader and the writer need to know about them. */
+export const TABLE_STYLE_FLAGS = [
+  'showFirstColumn',
+  'showLastColumn',
+  'showRowStripes',
+  'showColumnStripes',
+] as const satisfies readonly (keyof TableStyleInfo)[];
+
+/** Compile-time proof that `name` and {@link TABLE_STYLE_FLAGS} cover every {@link TableStyleInfo}
+ * field, so a flag added to the type cannot be read or written by one direction only. */
+export type EveryTableStyleFlagIsDeclared = AssertNever<
+  Exclude<keyof TableStyleInfo, 'name' | (typeof TABLE_STYLE_FLAGS)[number]>
+>;
+
 function cloneStyleInfo(style: TableStyleInfo): TableStyleInfo {
   const clone = cloneWith(style, STYLE_INFO_CLONE);
   // `cloneWith` skips a field the source omits; the `None` rule turns a present one into an omission,

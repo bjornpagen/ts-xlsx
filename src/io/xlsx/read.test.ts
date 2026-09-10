@@ -1187,6 +1187,27 @@ test('a sheet with default outline positions emits no <outlinePr>', () => {
   assert.equal(back?.outline.summaryRight, undefined);
 });
 
+// These optional booleans were read with `boolPresent`, which takes `"yes"` as present-and-true, so a
+// token the schema does not allow came back out of the writer as `"1"`.
+test('an unrecognised boolean token on outlinePr or pageSetUpPr is dropped, not written as "1"', () => {
+  const wb = new Workbook();
+  const sheet = wb.addWorksheet('S');
+  sheet.getCell('A1').value = 1;
+  sheet.outline.summaryBelow = false;
+  sheet.pageSetup.fitToPage = true;
+  const pkg = patchParts(writeXlsx(wb), {
+    [SHEET1]: (xml) =>
+      xml
+        .replace('summaryBelow="0"', 'summaryBelow="yes"')
+        .replace('fitToPage="1"', 'fitToPage="yes"'),
+  });
+  const back = readXlsx(pkg);
+  assert.equal(back.getWorksheet('S')?.outline.summaryBelow, undefined);
+  assert.equal(back.getWorksheet('S')?.pageSetup.fitToPage, undefined);
+  const rewritten = sheetXml(writeXlsx(back));
+  assert.doesNotMatch(rewritten, /summaryBelow=|fitToPage=/, 'neither is written back at all');
+});
+
 test('outline flags survive a worksheet model export/import', () => {
   const wb = new Workbook();
   const src = wb.addWorksheet('Src');
