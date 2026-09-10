@@ -235,6 +235,52 @@ test('a stray cell between rows neither joins the yielded row nor is placed by e
   assert.equal(readXlsx(archive).worksheets[0]?.getCell('B1').value, null);
 });
 
+// The streamer pushed every `<mergeCell ref>` raw, so this part streamed as
+// `["junk", "", "B2:A1", "A1:B2", "A1:C3", "D:D"]` while the buffered reader admitted two ranges.
+test('streamed merges are the ones readXlsx admits: readable, canonical and not overlapping', () => {
+  const archive = foreignPackage({
+    [SHEET1]:
+      '<?xml version="1.0"?><worksheet><sheetData/><mergeCells>' +
+      '<mergeCell ref="junk"/><mergeCell ref=""/><mergeCell ref="B2:A1"/><mergeCell ref="A1:B2"/>' +
+      '<mergeCell ref="A1:C3"/><mergeCell ref="D:D"/></mergeCells></worksheet>',
+  });
+  const buffered = [...(readXlsx(archive).worksheets[0]?.merges ?? [])];
+  assert.deepEqual(buffered, ['A1:B2', 'D:D'], 'precondition: what the buffered reader admits');
+  const [sheet] = [...readWorkbookStream(archive)];
+  assert.deepEqual(sheet?.merges, buffered);
+});
+
+// The streamer used the names as the workbook part spelled them, so this package streamed as
+// `["S", "S", "a/b"]` beside a buffered `["S", "S (2)", "ab"]`, and `{sheet: 'S (2)'}` was refused.
+test('streamed sheet names are repaired as readXlsx repairs them, and select by that name', () => {
+  const archive = foreignPackage({
+    'xl/workbook.xml':
+      '<?xml version="1.0"?><workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' +
+      '<sheet name="S" sheetId="1" r:id="rId1"/><sheet name="S" sheetId="2" r:id="rId2"/>' +
+      '<sheet name="a/b" sheetId="3" r:id="rId3"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels':
+      '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="x" Target="worksheets/sheet1.xml"/>' +
+      '<Relationship Id="rId2" Type="x" Target="worksheets/sheet2.xml"/>' +
+      '<Relationship Id="rId3" Type="x" Target="worksheets/sheet3.xml"/></Relationships>',
+    [SHEET1]: foreignSheet('<row r="1"><c r="A1"><v>1</v></c></row>'),
+    'xl/worksheets/sheet2.xml': foreignSheet('<row r="1"><c r="A1"><v>2</v></c></row>'),
+    'xl/worksheets/sheet3.xml': foreignSheet('<row r="1"><c r="A1"><v>3</v></c></row>'),
+  });
+  const buffered = readXlsx(archive).worksheets.map((sheet) => sheet.name);
+  assert.deepEqual(
+    buffered,
+    ['S', 'S (2)', 'ab'],
+    'precondition: the buffered reader repairs both',
+  );
+  assert.deepEqual(
+    [...readWorkbookStream(archive)].map((sheet) => sheet.name),
+    buffered,
+  );
+  assert.equal(rows(archive, {sheet: 'S (2)'})[0]?.cells[0]?.value, 2);
+  assert.equal(rows(archive, {sheet: 'ab'})[0]?.cells[0]?.value, 3);
+});
+
 test('a stylesheet at an unconventional path is still found, so a date stays a date', () => {
   // The resolution both readers run: through the relationship that names the part, with the
   // conventional path only as the fallback. A package is free to name any part anything, and a

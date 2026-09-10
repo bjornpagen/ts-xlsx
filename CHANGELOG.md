@@ -230,6 +230,13 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   past the last row, was placed by `readXlsx` but not streamed; neither reader places it now. A stray
   `<c>` between two rows could be added to the row the streamer had already yielded.
 
+- **Streamed sheet names and merges described a malformed package differently from `readXlsx`.** A
+  `StreamedSheet.name` was the raw declared name, so two sheets named `S` both streamed as `S` and
+  `readSheetRows({sheet: 'S (2)'})` refused the name `readXlsx` reports; names are now repaired the same
+  way, and a sheet is selected by its repaired name. `StreamedSheet.merges` held every `<mergeCell>`
+  verbatim, unreadable, reversed and overlapping ones included; it now holds the canonical ranges
+  `readXlsx` admits.
+
 
 ## [3.1.0] — 2026-09-04
 

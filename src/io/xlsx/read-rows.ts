@@ -21,6 +21,7 @@
 import type {DateEpoch} from '../../core/date.ts';
 import type {CellValue} from '../../core/value.ts';
 import {Workbook} from '../../core/workbook.ts';
+import {WorksheetMerges} from '../../core/worksheet-merges.ts';
 import {AuthoringError, quoted} from '../../errors.ts';
 import {numInteger} from '../../xml/xml-attrs.ts';
 import {closeEmptyElements, parseXmlPasses} from '../../xml/xml-read.ts';
@@ -28,6 +29,7 @@ import {boolStrict, localName, type XmlAttributes, xmlEvents} from '../../xml/xm
 import {openSpreadsheetPackage, readPartRelationships} from '../opc/read-opc.ts';
 import {unsupportedWorkbookPart} from '../opc/sniff-format.ts';
 import {ColumnRecordBudget} from '../read-policy/column-budget.ts';
+import {admitting, repairedSheetNames} from '../read-policy/read-repair.ts';
 import {CellStyleResolver} from '../style/cell-style-resolution.ts';
 import {CellAccumulator, WORKSHEET_BODY_EMPTY_CLOSES} from './cell-accumulator.ts';
 import type {SharedString} from './cell-value.ts';
@@ -107,7 +109,11 @@ export interface StreamedRow {
  * surface settles, so a consumer destructures them and never has to spell them.
  */
 export interface StreamedSheet {
-  /** The worksheet's declared name, joined from the workbook part. Never a positional placeholder. */
+  /**
+   * The worksheet's name, joined from the workbook part and repaired exactly as `readXlsx` repairs it
+   * (a duplicate becomes `S (2)`, a forbidden character is removed), so the two readers name a sheet
+   * the same way. Never a positional placeholder.
+   */
   readonly name: string;
   /** Stream this sheet's rows, one at a time, in sheet order. */
   // The two extra arguments are not decoration: a bare `Generator<T>` defaults its return and next
@@ -117,7 +123,11 @@ export interface StreamedSheet {
   rows(): Generator<StreamedRow, void, undefined>;
   /** 1-based indices of columns the sheet declares hidden, ascending. */
   readonly hiddenColumns: readonly number[];
-  /** The sheet's merged ranges, as canonical A1 range strings, in declaration order. */
+  /**
+   * The sheet's merged ranges, as canonical A1 range strings, in declaration order: the ones
+   * `readXlsx` admits, so an unreadable range, or one overlapping a range declared before it, is
+   * dropped.
+   */
   readonly merges: readonly string[];
 }
 
@@ -146,7 +156,14 @@ export function* readSheetRows(
   const sheetXml = pkg.sheetXml(chosen.relId);
   // The sheet is named but its part is missing (a truncated or foreign package), so it has no rows.
   if (sheetXml === undefined) return;
-  yield* scanSheet(sheetXml, pkg.sharedStrings, pkg.xfStyles, pkg.dateEpoch, new Set(), []);
+  yield* scanSheet(
+    sheetXml,
+    pkg.sharedStrings,
+    pkg.xfStyles,
+    pkg.dateEpoch,
+    new Set(),
+    new WorksheetMerges(),
+  );
 }
 
 /**
@@ -211,7 +228,11 @@ function openPackage(data: Uint8Array, maxUncompressedBytes: number | undefined)
   const properties = new Workbook();
   const sheetsPass = workbookSheetsPass();
   parseXmlPasses(workbookXml, [sheetsPass, workbookPropertiesPass(properties)]);
-  const sheets = sheetsPass.result();
+  // Repaired by the same function `readXlsx` runs, so a streamed sheet carries the name the buffered
+  // model gives it, and selecting a sheet by that name works in both. Raw, a file with two sheets named
+  // `S` streamed two of them, `readSheetRows({sheet: 'S (2)'})` refused a name `readXlsx` reports, and a
+  // streamed name handed to the streaming writer was refused there.
+  const sheets = repairedSheetNames(sheetsPass.result());
   const rels = readPartRelationships(documentPath, text);
   const sharedStrings = parseSharedStrings(
     rels.relatedTextOrPath('sharedStrings', SHARED_STRINGS_PART),
@@ -258,7 +279,7 @@ class StreamedSheetReader implements StreamedSheet {
   readonly #xfStyles: ReadonlyArray<XfStyle>;
   readonly #dateEpoch: DateEpoch;
   #hiddenColumns = new Set<number>();
-  #merges: string[] = [];
+  #merges = new WorksheetMerges();
   #scanned = false;
 
   constructor(
@@ -277,7 +298,7 @@ class StreamedSheetReader implements StreamedSheet {
 
   *rows(): Generator<StreamedRow, void, undefined> {
     this.#hiddenColumns = new Set();
-    this.#merges = [];
+    this.#merges = new WorksheetMerges();
     this.#scanned = false;
     yield* scanSheet(
       this.#xml,
@@ -303,7 +324,7 @@ class StreamedSheetReader implements StreamedSheet {
     // that explicit at the one place it can happen. A `Worksheet` accessor hands back its live array
     // because it *is* the owner and the array outlives the call; see the collection-accessor rule in
     // `docs/architecture.md`.
-    return [...this.#merges];
+    return [...this.#merges.ranges];
   }
 
   // Drain a scan purely for its summaries when the caller reads them without (or before) iterating
@@ -330,7 +351,7 @@ function* scanSheet(
   xfStyles: ReadonlyArray<XfStyle>,
   dateEpoch: DateEpoch,
   hiddenColumns: Set<number>,
-  merges: string[],
+  merges: WorksheetMerges,
 ): Generator<StreamedRow, void, undefined> {
   let rowNumber = 0;
   let rowHidden = false;
@@ -396,9 +417,14 @@ function* scanSheet(
         case 'col':
           collectColumn(event.attrs, hiddenColumns, styleResolution, columnBudget);
           break;
-        case 'mergeCell':
-          if (event.attrs.ref !== undefined) merges.push(event.attrs.ref);
+        case 'mergeCell': {
+          // Admitted through the buffered reader's own collection, not pushed raw: it canonicalises
+          // the range and refuses an unreadable, sheet-qualified or overlapping one, and its index
+          // keeps that overlap check from growing with the square of the file's merges.
+          const ref = event.attrs.ref;
+          if (ref !== undefined) admitting(() => merges.add(ref));
           break;
+        }
         default:
           break;
       }
