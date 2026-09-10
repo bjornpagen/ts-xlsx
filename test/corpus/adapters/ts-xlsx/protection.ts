@@ -6,7 +6,7 @@ import {messageOf} from '../../thrown.ts';
 import type {Untyped} from '../../untyped.ts';
 import {partMapOf} from './package-facts.ts';
 import {decodeAddress, readXlsx, Workbook, writeXlsx} from './runtime.ts';
-import {attrsOf, decodeXmlEntities, xmlWellFormed} from './xml-probes.ts';
+import {attrsOf, decodeXmlEntities, reloadPatched, xmlWellFormed} from './xml-probes.ts';
 
 // An attribute's value as the author wrote it, or null when the element or attribute is missing.
 const decode = (raw: string | null | undefined) =>
@@ -228,6 +228,27 @@ export const protection = {
         overrideContentType: decode(overrideAttrs?.ContentType),
         relTarget: decode(relEl === undefined ? null : attrsOf(relEl).Target),
       },
+    };
+  },
+
+  // Put `<sheetProtection ${attributes}/>` into a written sheet, read it, and write it again →
+  // { protected, legacyPasswordHash, rewritten }, where `rewritten` is the attributes of the
+  // `<sheetProtection>` the second write emitted, or null when it emitted none.
+  legacySheetProtectionReport(attributes: string) {
+    const wb = new Workbook();
+    wb.addWorksheet('S').getCell('A1').value = 'x';
+    const read = reloadPatched(writeXlsx(wb), {
+      // `<sheetProtection>` follows `<sheetData>` in CT_Worksheet order.
+      'xl/worksheets/sheet1.xml': (xml) =>
+        xml.replace('</sheetData>', `</sheetData><sheetProtection ${attributes}/>`),
+    });
+    const sheetProtection = read.getWorksheet('S')?.protection;
+    const rewrittenXml = partMapOf(writeXlsx(read))['xl/worksheets/sheet1.xml'] ?? '';
+    const element = rewrittenXml.match(/<sheetProtection\b[^>]*\/>/)?.[0];
+    return {
+      protected: sheetProtection !== undefined,
+      legacyPasswordHash: sheetProtection?.legacyPasswordHash ?? null,
+      rewritten: element === undefined ? null : attrsOf(element),
     };
   },
 };

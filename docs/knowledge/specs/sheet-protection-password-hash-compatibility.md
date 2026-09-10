@@ -26,7 +26,7 @@ how, to also satisfy older consumers that only read the legacy hash.
   2. **Legacy only**: the 16-bit `password` attribute. Broad compatibility, cryptographically
      weak, deprecated.
   3. **Both**: emit the modern hash and the legacy attribute so every consumer enforces
-     *something*. Maximizes compatibility at the cost of shipping the weak hash too.
+     _something_. Maximizes compatibility at the cost of shipping the weak hash too.
 - Each protection permission passed to `protect()` (objects, scenarios, `selectLockedCells`,
   `formatCells`, `insertRows`, …) is serialized as its corresponding `sheetProtection` flag.
 - Protecting with **no** password still writes the permission flags but fabricates **no** hash.
@@ -40,6 +40,17 @@ how, to also satisfy older consumers that only read the legacy hash.
   compatibility, and do not let its presence imply strong protection.
 - Worksheet protection is not encryption, since the sheet data is still readable in the zip, so the
   API docs must not imply confidentiality. This belongs alongside any future workbook-encryption work.
+
+## What a file already carries
+
+A separate matter from what to emit for a password a caller supplies. A file written by pre-2010 Excel,
+XlsxWriter, openpyxl or LibreOffice often protects a sheet with the legacy hash alone. The reader keeps
+that hash verbatim as `SheetProtection.legacyPasswordHash` and the writer re-emits it before `sheet="1"`,
+so a save never turns a password-guarded sheet into one anyone can unprotect. The hash is held to its
+schema type (`ST_UnsignedShortHex`, four hexadecimal digits) on both sides: a malformed one is dropped on
+read and refused on write. It is never derived from a password, since `protect` still writes only the
+agile credential, so the policy question above is untouched. An element without `sheet="1"` records an
+unprotected sheet, because `sheet` defaults to false.
 
 ## Prior art
 

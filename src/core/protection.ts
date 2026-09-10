@@ -11,6 +11,7 @@
 
 import {concat, toBase64, utf16leBytes} from '../bytes.ts';
 import {sha512} from '../sha512.ts';
+import type {AssertNever} from './internal.ts';
 
 /**
  * Whether each protected-sheet operation stays available to a user. Every flag is an
@@ -63,6 +64,24 @@ export interface SheetProtectionCredential {
 export interface SheetProtection {
   readonly flags: SheetProtectionFlags;
   readonly credential?: SheetProtectionCredential;
+  /**
+   * The legacy 16-bit password hash (`password="CC3D"`) a file protected the sheet with, kept verbatim
+   * so the sheet stays guarded after a save. Pre-2010 Excel, XlsxWriter, openpyxl and LibreOffice write
+   * it instead of the agile credential. It is never derived from a password: `protect` writes only the
+   * agile form, and this hash is weak enough that nobody should want it authored.
+   */
+  readonly legacyPasswordHash?: string;
+}
+
+const LEGACY_PASSWORD_HASH = /^[0-9A-Fa-f]{4}$/;
+
+/**
+ * Whether a string is a legacy sheet password hash as its schema type (`ST_UnsignedShortHex`) spells
+ * one: exactly four hexadecimal digits. The reader keeps only such a value and the writer refuses
+ * anything else, since the hash is interpolated into an attribute.
+ */
+export function isLegacyPasswordHash(value: string): boolean {
+  return LEGACY_PASSWORD_HASH.test(value);
 }
 
 /**
@@ -73,10 +92,7 @@ export interface SheetProtection {
  * and deserialization can never fall out of step. Most editing operations default to forbidden
  * under protection; selecting cells and the object/scenario operations default to permitted.
  */
-export const SHEET_PROTECTION_FLAGS: readonly {
-  readonly key: keyof SheetProtectionFlags;
-  readonly defaultForbidden: boolean;
-}[] = [
+export const SHEET_PROTECTION_FLAGS = [
   {key: 'formatCells', defaultForbidden: true},
   {key: 'formatColumns', defaultForbidden: true},
   {key: 'formatRows', defaultForbidden: true},
@@ -92,7 +108,19 @@ export const SHEET_PROTECTION_FLAGS: readonly {
   {key: 'scenarios', defaultForbidden: false},
   {key: 'selectLockedCells', defaultForbidden: false},
   {key: 'selectUnlockedCells', defaultForbidden: false},
-];
+] as const satisfies readonly {
+  readonly key: keyof SheetProtectionFlags;
+  readonly defaultForbidden: boolean;
+}[];
+
+/**
+ * Compile-time proof that {@link SHEET_PROTECTION_FLAGS} covers every {@link SheetProtectionFlags}
+ * operation. The table's doc says the writer and reader can never fall out of step; that holds only
+ * while every flag is in it, and a flag added to the interface alone would be neither written nor read.
+ */
+export type EverySheetProtectionFlagIsDeclared = AssertNever<
+  Exclude<keyof SheetProtectionFlags, (typeof SHEET_PROTECTION_FLAGS)[number]['key']>
+>;
 
 // OOXML's agile hashing (ECMA-376 / MS-OFFCRYPTO): the password is UTF-16LE, prefixed with
 // the salt for the first hash, then re-hashed `spinCount` times with a little-endian uint32

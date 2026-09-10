@@ -12,6 +12,13 @@ A sheet's protection: which operations stay allowed, and the optional password g
 interface SheetProtection {
   readonly flags: SheetProtectionFlags;
   readonly credential?: SheetProtectionCredential;
+  /**
+   * The legacy 16-bit password hash (`password="CC3D"`) a file protected the sheet with, kept verbatim
+   * so the sheet stays guarded after a save. Pre-2010 Excel, XlsxWriter, openpyxl and LibreOffice write
+   * it instead of the agile credential. It is never derived from a password: `protect` writes only the
+   * agile form, and this hash is weak enough that nobody should want it authored.
+   */
+  readonly legacyPasswordHash?: string;
 }
 ```
 

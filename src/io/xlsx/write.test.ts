@@ -5,6 +5,7 @@ import {strFromU8, strToU8, unzipSync} from 'fflate';
 
 import {INTERNAL, NAMED_STYLE_ID} from '../../core/internal.ts';
 import {Workbook} from '../../core/workbook.ts';
+import {AuthoringError} from '../../errors.ts';
 import {
   captureIn,
   partIn,
@@ -971,6 +972,22 @@ test('unprotect() removes a sheet-protection element previously set', () => {
   s.unprotect();
   const xml = partIn(partsOf(wb), 'xl/worksheets/sheet1.xml');
   assert.doesNotMatch(xml, /<sheetProtection/);
+});
+
+test('a legacy password hash is written before sheet="1", and a malformed one is refused', () => {
+  const wb = new Workbook();
+  const s = wb.addWorksheet('S');
+  s.getCell('A1').value = 'x';
+  // Only a read can put one here; `protect` never authors the legacy form.
+  s[INTERNAL].restoreProtection({flags: {}, legacyPasswordHash: 'cc3d'});
+  assert.match(
+    partIn(partsOf(wb), 'xl/worksheets/sheet1.xml'),
+    /<sheetProtection password="cc3d" sheet="1"\/>/,
+  );
+
+  // Interpolated into an attribute, so a value that is not four hex digits never reaches the bytes.
+  s[INTERNAL].restoreProtection({flags: {}, legacyPasswordHash: 'x"/><y a="'});
+  assert.throws(() => writeXlsx(wb), AuthoringError);
 });
 
 test('a sheet autofilter emits an <autoFilter> element after <sheetProtection>', () => {

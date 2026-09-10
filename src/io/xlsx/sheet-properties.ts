@@ -25,6 +25,7 @@ import {
   type PrintOptions,
 } from '../../core/page-setup.ts';
 import {
+  isLegacyPasswordHash,
   SHEET_PROTECTION_FLAGS,
   type SheetProtection,
   type SheetProtectionCredential,
@@ -121,8 +122,13 @@ function outlinePrXml(outline: OutlineProperties): string {
 // and `algorithmName` is prose even where the base64 salt and hash would not need it.
 export function sheetProtectionXml(protection: SheetProtection | undefined): string {
   if (protection === undefined) return '';
-  const {flags, credential} = protection;
+  const {flags, credential, legacyPasswordHash} = protection;
   let attrs = '';
+  // A legacy hash is only ever one a file carried, and it is interpolated, so it is held to its schema
+  // type here: anything but four hex digits reached the model some way other than the reader.
+  if (legacyPasswordHash !== undefined) {
+    attrs += ` password="${checkedToken(legacyPasswordHash, isLegacyPasswordHash, 'legacy sheet password hash')}"`;
+  }
   if (credential !== undefined) {
     attrs +=
       ` algorithmName="${escapeAttr(credential.algorithmName)}"` +
@@ -288,13 +294,15 @@ export function pageBreaksXml(
 // ---------------------------------------------------------------------------------------------
 
 // Read a <sheetProtection> element back into a SheetProtection: the deserialization mirror of the
-// writer. `sheet="0"` (or "false") means the element records an *un*protected sheet, so nothing is
-// restored. Each flag attribute is the INVERSE of the author's allow-flag ("1" forbids, "0" permits),
-// and only attributes actually present are carried, so an omitted (default-valued) flag stays absent,
-// exactly what the writer emitted. A password credential is preserved verbatim in its agile form
-// (algorithm, hash, salt, spin count); there is no plaintext password to recover, so it is not re-hashed.
+// writer. `sheet` defaults to false, so an element that omits it, or sets it false, records an
+// *un*protected sheet and nothing is restored; reading absence as protected locked, on every save, a
+// sheet its file had left open. Each flag attribute is the INVERSE of the author's allow-flag ("1"
+// forbids, "0" permits), and only attributes actually present are carried, so an omitted
+// (default-valued) flag stays absent, exactly what the writer emitted. A password is preserved
+// verbatim, as the agile credential (algorithm, hash, salt, spin count) and as the legacy 16-bit
+// `password` hash when that is four hex digits; there is no plaintext to recover, so neither is re-hashed.
 export function parseSheetProtection(attrs: XmlAttributes): SheetProtection | undefined {
-  if (boolTristate(attrs.sheet) === false) return undefined;
+  if (!boolStrict(attrs.sheet)) return undefined;
   const flags: {-readonly [K in keyof SheetProtectionFlags]?: boolean} = {};
   for (const {key} of SHEET_PROTECTION_FLAGS) {
     const raw = attrs[key];
@@ -314,9 +322,16 @@ export function parseSheetProtection(attrs: XmlAttributes): SheetProtection | un
       saltValue,
       spinCount: spin,
     };
-    return {flags, credential};
+    return {flags, credential, ...legacyHash(attrs.password)};
   }
-  return {flags};
+  return {flags, ...legacyHash(attrs.password)};
+}
+
+// The legacy hash as a field to spread, present only when the file spelled it as its schema type.
+function legacyHash(password: string | undefined): {legacyPasswordHash?: string} {
+  return password !== undefined && isLegacyPasswordHash(password)
+    ? {legacyPasswordHash: password}
+    : {};
 }
 
 // Page-break accumulation. `<brk>` elements appear under both `<rowBreaks>` and `<colBreaks>`; a break

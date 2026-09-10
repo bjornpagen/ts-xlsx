@@ -12,6 +12,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ## [Unreleased]
 
+### Added
+
+- **`SheetProtection.legacyPasswordHash`** carries the legacy 16-bit `password="XXXX"` hash a file
+  protected a sheet with, verbatim, so that protection survives a save. The library never derives one
+  from a password; `protect` still writes only the agile credential.
+
 ### Changed
 
 - **`decodeRange` refuses a row outside `1..1048576` with a `RangeError`**, as it already refused a
@@ -52,6 +58,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   an empty label, and a save wrote an empty string where the number was. The value is now kept and
   the link dropped. Keeping both needs hyperlinks modelled beside cells rather than inside their
   values, which is a separate change.
+
+- **A sheet protected by the legacy password hash was saved unguarded, and a sheet with no `sheet`
+  attribute was saved locked.** The 16-bit hash had no field, so a `<sheetProtection>` carrying
+  `password="CC3D"` was rewritten without it and anyone could unprotect the sheet. And `sheet`
+  defaults to false, but its absence read as protected, so a save locked a sheet the file had left
+  open. Both now read as the file states.
 
 
 ## [3.1.0] — 2026-09-04

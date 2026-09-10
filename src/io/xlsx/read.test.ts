@@ -956,6 +956,45 @@ test('a passwordless protected sheet round-trips as protected with no credential
   assert.equal(protection.credential, undefined);
 });
 
+// The 16-bit `password` hash is what pre-2010 Excel, XlsxWriter, openpyxl and LibreOffice write, and it
+// had no field: a sheet protected that way was rewritten still marked protected and without a password,
+// so anyone could unprotect it. And `sheet` defaults to false, so an element without it was locking a
+// sheet the file had left open.
+function withSheetProtection(element: string): Uint8Array {
+  const wb = new Workbook();
+  wb.addWorksheet('S').getCell('A1').value = 'x';
+  return patchParts(writeXlsx(wb), {
+    [SHEET1]: (xml) => xml.replace('</sheetData>', `</sheetData>${element}`),
+  });
+}
+
+test('a legacy password hash a file carries survives a round-trip verbatim', () => {
+  const read = readXlsx(
+    withSheetProtection('<sheetProtection password="CC3D" sheet="1" objects="1" scenarios="1"/>'),
+  );
+  const protection = read.getWorksheet('S')?.protection;
+  assert.ok(protection, 'the sheet reads as protected');
+  assert.equal(protection.legacyPasswordHash, 'CC3D');
+  assert.equal(protection.credential, undefined);
+  const rewritten = elementIn(sheetXml(writeXlsx(read)), /<sheetProtection\b[^>]*\/>/);
+  assert.match(rewritten, /password="CC3D"/);
+  assert.match(rewritten, /sheet="1"/);
+});
+
+test('a malformed legacy password hash is dropped, and the protection it came with is kept', () => {
+  const read = readXlsx(withSheetProtection('<sheetProtection password="not-a-hash" sheet="1"/>'));
+  const protection = read.getWorksheet('S')?.protection;
+  assert.ok(protection);
+  assert.equal(protection.legacyPasswordHash, undefined);
+  assert.doesNotMatch(sheetXml(writeXlsx(read)), /password=/);
+});
+
+test('a sheetProtection element without sheet="1" records an unprotected sheet', () => {
+  const read = readXlsx(withSheetProtection('<sheetProtection objects="1" scenarios="1"/>'));
+  assert.equal(read.getWorksheet('S')?.protection, undefined);
+  assert.doesNotMatch(sheetXml(writeXlsx(read)), /<sheetProtection/, 'and a save does not lock it');
+});
+
 test('an unprotected sheet reports no protection after a round-trip', () => {
   const wb = new Workbook();
   wb.addWorksheet('S').getCell('A1').value = 'x';
