@@ -12,8 +12,8 @@
 // The rectangles are what geometry is done against. The index is what keeps overlap-checking and
 // covered-address resolution off a linear scan; see `merge-index.ts` for why that mattered.
 
-import {AuthoringError, quoted} from '../errors.ts';
-import {boundedRect, decodeRange} from './address.ts';
+import {AuthoringError, InternalError, quoted} from '../errors.ts';
+import {boundedRect, decodeRange, encodeRect} from './address.ts';
 import {replaceContents} from './containers.ts';
 import {MergeIndex} from './merge-index.ts';
 import type {MergeRect} from './merge.ts';
@@ -26,6 +26,31 @@ export interface MergeRemoval {
   readonly existed: boolean;
   /** Whether a rectangle went with it, so anything derived from the rectangles is now stale. */
   readonly rectsChanged: boolean;
+}
+
+/**
+ * A merged range as the sheet stores it, with the rectangle it covers: `$` anchors dropped and the
+ * corners top-left first, the spelling the writer emits and a splice produces. Stored as typed, a merge
+ * made as `$A$1:$B$2` could not be removed as `A1:B2`, and stopped matching its own spelling once an
+ * unrelated splice rewrote it.
+ *
+ * @throws {SyntaxError} if the range is unparseable or carries a sheet prefix. A `<mergeCell>` names a
+ *   region of the sheet it sits on, so a prefix was either redundant or silently wrong.
+ */
+function canonicalMerge(range: string): {
+  readonly canonical: string;
+  readonly rect: MergeRect | undefined;
+} {
+  const decoded = decodeRange(range);
+  if (decoded.sheetName !== undefined) {
+    throw new SyntaxError(
+      `merged range ${quoted(range)} names worksheet ${quoted(decoded.sheetName)}: a merge belongs to the sheet it is made on`,
+    );
+  }
+  // `MergeRect` and the narrowed rectangle are the same four inclusive bounds, so the decode is
+  // already the record this needs.
+  const rect: MergeRect | undefined = boundedRect(decoded);
+  return {canonical: rect === undefined ? decoded.dimensions : encodeRect(rect), rect};
 }
 
 export class WorksheetMerges {
@@ -53,15 +78,15 @@ export class WorksheetMerges {
 
   /**
    * Declare a merged range, returning the rectangle it covers, or `undefined` for an unbounded
-   * whole-row/column range, which is declared and overlap-checks against nothing.
+   * whole-row/column range, which is declared and overlap-checks against nothing. The range is stored
+   * in canonical form (see {@link canonicalMerge}).
    *
+   * @throws {SyntaxError} if the range is unparseable or names a worksheet.
    * @throws {AuthoringError} if the range overlaps an already-merged region. Excel forbids
    *   overlapping merges and writes such geometry as a file it then offers to repair.
    */
   add(range: string): MergeRect | undefined {
-    // `MergeRect` and the narrowed rectangle are the same four inclusive bounds, so the decode is
-    // already the record this needs.
-    const rect: MergeRect | undefined = boundedRect(decodeRange(range));
+    const {canonical, rect} = canonicalMerge(range);
     if (rect !== undefined) {
       if (this.#index.overlapping(rect) !== undefined) {
         throw new AuthoringError(
@@ -71,22 +96,33 @@ export class WorksheetMerges {
       this.#rects.push(rect);
       this.#index.note(rect);
     }
-    this.#ranges.push(range);
+    this.#ranges.push(canonical);
     return rect;
   }
 
-  /** Drop a declared range and, with it, the rectangle it covers. The inverse of {@link add}. */
+  /**
+   * Drop a declared range and, with it, the rectangle it covers. The inverse of {@link add}, and it
+   * matches however the range is spelled, since both sides are compared in canonical form.
+   *
+   * @throws {SyntaxError} if the range is unparseable or names a worksheet.
+   */
   remove(range: string): MergeRemoval {
-    const index = this.#ranges.indexOf(range);
+    const {canonical, rect} = canonicalMerge(range);
+    const index = this.#ranges.indexOf(canonical);
     if (index === -1) return {existed: false, rectsChanged: false};
     this.#ranges.splice(index, 1);
-    const rect = boundedRect(decodeRange(range));
     if (rect === undefined) return {existed: true, rectsChanged: false};
     const {top, left, bottom, right} = rect;
     const at = this.#rects.findIndex(
       (r) => r.top === top && r.left === left && r.bottom === bottom && r.right === right,
     );
-    if (at === -1) return {existed: true, rectsChanged: false};
+    // A bounded range and its rectangle are added and removed together, so a declared one always has
+    // its rectangle; splicing at -1 would drop some other merge's.
+    if (at === -1) {
+      throw new InternalError(
+        `merged range ${quoted(canonical)} was declared without its rectangle`,
+      );
+    }
     this.#rects.splice(at, 1);
     this.#index.invalidate();
     return {existed: true, rectsChanged: true};

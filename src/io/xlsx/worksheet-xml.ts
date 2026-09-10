@@ -10,8 +10,9 @@
 // sheet. The two halves shared nothing but the style registry, and `row-xml.ts` is precisely the
 // surface that writer imports, which `write.ts` used to re-export on its behalf.
 
-import {decodeRange, encodeRect} from '../../core/address.ts';
+import {encodeRect} from '../../core/address.ts';
 import type {DateEpoch} from '../../core/date.ts';
+import {mergesOverlappingTables} from '../../core/merge.ts';
 import {pickStyleFacets} from '../../core/style.ts';
 import type {ColumnProperties, Worksheet, WorksheetProperties} from '../../core/worksheet.ts';
 import {AuthoringError, InternalError, quoted} from '../../errors.ts';
@@ -237,32 +238,18 @@ function slicerListExtXml(slicerRelIds: readonly string[]): string {
 // Excel forbids a merged range from intersecting a formatted table; such a file opens as
 // corrupt. The writer is the OOXML gatekeeper for this cross-feature geometry conflict.
 function validateMerges(sheet: Worksheet): void {
-  if (sheet.merges.length === 0 || sheet.tables.length === 0) return;
-  for (const merge of sheet.merges) {
-    const {left, right, top, bottom} = decodeRange(merge);
-    if (left === undefined || right === undefined || top === undefined || bottom === undefined)
-      continue;
-    for (const table of sheet.tables) {
-      const region = table.region;
-      const overlaps =
-        left <= region.right &&
-        right >= region.left &&
-        top <= region.bottom &&
-        bottom >= region.top;
-      if (overlaps) {
-        throw new AuthoringError(
-          `merged range ${merge} overlaps table ${quoted(table.name)} (${table.range}): Excel forbids a merge inside a table`,
-        );
-      }
-    }
-  }
+  const [conflict] = mergesOverlappingTables(sheet.merges, sheet.tables);
+  if (conflict === undefined) return;
+  const {merge, table} = conflict;
+  throw new AuthoringError(
+    `merged range ${merge} overlaps table ${quoted(table.name)} (${table.range}): Excel forbids a merge inside a table`,
+  );
 }
 
+// The model stores every merge in canonical form, so the ranges are written as they are held.
 function mergeCellsXml(merges: readonly string[]): string {
   if (merges.length === 0) return '';
-  const cells = merges
-    .map((range) => `<mergeCell ref="${escapeAttr(decodeRange(range).dimensions)}"/>`)
-    .join('');
+  const cells = merges.map((range) => `<mergeCell ref="${escapeAttr(range)}"/>`).join('');
   return `<mergeCells count="${merges.length}">${cells}</mergeCells>`;
 }
 

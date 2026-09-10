@@ -9,12 +9,41 @@
 // parameter, so these stay pure functions of the rects and rows handed in. Resolving a covered
 // position to its region's master is the one that did not stay a scan; it lives on `MergeIndex`.
 
-import {encodeCornerRef, type GridRect, tryDecodeRange} from './address.ts';
+import {
+  boundedRect,
+  decodeRange,
+  encodeCornerRef,
+  type GridRect,
+  rectsOverlap,
+  tryDecodeRange,
+} from './address.ts';
 import type {Cell} from './cell.ts';
 import {type AxisSplice, shiftSpan} from './grid-shift.ts';
 
 /** A merged region, as the {@link GridRect} every range-shaped thing in the library is. */
 export type MergeRect = GridRect;
+
+/**
+ * Each merged range that overlaps a table, paired with the first table it overlaps. Excel forbids a
+ * merge inside a table: the writer refuses that geometry and the reader drops the merge, the repair
+ * Excel makes on load. Both used to spell the overlap test out by hand. The answer is a list of its
+ * own, so the reader can unmerge while it walks it rather than the live `sheet.merges`. An unbounded
+ * whole-row/column merge carries no rectangle and overlaps nothing.
+ */
+export function mergesOverlappingTables<T extends {readonly region: GridRect}>(
+  merges: readonly string[],
+  tables: readonly T[],
+): {readonly merge: string; readonly table: T}[] {
+  const overlapping: {merge: string; table: T}[] = [];
+  if (tables.length === 0) return overlapping;
+  for (const merge of merges) {
+    const rect = boundedRect(decodeRange(merge));
+    if (rect === undefined) continue;
+    const table = tables.find((candidate) => rectsOverlap(rect, candidate.region));
+    if (table !== undefined) overlapping.push({merge, table});
+  }
+  return overlapping;
+}
 
 /**
  * Drop any value already sitting in a merge's covered non-anchor cells, keeping only the top-left

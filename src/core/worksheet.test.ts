@@ -148,6 +148,29 @@ test('unmergeCells returns false for a range that was never merged', () => {
   assert.deepEqual([...sheet.merges], ['A1:B2'], 'no merge is removed');
 });
 
+// A merge was stored as typed and removed only by that exact string, while a splice rewrote it to the
+// canonical spelling: `$A$1:$B$2` could not be unmerged as `A1:B2`, nor as itself once an unrelated
+// row insert had run.
+test('merges are stored canonically, and unmergeCells finds them however they are spelled', () => {
+  const sheet = new Worksheet('S', 1);
+  sheet.mergeCells('$A$1:$B$2');
+  sheet.mergeCells('D5:C4');
+  assert.deepEqual([...sheet.merges], ['A1:B2', 'C4:D5']);
+  assert.equal(sheet.unmergeCells('A1:B2'), true, 'the canonical spelling finds an anchored merge');
+
+  sheet.insertRow(20, ['below every merge']);
+  assert.deepEqual([...sheet.merges], ['C4:D5'], 'an unrelated splice leaves the spelling alone');
+  assert.equal(sheet.unmergeCells('$D$5:$C$4'), true, 'and any spelling still finds it after one');
+  assert.deepEqual([...sheet.merges], []);
+});
+
+test('a sheet-qualified merge range is refused rather than its prefix ignored', () => {
+  const sheet = new Worksheet('S', 1);
+  assert.throws(() => sheet.mergeCells('Other!E1:F2'), SyntaxError);
+  assert.throws(() => sheet.unmergeCells('Other!E1:F2'), SyntaxError);
+  assert.deepEqual([...sheet.merges], []);
+});
+
 test('a sheet carries no autofilter until one is set', () => {
   const sheet = new Worksheet('S', 1);
   assert.equal(sheet.autoFilter, undefined);

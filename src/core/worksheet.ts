@@ -743,6 +743,13 @@ export class Worksheet {
    * anchor's, exactly how Excel collapses a range on merge. Leaving it would emit a populated `<c>`
    * under the `<mergeCell>` ref, the geometry Excel opens with a repair prompt. Covered-cell styles
    * survive (a border spanning the merge is legal), so only the conflicting value is cleared.
+   *
+   * The range is stored in canonical form, `$` anchors dropped and the top-left corner first, so
+   * merging `$B$2:$A$1` reports `A1:B2` through {@link merges}.
+   *
+   * @throws {SyntaxError} if the range is unparseable or names a worksheet: a merge belongs to the
+   *   sheet it is made on, and a prefix naming another one used to be ignored.
+   * @throws {AuthoringError} if the range overlaps an already-merged region.
    */
   mergeCells(range: string): void {
     // What the merge does to the *grid* stays here, because the grid is this class's: the region
@@ -754,7 +761,7 @@ export class Worksheet {
     }
   }
 
-  /** The merged ranges on this sheet, in the order they were added. */
+  /** The merged ranges on this sheet, in canonical form (`A1:B2`), in the order they were added. */
   get merges(): readonly string[] {
     return this.#merges.ranges;
   }
@@ -780,9 +787,12 @@ export class Worksheet {
   }
 
   /**
-   * Remove a merged range previously added with {@link mergeCells}, returning whether a merge with
-   * that exact range string existed. The covering rectangle is dropped alongside it, so a cell the
-   * merge had masked addresses independently again. The inverse of {@link mergeCells}.
+   * Remove a merged range previously added with {@link mergeCells}, returning whether such a merge
+   * existed. The range matches however it is spelled (`$` anchors, corner order), since merges are
+   * stored and compared in canonical form. The covering rectangle is dropped alongside it, so a cell
+   * the merge had masked addresses independently again. The inverse of {@link mergeCells}.
+   *
+   * @throws {SyntaxError} if the range is unparseable or names a worksheet.
    */
   unmergeCells(range: string): boolean {
     const {existed, rectsChanged} = this.#merges.remove(range);

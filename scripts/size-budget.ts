@@ -99,7 +99,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 210, by the same structured-reference spelling as `/xlsb` and `/csv`, which
   // put this entry four tenths over.
-  './core': 211,
+  //
+  // Raised again, from 211, when merged ranges began to be stored canonically (a sheet prefix refused,
+  // a declared range without its rectangle an `InternalError`) and the merge-over-table test moved into
+  // `core/merge.ts` for both codecs to share, which put this entry a kilobyte over.
+  './core': 212,
   // Raised from 554 by the same future-function registry as `.`, which put this entry nine tenths over.
   //
   // Raised again, from 555, by the same conditional-format boundaries as `.`, eight tenths over.
@@ -119,7 +123,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 300, when the future-function registry took [MS-XLSX]'s full table and the
   // names Excel prefixes beyond it, fifty-odd names more, which put this entry four tenths over.
-  './xlsb': 301,
+  //
+  // Raised again, from 301, by the same canonical merge storage as `/core`, eight tenths over.
+  './xlsb': 302,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
@@ -134,7 +140,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 220, by the conditional-format overlay's refusal of an empty range, which
   // every entry carrying the model pays for, a tenth over.
-  './csv': 221,
+  //
+  // Raised again, from 221, by the same canonical merge storage as `/core`, three tenths over.
+  './csv': 222,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //

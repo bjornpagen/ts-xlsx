@@ -50,6 +50,13 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   turned a two-bound rule into a one-bound one. `Worksheet.addConditionalFormatting` refuses a range
   that names no cells.
 
+- **BREAKING: merged ranges are stored in canonical form, and a sheet-qualified one is refused.**
+  `sheet.merges` returned the spelling a caller merged with (`$A$1:$B$2`, `D5:C4`) until a splice
+  rewrote it, and `unmergeCells` matched only that exact string, so a merge could not be removed by
+  its canonical spelling, nor by its own once a splice had run. Merges are now stored as `A1:B2` and
+  matched however they are written. `mergeCells('Other!E1:F2')` ignored the prefix and merged on the
+  sheet it was called on; it now throws `SyntaxError`, as `unmergeCells` does for such a range.
+
 ### Fixed
 
 - **A refused cell position left the sheet unreadable and unwritable.** `getCell('A0')`,

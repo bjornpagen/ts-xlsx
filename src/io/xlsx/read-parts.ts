@@ -6,9 +6,9 @@
 // assembled in, and this is the half that answers it: given a part's relationships, which package part
 // does each feature live in, and what comes back when it is read.
 
-import {decodeRange} from '../../core/address.ts';
 import type {CommentThread} from '../../core/comment-thread.ts';
 import {INTERNAL} from '../../core/internal.ts';
+import {mergesOverlappingTables} from '../../core/merge.ts';
 import type {PreservedWorksheetReference} from '../../core/preserved.ts';
 import {Workbook} from '../../core/workbook.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
@@ -457,22 +457,9 @@ export function readSheetPivotTables(
 // geometry lands in the model intact; this applies the same repair once the tables are known, so a
 // re-write does not surface the Excel-invalid geometry the writer (correctly) rejects.
 function dropMergesInsideTables(sheet: Worksheet): void {
-  const regions = sheet.tables.map((table) => table.region);
-  if (regions.length === 0) return;
-  // The copy is not incidental: `sheet.merges` is the live backing array and `unmergeCells` splices
-  // out of it, so iterating it directly would skip the entry after every removal.
-  // oxlint-disable-next-line unicorn/no-useless-spread
-  for (const range of [...sheet.merges]) {
-    const {top, left, bottom, right} = decodeRange(range);
-    if (top === undefined || left === undefined || bottom === undefined || right === undefined)
-      continue;
-    const overlaps = regions.some(
-      (region) =>
-        left <= region.right &&
-        right >= region.left &&
-        top <= region.bottom &&
-        bottom >= region.top,
-    );
-    if (overlaps) sheet.unmergeCells(range);
+  // The overlapping merges come back as a list of their own, which is what lets this unmerge as it
+  // goes: `sheet.merges` is the live backing array `unmergeCells` splices out of.
+  for (const {merge} of mergesOverlappingTables(sheet.merges, sheet.tables)) {
+    sheet.unmergeCells(merge);
   }
 }
