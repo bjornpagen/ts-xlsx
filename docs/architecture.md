@@ -857,7 +857,9 @@ The subsystem is built as encode/decode pairs over two formats plus a project la
   is *not* deflate. The compressor's contract is that its output re-expands byte-for-byte.
 - **Project layer.** `project.ts` decodes the `VBA/dir` and module streams into a typed view;
   `project-editor.ts` splices structural edits (remove module, add reference) into an existing
-  project; `vba-encoding.ts` holds the shared `dir`-record TLV encoders and VBA name validation.
+  project by splicing bytes, never by decoding and re-encoding a stream; `dir-records.ts` holds the
+  `dir` record grammar, the walk that reads it and the one function that writes a record; and
+  `vba-encoding.ts` holds VBA name validation.
   `codepage.ts` handles the project code page (MBCS, not latin1) in both directions, and
   `errors.ts` holds the two failure types. There is deliberately no from-source synthesizer;
   see below.

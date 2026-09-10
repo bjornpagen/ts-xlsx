@@ -10,13 +10,15 @@
 // pure-TS path (ADR 0019). These splices are safe precisely because they leave every module's p-code
 // exactly as its own compiler wrote it.
 
+import {utf16leBytes} from '../bytes.ts';
 import {InternalError, quoted} from '../errors.ts';
-import {readU16, spliceBytes, writeU16} from './bytes.ts';
+import {concat, readU16, spliceBytes, writeU16, writeU32} from './bytes.ts';
 import {sameEntryName} from './cfb-format.ts';
 import {type CfbNode, isStream, writeCompoundFile} from './cfb-writer.ts';
 import {CompoundFile} from './cfb.ts';
 import {type Decoder, decoderForCodePage, type Encoder, encoderForCodePage} from './codepage.ts';
 import {
+  dirRecord,
   dirRecords,
   REC_MODULE_NAME,
   REC_MODULE_STREAMNAME,
@@ -29,7 +31,7 @@ import {
 import {VbaAuthorError, VbaParseError} from './errors.ts';
 import {compressContainer, decompressContainer} from './ms-ovba.ts';
 import {DIR_PATH, parseVbaProjectIn, PROJECT_PATH, PROJECTWM_PATH, VBA_STORAGE} from './project.ts';
-import {push, u16, u32, utf16le, validateVbaName} from './vba-encoding.ts';
+import {validateVbaName} from './vba-encoding.ts';
 
 /**
  * Remove a standard module from an existing `vbaProject.bin`, returning new bytes that carry every
@@ -80,12 +82,11 @@ export function removeVbaModule(bin: Uint8Array, name: string): Uint8Array {
   // the removed module, which is what makes the removal take.
   const replacements: StreamReplacement[] = [{path: DIR_PATH, data: compressContainer(patchedDir)}];
 
-  const encode = encoderForCodePage(project.codePage);
   const projectText = cfb.readStream(PROJECT_PATH);
   if (projectText) {
     replacements.push({
       path: PROJECT_PATH,
-      data: encode(removeProjectStreamLines(decoder.decode(projectText), module.name, module.kind)),
+      data: removeProjectStreamLines(projectText, module.name, module.kind, decoder),
     });
   }
   const projectwm = cfb.readStream(PROJECTWM_PATH);
@@ -142,6 +143,10 @@ const MAX_LIBID_VERSION = 0xffff;
 const MAX_LIBID_LCID = 0xffffffff;
 // LibidRegName: *255(%x01-FF), so at most 255 bytes, never NUL.
 const MAX_DISPLAY_NAME_CHARS = 255;
+// LibidPath is bounded by nothing in [MS-OVBA] but SizeOfLibid, a u32, which is no bound at all on a
+// string built in memory. 32,767 characters is the longest path Windows can open (the extended-length
+// `\\?\` limit), so a longer one names no type library a host could ever load.
+const MAX_LIBID_PATH_CHARS = 32_767;
 const GUID_PATTERN =
   /^\{?([0-9A-Fa-f]{8})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{12})\}?$/;
 
@@ -176,6 +181,12 @@ function normalizeReference(ref: VbaLibraryReference): NormalizedReference {
     throw new VbaAuthorError(`reference lcid must be an integer in [0, 0xFFFFFFFF], got ${lcid}`);
   }
 
+  // Measured before the path is quoted into any message: a refusal should not carry the megabyte it refuses.
+  if (ref.path.length > MAX_LIBID_PATH_CHARS) {
+    throw new VbaAuthorError(
+      `reference path is ${ref.path.length} characters long, past the ${MAX_LIBID_PATH_CHARS} a Windows path can hold`,
+    );
+  }
   if (ref.path.length === 0 || ref.path.includes('\0') || ref.path.includes('#')) {
     throw new VbaAuthorError(
       `invalid reference path ${quoted(ref.path)} (must be non-empty and contain no NUL or '#')`,
@@ -233,26 +244,23 @@ export function addVbaReference(bin: Uint8Array, ref: VbaLibraryReference): Uint
 // Build the REFERENCENAME + REFERENCEREGISTERED record bytes ([MS-OVBA] 2.3.4.2.2.2 / .2.2.5) for one
 // reference. REFERENCENAME's MBCS/Unicode name pair mirrors MODULE_NAME/MODULE_NAME_UNICODE's shape;
 // REFERENCEREGISTERED is one record carrying SizeOfLibid + Libid + two zero Reserved fields.
-function buildReferenceDirRecords(ref: NormalizedReference, encode: Encoder): number[] {
-  const r: number[] = [];
-  const nameBytes = [...encode(ref.name)];
-  push(r, REC_REFERENCE_NAME, nameBytes);
-  push(r, REC_REFERENCE_NAME_UNICODE, utf16le(ref.name));
-  const libidBytes = [...encode(ref.libid)];
-  push(r, REC_REFERENCE_REGISTERED, [
-    ...u32(libidBytes.length),
-    ...libidBytes,
-    ...u32(0),
-    ...u16(0),
+function buildReferenceDirRecords(ref: NormalizedReference, encode: Encoder): Uint8Array {
+  const libid = encode(ref.libid);
+  const sizeOfLibid = new Uint8Array(4);
+  writeU32(sizeOfLibid, 0, libid.length);
+  const reserved = new Uint8Array(6); // Reserved1 (u32) and Reserved2 (u16), both zero
+  return concat([
+    dirRecord(REC_REFERENCE_NAME, encode(ref.name)),
+    dirRecord(REC_REFERENCE_NAME_UNICODE, utf16leBytes(ref.name)),
+    dirRecord(REC_REFERENCE_REGISTERED, concat([sizeOfLibid, libid, reserved])),
   ]);
-  return r;
 }
 
 // Insert new reference dir records right before MODULES_COUNT (0x000f). The reference array has no
 // explicit count field; MODULES_COUNT is simply the next record once the last reference ends (confirmed
 // against a real Excel-authored dir stream). Every other record, other references and all modules, rides
 // through unchanged.
-function insertReferenceDirRecords(dir: Uint8Array, records: readonly number[]): Uint8Array {
+function insertReferenceDirRecords(dir: Uint8Array, records: Uint8Array): Uint8Array {
   let insertAt = -1;
   for (const {id, recordStart} of dirRecords(dir, 'overruns while adding a reference')) {
     if (id === REC_MODULES_COUNT) {
@@ -262,7 +270,7 @@ function insertReferenceDirRecords(dir: Uint8Array, records: readonly number[]):
   }
   if (insertAt < 0) throw new VbaParseError('dir stream is missing MODULES_COUNT');
 
-  return spliceBytes(dir, insertAt, insertAt, Uint8Array.from(records));
+  return spliceBytes(dir, insertAt, insertAt, records);
 }
 
 // Remove one module's MODULE record block from a decompressed `dir` stream, and decrement MODULES_COUNT.
@@ -319,32 +327,58 @@ function removeModuleDirRecord(dir: Uint8Array, streamName: string, decoder: Dec
   return out;
 }
 
-// Remove a module's declaration line (`Module=`/`Class=`) and its workspace line from the `PROJECT` text
-// stream: the inverse of insertProjectStreamLines. Every other line is left exactly as it was.
+// Remove a module's declaration line (`Module=`/`Class=`) and its `[Workspace]` line from the `PROJECT`
+// stream by splicing its bytes, so every other line is left exactly as it was, down to its line ending.
+// The stream is MBCS in the project code page, and re-encoding it after an edit could only invert what
+// the encoder knows, which under a multi-byte page is ASCII alone: a `Description="日本"` made removing
+// an unrelated module throw. Each line is decoded only to be compared.
 function removeProjectStreamLines(
-  text: string,
+  stream: Uint8Array,
   name: string,
   kind: 'procedural' | 'class',
-): string {
-  const eol = text.includes('\r\n') ? '\r\n' : '\n';
-  const lines = text.split(/\r\n|\r|\n/);
+  decoder: Decoder,
+): Uint8Array {
+  const lines = projectLines(stream, decoder);
   const declLine = `${kind === 'procedural' ? 'Module' : 'Class'}=${name}`;
-  const declIndex = lines.indexOf(declLine);
-  if (declIndex >= 0) lines.splice(declIndex, 1);
+  const removals: ProjectLine[] = [];
+  const decl = lines.find((line) => line.text === declLine);
+  if (decl !== undefined) removals.push(decl);
 
-  const wsIndex = lines.findIndex((l) => l.trim() === '[Workspace]');
-  if (wsIndex >= 0) {
-    for (let i = wsIndex + 1; i < lines.length; i++) {
-      const l = lines[i] as string;
-      if (l.trim() === '' || l.startsWith('[')) break;
-      if (l.startsWith(`${name}=`)) {
-        lines.splice(i, 1);
-        break;
-      }
+  const wsIndex = lines.findIndex((line) => line.text.trim() === '[Workspace]');
+  for (const line of wsIndex < 0 ? [] : lines.slice(wsIndex + 1)) {
+    if (line.text.trim() === '' || line.text.startsWith('[')) break;
+    if (line.text.startsWith(`${name}=`)) {
+      removals.push(line);
+      break;
     }
   }
 
-  return lines.join(eol);
+  // The later line first, so the earlier cut does not move the bytes the later one names.
+  return removals
+    .sort((a, b) => b.start - a.start)
+    .reduce((bytes, line) => spliceBytes(bytes, line.start, line.end), stream);
+}
+
+/** One line of the `PROJECT` stream: its text, and the bytes the whole line occupies, ending included. */
+interface ProjectLine {
+  readonly text: string;
+  readonly start: number;
+  readonly end: number;
+}
+
+// Lines end at LF, a CRLF line keeping its CR out of its text. CR, LF and `=` all sit below 0x40, and no
+// multi-byte code page a project declares (Shift_JIS, GBK, Big5, EUC-KR) uses a byte that low as a
+// trail byte, so a line boundary can never fall inside a character.
+function projectLines(stream: Uint8Array, decoder: Decoder): ProjectLine[] {
+  const lines: ProjectLine[] = [];
+  for (let start = 0; start < stream.length;) {
+    const lf = stream.indexOf(0x0a, start);
+    const end = lf < 0 ? stream.length : lf + 1;
+    const contentEnd = lf > start && stream[lf - 1] === 0x0d ? lf - 1 : lf < 0 ? stream.length : lf;
+    lines.push({text: decoder.decode(stream.subarray(start, contentEnd)), start, end});
+    start = end;
+  }
+  return lines;
 }
 
 // Remove a module's (MBCS name, UTF-16 name) pair from the binary PROJECTwm stream: the inverse of

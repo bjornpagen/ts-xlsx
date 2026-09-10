@@ -1,4 +1,5 @@
-// The `dir` stream's record grammar: the ids [MS-OVBA] 2.3.4.2 names, and the one walk over them.
+// The `dir` stream's record grammar: the ids [MS-OVBA] 2.3.4.2 names, the one walk over them, and the
+// one way a record is written.
 //
 // The stream is a flat sequence of TLV records, `Id(u16) Size(u32) data[Size]`, which is simple
 // enough that three call sites each wrote their own walk. They were right to agree on the shape and
@@ -13,7 +14,7 @@
 // is not. The second is how a structural edit corrupts a macro project without saying anything. One
 // walk, stated once, is what stops the fourth copy from being written without the correction.
 
-import {readU16, readU32} from './bytes.ts';
+import {readU16, readU32, writeU16, writeU32} from './bytes.ts';
 import {VbaParseError} from './errors.ts';
 
 /** PROJECTCODEPAGE: the code page every MBCS name in the project decodes through. */
@@ -95,4 +96,17 @@ export function* dirRecords(dir: Uint8Array, context: string): Generator<DirReco
     yield {id, recordStart: pos, dataStart, size, end};
     pos = end;
   }
+}
+
+/**
+ * One record's bytes, `Id(u16) Size(u32) data[Size]`: the grammar {@link dirRecords} walks, written.
+ * Built as bytes rather than spread into a `number[]`, which overflowed the call stack on a payload of a
+ * few hundred thousand bytes. Not for PROJECTVERSION, whose uncounted VersionMinor no edit here writes.
+ */
+export function dirRecord(id: number, data: Uint8Array): Uint8Array {
+  const out = new Uint8Array(6 + data.length);
+  writeU16(out, 0, id);
+  writeU32(out, 2, data.length);
+  out.set(data, 6);
+  return out;
 }

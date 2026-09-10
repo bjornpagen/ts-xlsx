@@ -95,6 +95,17 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   the other directory order `removeVbaModule` wrote the module's bytes over the root `PROJECT`,
   destroying every module declaration. Streams are now read and replaced by their storage path.
 
+- **Removing a VBA module from a project with non-ASCII `PROJECT` text threw, and rewrote the stream's
+  line endings.** The stream was decoded and re-encoded to drop the module's lines, and under Shift_JIS,
+  GBK, Big5 and EUC-KR the encoder can only invert ASCII, so a Japanese `Description` made
+  `removeVbaModule` throw `VbaAuthorError` over text the caller never touched; a stream mixing CRLF and
+  LF also came back with one ending throughout. The lines are now cut out of the bytes, and every other
+  byte stays as the file wrote it.
+
+- **`addVbaReference` with a path of a few hundred thousand characters overflowed the call stack.** A
+  path longer than the 32,767 characters a Windows path can hold is now refused with `VbaAuthorError`,
+  and the reference records are built as bytes.
+
 
 ## [3.1.0] — 2026-09-04
 

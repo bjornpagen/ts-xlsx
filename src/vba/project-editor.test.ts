@@ -182,6 +182,67 @@ test('removeVbaModule refuses a dir stream that declares zero modules but carrie
   });
 });
 
+// A two-module project (Module1, Module2) in `codePage` whose PROJECT stream is exactly `project`.
+function projectWithStream(codePage: number, project: Uint8Array): Uint8Array {
+  const module = (name: string) => ({
+    name,
+    documentType: false,
+    sourceBytes: [],
+    pcodePrefixLen: 0,
+  });
+  const dir = buildDirStream(codePage, [module('Module1'), module('Module2')]);
+  return writeCompoundFile([
+    {name: 'PROJECT', data: project},
+    {
+      name: 'VBA',
+      children: [
+        {name: 'dir', data: compressContainer(Uint8Array.from(dir))},
+        {name: 'Module1', data: compressContainer(strToU8('Sub A()\r\nEnd Sub'))},
+        {name: 'Module2', data: compressContainer(strToU8('Sub B()\r\nEnd Sub'))},
+      ],
+    },
+  ]);
+}
+
+// The PROJECT stream is MBCS in the project's code page, and the encoder inverts only ASCII under a
+// multi-byte page, so re-encoding the stream after dropping a line threw over text nobody asked to change.
+test('removing a module leaves PROJECT text its code page cannot re-encode byte-identical', () => {
+  const nihon = [0x93, 0xfa, 0x96, 0x7b]; // 日本 in Shift_JIS
+  const kept = [
+    ...ascii('ID="{00000000-0000-0000-0000-000000000000}"\r\nDescription="'),
+    ...nihon,
+    ...ascii('"\r\n'),
+  ];
+  const bin = projectWithStream(
+    932,
+    Uint8Array.from([...kept, ...ascii('Module=Module1\r\nModule=Module2\r\n')]),
+  );
+
+  const removed = removeVbaModule(bin, 'Module1');
+
+  assert.deepEqual(
+    new CompoundFile(removed).readStream(['PROJECT']),
+    Uint8Array.from([...kept, ...ascii('Module=Module2\r\n')]),
+  );
+});
+
+test('removing a module keeps every other PROJECT line ending as the file wrote it', () => {
+  const stream = (text: string): Uint8Array => Uint8Array.from(ascii(text));
+  const bin = projectWithStream(
+    1252,
+    stream(
+      'ID="x"\r\nModule=Module1\nModule=Module2\r\n[Workspace]\nModule1=0, 0, 0, 0, C\r\nModule2=0, 0, 0, 0, C\n',
+    ),
+  );
+
+  const removed = removeVbaModule(bin, 'Module1');
+
+  assert.deepEqual(
+    new CompoundFile(removed).readStream(['PROJECT']),
+    stream('ID="x"\r\nModule=Module2\r\n[Workspace]\nModule2=0, 0, 0, 0, C\n'),
+  );
+});
+
 test('removeVbaModule rejects a malformed container as a parse error', () => {
   assert.throws(() => removeVbaModule(Uint8Array.from([1, 2, 3, 4]), 'Module1'), VbaParseError);
 });
@@ -343,6 +404,16 @@ test('addVbaReference rejects an invalid path', () => {
   assert.throws(() => addVbaReference(bin, {...SCRIPTING_REF, path: ''}), VbaAuthorError);
   assert.throws(
     () => addVbaReference(bin, {...SCRIPTING_REF, path: 'C:\\has#hash.dll'}),
+    VbaAuthorError,
+  );
+});
+
+test('addVbaReference rejects a path longer than any Windows path, as an authoring error', () => {
+  // A few hundred thousand characters used to overflow the call stack building the record, which is a
+  // native RangeError escaping the failure taxonomy rather than a refusal.
+  const bin = buildNavigableProjectBin(CODE_PAGE, MODULES);
+  assert.throws(
+    () => addVbaReference(bin, {...SCRIPTING_REF, path: `C:\\${'a'.repeat(200_000)}.dll`}),
     VbaAuthorError,
   );
 });

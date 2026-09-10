@@ -1,12 +1,12 @@
-// Shared low-level encoders for the VBA `dir` stream and name validation: the primitives the structural
-// splices in `project-editor.ts` build on. ([MS-OVBA] 2.3.4.2 record TLVs, and the VBA identifier rules.)
+// VBA name validation: the identifier rules every name the structural splices in `project-editor.ts`
+// write must meet. The `dir` records those splices emit are written by `dir-records.ts`, beside the walk
+// that reads them.
 //
 // There is no from-scratch `vbaProject.bin` synthesizer here. Excel does not recompile VBA from source
 // on open (a module runs the compiled p-code it ships) so authoring/editing module SOURCE is done by
 // the offline `tools/vba-compiler` (VBIDE), which produces genuinely compiled p-code. This module holds
 // only what the pure-TS structural edits (remove module, add reference) still need (ADR 0019).
 
-import {utf16leBytes} from '../bytes.ts';
 import {quoted} from '../errors.ts';
 import {MAX_NAME_CHARS} from './cfb-format.ts';
 import {VbaAuthorError} from './errors.ts';
@@ -26,19 +26,4 @@ export function validateVbaName(name: string, what: 'project' | 'module' | 'refe
       `invalid ${what} name ${quoted(name)} (must be a VBA identifier ≤ 31 chars)`,
     );
   }
-}
-
-/** Append one `dir`-stream TLV record (Id, Size, data) to `out`. */
-export function push(out: number[], id: number, data: number[]): void {
-  out.push(...u16(id), ...u32(data.length), ...data);
-}
-export function u16(n: number): number[] {
-  return [n & 0xff, (n >> 8) & 0xff];
-}
-export function u32(n: number): number[] {
-  return [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, (n >> 24) & 0xff];
-}
-/** A name as NUL-free UTF-16LE code units: the encoding [MS-OVBA] uses for every "Unicode" name field. */
-export function utf16le(s: string): number[] {
-  return [...utf16leBytes(s)];
 }

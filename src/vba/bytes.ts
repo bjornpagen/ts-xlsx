@@ -1,7 +1,6 @@
-// Read-side byte primitives for the VBA subsystem: the counterpart to the write-side `vba-encoding.ts`
-// (`u16`, `u32`, `utf16le`, `push`). Every structure under `src/vba/` is a little-endian binary record
-// ([MS-CFB] sectors and directory entries, [MS-OVBA] `dir` TLVs and compressed chunks), so these four
-// are what its parsers are built from.
+// Byte primitives for the VBA subsystem. Every structure under `src/vba/` is a little-endian binary record
+// ([MS-CFB] sectors and directory entries, [MS-OVBA] `dir` TLVs and compressed chunks), so these are
+// what its parsers read with and what its splices write with.
 //
 // The bound is checked here, once, rather than at each caller. A plain `buf[at] | (buf[at + 1] << 8)`
 // reads `undefined | (undefined << 8)` past the end, which is `0`, so a truncated `vbaProject.bin` out of
@@ -57,6 +56,18 @@ export function writeU16(buf: Uint8Array, at: number, value: number): void {
   if (at + 1 >= buf.length) throw truncated(at, 2, buf.length);
   buf[at] = value & 0xff;
   buf[at + 1] = (value >> 8) & 0xff;
+}
+
+/** Write a little-endian `uint32` over bytes already in `buf`, asserted rather than masked as {@link writeU16} is. */
+export function writeU32(buf: Uint8Array, at: number, value: number): void {
+  if (!Number.isInteger(value) || value < 0 || value > 0xffff_ffff) {
+    throw new VbaParseError(`${value} does not fit the uint32 at offset ${at}`);
+  }
+  if (at + 3 >= buf.length) throw truncated(at, 4, buf.length);
+  buf[at] = value & 0xff;
+  buf[at + 1] = (value >>> 8) & 0xff;
+  buf[at + 2] = (value >>> 16) & 0xff;
+  buf[at + 3] = (value >>> 24) & 0xff;
 }
 
 /**
