@@ -30,6 +30,54 @@ const anchors = (sheet: Worksheet) => ({
   threads: sheet.commentThreads.map((thread) => thread.ref),
 });
 
+// A cell's value can carry grid coordinates of its own: a hyperlink's clickable range, a data table's
+// filled range and input cells. A splice moved the cell and left those behind, so the writer emitted a
+// hyperlink over the cells the link had moved away from.
+test('a hyperlink range moves with its cell through a row insert and a column delete', () => {
+  const sheet = new Workbook().addWorksheet('S');
+  sheet.getCell('D1').value = {text: 'go', hyperlink: 'https://example.com/', range: 'D1:H1'};
+  sheet.mergeCells('D1:H1');
+
+  sheet.insertRow(1, ['header']);
+  assert.deepEqual(sheet.getCell('D2').value, {
+    text: 'go',
+    hyperlink: 'https://example.com/',
+    range: 'D2:H2',
+  });
+
+  sheet.spliceColumns(1, 2);
+  assert.deepEqual(sheet.merges, ['B2:F2']);
+  assert.deepEqual(sheet.getCell('B2').value, {
+    text: 'go',
+    hyperlink: 'https://example.com/',
+    range: 'B2:F2',
+  });
+});
+
+test("a data table's filled range and input cells move with inserts above and to the left", () => {
+  const sheet = new Workbook().addWorksheet('S');
+  sheet.getCell('B2').value = {
+    shareType: 'dataTable',
+    ref: 'B2:B5',
+    dataTable2D: true,
+    r1: 'A1',
+    r2: 'C1',
+    result: 3,
+  };
+
+  sheet.insertRow(1, []);
+  sheet.insertColumn(1, []);
+
+  assert.deepEqual(sheet.getCell('C3').value, {
+    shareType: 'dataTable',
+    ref: 'C3:C6',
+    dataTable2D: true,
+    r1: 'B2',
+    r2: 'D2',
+    result: 3,
+  });
+});
+
 test('an insert above carries every range-bound overlay down with the cells it covers', () => {
   const sheet = anchoredSheet();
   sheet.insertRow(1, ['hdr']);

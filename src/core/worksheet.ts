@@ -850,8 +850,7 @@ export class Worksheet {
     assertSpliceFits('row', start, inserts.length);
     const inserted = inserts.map((values, i) => buildRowCells(start + i, values, this.#columns));
     this.#edits.spliceRows(start, count, inserted);
-    this.#merges.invalidate();
-    this.#extent.invalidate();
+    this.#afterStructuralEdit();
   }
 
   /**
@@ -987,12 +986,11 @@ export class Worksheet {
     if (insert) {
       const copies = Array.from({length: count}, () => snapshot(start));
       this.#edits.spliceRows(start + 1, 0, copies);
-      this.#merges.invalidate();
     } else {
       for (let i = 1; i <= count; i++) this.#rows.set(start + i, snapshot(start + i));
     }
     for (let i = 1; i <= count; i++) copyProperties(start + i);
-    this.#extent.invalidate();
+    this.#afterStructuralEdit();
   }
 
   /**
@@ -1012,8 +1010,7 @@ export class Worksheet {
     assertStartAndCount('splice', 'column', start, count);
     assertSpliceFits('column', start, inserts.length);
     this.#edits.spliceColumns(start, count, inserts);
-    this.#merges.invalidate();
-    this.#extent.invalidate();
+    this.#afterStructuralEdit();
   }
 
   /**
@@ -1088,6 +1085,13 @@ export class Worksheet {
     // TypeScript cannot follow an object built key by key; what makes this sound is that the
     // registry is proved exhaustive over `keyof WorksheetModel`; see the type assertion beside it.
     return model as unknown as WorksheetModel;
+  }
+
+  // What every structural edit ends with. The extent was derived from lines the edit just moved and
+  // cannot tell which bound went, so it re-derives on the next read. The merge index needs no such
+  // call: a splice replaces its rectangles through `replaceAll`, which resets it.
+  #afterStructuralEdit(): void {
+    this.#extent.invalidate();
   }
 
   // Empty every collection the model round-trips, so a subsequent replay leaves no residue from

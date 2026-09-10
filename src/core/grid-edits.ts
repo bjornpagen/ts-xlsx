@@ -1,23 +1,36 @@
 // Structural-edit machinery: the splice arithmetic that inserts or deletes whole rows and columns
 // and keeps everything anchored to the grid moving in step: line metadata, merged ranges, tables,
-// anchored images, shared-formula clones, and the range-bound overlays (data validations, conditional
-// formats, comment threads, the autofilter). It is isolated from Worksheet because it is pure grid
-// mechanics: it holds the sheet's storage containers by reference and mutates them in place, and
-// touches none of the public cell API. Worksheet builds the cells an insert introduces, then hands
+// anchored images, the coordinates a cell's value carries, and the range-bound overlays (data
+// validations, conditional formats, comment threads, the autofilter). It is isolated from Worksheet
+// because it is pure grid mechanics: it holds the sheet's storage containers by reference and mutates
+// them in place, and touches none of the public cell API. Worksheet builds the cells an insert introduces, then hands
 // the pre-built rows (or the raw column values) here for the shift.
 
-import {boundedRect, decodeRange, encodeAddress, encodeRect, tryDecodeCellRef} from './address.ts';
+import {
+  boundedRect,
+  decodeRange,
+  encodeAddress,
+  encodeRect,
+  type GridRect,
+  tryDecodeCellRef,
+  tryDecodeRange,
+} from './address.ts';
 import {type AutoFilter, shiftAutoFilter} from './autofilter.ts';
 import {Cell, copyCellContent} from './cell.ts';
 import type {ConditionalFormattingOverlay} from './conditional-formatting-overlay.ts';
 import {replaceContents} from './containers.ts';
 import type {DataValidationOverlay} from './data-validation-overlay.ts';
-import {type AxisSplice, isDeletedSpan, shiftIndex, shiftRect} from './grid-shift.ts';
+import {type AxisSplice, isDeletedSpan, shiftIndex, shiftPoint, shiftRect} from './grid-shift.ts';
 import {type AnchoredImage, type AnchorPoint, type ImageAnchor, isOneCellAnchor} from './image.ts';
 import type {MergeRect} from './merge.ts';
 import {positionalPlacements} from './row-input.ts';
 import type {Table} from './table.ts';
-import {type CellValue, isSharedFormulaValue, type SharedFormulaValue} from './value.ts';
+import {
+  type CellValue,
+  isDataTableFormulaValue,
+  isHyperlinkValue,
+  isSharedFormulaValue,
+} from './value.ts';
 import type {WorksheetComments} from './worksheet-comments.ts';
 import type {WorksheetMerges} from './worksheet-merges.ts';
 import type {ColumnProperties, RowProperties} from './worksheet.ts';
@@ -96,18 +109,13 @@ export class GridEdits {
     this.#rows.clear();
     for (const [row, cols] of shifted) this.#rows.set(row, cols);
 
-    this.#shiftLineProperties(this.#rowProperties, splice);
-    this.#shiftMerges(splice);
-    this.#shiftTables(splice);
-    this.#shiftImages(splice);
-    this.#reanchorSharedFormulas(splice);
-    this.#shiftRangeBoundOverlays(splice);
+    this.#shiftAnchored(splice, this.#rowProperties);
   }
 
   // Apply a delete-then-insert to the column grid: cells left of the edit stay, cells at or beyond the
   // deleted span shift by `inserts.length - count` carrying their content, and the inserted column
-  // values materialise as fresh cells at `start`. Column metadata, merges, tables, images,
-  // shared-formula clones and the range-bound overlays re-anchor the same way.
+  // values materialise as fresh cells at `start`. Column metadata, merges, tables, images, the
+  // coordinates cell values carry and the range-bound overlays re-anchor the same way.
   spliceColumns(start: number, count: number, inserts: CellValue[][]): void {
     const splice: AxisSplice = {axis: 'col', start, count, delta: inserts.length - count};
     // Built whole, then swapped in, the way `spliceRows` does it. Writing each row back inside the loop
@@ -161,11 +169,17 @@ export class GridEdits {
       }
     });
     for (const [row, cols] of shiftedRows) this.#rows.set(row, cols);
-    this.#shiftLineProperties(this.#columns, splice);
+    this.#shiftAnchored(splice, this.#columns);
+  }
+
+  // Everything anchored to the grid besides the cells, moved through one splice. Both axes end here, so
+  // a participant is added once and cannot be moved on one axis and forgotten on the other.
+  #shiftAnchored<T>(splice: AxisSplice, lineProperties: Map<number, T>): void {
+    this.#shiftLineProperties(lineProperties, splice);
     this.#shiftMerges(splice);
     this.#shiftTables(splice);
     this.#shiftImages(splice);
-    this.#reanchorSharedFormulas(splice);
+    this.#reanchorValueReferences(splice);
     this.#shiftRangeBoundOverlays(splice);
   }
 
@@ -198,25 +212,17 @@ export class GridEdits {
     return moved;
   }
 
-  // Re-anchor shared-formula clones through a splice on the given axis. A clone stores its master's
-  // absolute address; when the splice shifts the master, that stored address goes stale and the writer
-  // would reject the clone as orphaned. Applying the same shift the grid used keeps each clone pointed
-  // at its master's new cell. A master whose axis coordinate falls in the deleted span clamps to the
-  // cut line like a merge edge: a genuinely orphaned clone the writer then reports legibly.
-  #reanchorSharedFormulas(splice: AxisSplice): void {
+  // Move the grid coordinates a cell's value carries: the positions stored inside a value rather than
+  // beside it, which are a shared-formula clone's master address, a hyperlink's clickable `range`, and
+  // a data table's filled `ref` and input cells. Each names cells by position, so left behind it names
+  // cells the splice moved away from, and the writer emits it as written. Formula text is the one
+  // thing still not rewritten; see the GridEdits paragraph in docs/architecture.md.
+  #reanchorValueReferences(splice: AxisSplice): void {
     for (const cols of this.#rows.values()) {
       for (const cell of cols.values()) {
         const value = cell.value;
-        if (!isSharedFormulaValue(value)) continue;
-        const master = tryDecodeCellRef(value.sharedFormula);
-        if (master === undefined) continue;
-        const anchored =
-          splice.axis === 'row'
-            ? encodeAddress(master.col, shiftIndex(master.row, splice))
-            : encodeAddress(shiftIndex(master.col, splice), master.row);
-        if (anchored === value.sharedFormula) continue;
-        const reanchored: SharedFormulaValue = {...value, sharedFormula: anchored};
-        cell.value = reanchored;
+        const moved = reanchoredValue(value, splice);
+        if (moved !== value) cell.value = moved;
       }
     }
   }
@@ -293,4 +299,68 @@ export class GridEdits {
     });
     replaceContents(this.#images, moved);
   }
+}
+
+// A cell value with the coordinates it carries moved through a splice, or the very same value when
+// none of them moved, so an untouched cell is not reassigned.
+function reanchoredValue(value: CellValue, splice: AxisSplice): CellValue {
+  if (isSharedFormulaValue(value)) {
+    // A clone stores its master's absolute address, and a stale one is a clone the writer rejects as
+    // orphaned. A master in the deleted span clamps to the cut line like a merge edge, leaving a
+    // genuinely orphaned clone the writer then reports legibly.
+    const master = tryDecodeCellRef(value.sharedFormula);
+    if (master === undefined) return value;
+    const anchored =
+      splice.axis === 'row'
+        ? encodeAddress(master.col, shiftIndex(master.row, splice))
+        : encodeAddress(shiftIndex(master.col, splice), master.row);
+    return anchored === value.sharedFormula ? value : {...value, sharedFormula: anchored};
+  }
+  if (isHyperlinkValue(value) && value.range !== undefined) {
+    const range = shiftedRange(value.range, splice);
+    if (range === value.range) return value;
+    // A range the delete took whole, around a cell that survived, describes nothing any more: the link
+    // stays on its cell as an ordinary single-cell one.
+    if (range === undefined) {
+      const {hyperlink, text, tooltip} = value;
+      return tooltip === undefined ? {hyperlink, text} : {hyperlink, text, tooltip};
+    }
+    return {...value, range};
+  }
+  if (isDataTableFormulaValue(value)) {
+    // The filled range holds the table's own cell, so a cell that survived keeps a range that did.
+    const ref = shiftedRange(value.ref, splice) ?? value.ref;
+    const r1 = value.r1 === undefined ? undefined : shiftedInputCell(value.r1, splice);
+    const r2 = value.r2 === undefined ? undefined : shiftedInputCell(value.r2, splice);
+    if (ref === value.ref && r1 === value.r1 && r2 === value.r2) return value;
+    return {...value, ref, ...(r1 === undefined ? {} : {r1}), ...(r2 === undefined ? {} : {r2})};
+  }
+  return value;
+}
+
+// A range reference moved as a region: the text itself when it did not move or names no bounded range,
+// re-spelled when it moved, and `undefined` when the delete took it whole.
+function shiftedRange(ref: string, splice: AxisSplice): string | undefined {
+  const decoded = tryDecodeRange(ref);
+  const rect = decoded === undefined ? undefined : boundedRect(decoded);
+  if (rect === undefined) return ref;
+  const moved = shiftRect(rect, splice);
+  if (moved === undefined) return undefined;
+  return sameRect(moved, rect) ? ref : encodeRect(moved);
+}
+
+// A data table's input cell moved with its line. One the delete took is left as it was: whether Excel
+// re-points the table or turns the input into `#REF!` was not checked, and a guess would rewrite the
+// file's formula on a hunch.
+function shiftedInputCell(ref: string, splice: AxisSplice): string {
+  const cell = tryDecodeCellRef(ref);
+  const moved = cell === undefined ? undefined : shiftPoint(cell, splice);
+  if (cell === undefined || moved === undefined) return ref;
+  return moved.row === cell.row && moved.col === cell.col
+    ? ref
+    : encodeAddress(moved.col, moved.row);
+}
+
+function sameRect(a: GridRect, b: GridRect): boolean {
+  return a.top === b.top && a.left === b.left && a.bottom === b.bottom && a.right === b.right;
 }

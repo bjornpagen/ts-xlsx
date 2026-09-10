@@ -112,6 +112,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   applied. The model is now applied to a scratch sheet first; an assignment that fails throws and
   leaves the destination as it was.
 
+- **A row or column splice left a hyperlink's clickable range and a data table's ranges behind.** A
+  splice moved a cell but not the coordinates inside its value: a link over merged `D1:H1` moved to
+  `D2` with its `range` still `D1:H1`, so the writer emitted the hyperlink over the old cells and a
+  re-read put an empty link on `D1`. A hyperlink's `range` and a data table's `ref`, `r1` and `r2` now
+  move with the cell, as a shared-formula clone's master address already did.
+
 
 ## [3.1.0] — 2026-09-04
 

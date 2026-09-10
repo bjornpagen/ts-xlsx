@@ -129,4 +129,30 @@ export const hyperlinks = {
     });
     return {read: report(read), rewritten: report(readXlsx(writeXlsx(read)))};
   },
+
+  // Put a link whose clickable range spans merged D1:H1 on D1, insert a row above, write and read it
+  // back → { merges, linkRef, link }: the merged ranges read back, the `ref` of the written
+  // `<hyperlink>` (or null), and the value read from D2 as { hyperlink, text, range }, or null when D2
+  // holds no link.
+  rangedHyperlinkAfterInsertRow() {
+    const wb = new Workbook();
+    const sheet = wb.addWorksheet('S');
+    sheet.getCell('D1').value = {text: 'go', hyperlink: 'https://example.com/', range: 'D1:H1'};
+    sheet.mergeCells('D1:H1');
+    sheet.insertRow(1, ['header']);
+    const bytes = writeXlsx(wb);
+    const element = (partMapOf(bytes)['xl/worksheets/sheet1.xml'] ?? '').match(
+      /<hyperlink\b[^>]*\/?>/,
+    )?.[0];
+    const read = readXlsx(bytes).getWorksheet('S');
+    const value: Untyped = read?.getCell('D2').value ?? null;
+    return {
+      merges: read === undefined ? [] : [...read.merges],
+      linkRef: element === undefined ? null : (attrsOf(element).ref ?? null),
+      link:
+        value !== null && typeof value === 'object' && 'hyperlink' in value
+          ? {hyperlink: value.hyperlink, text: value.text, range: value.range ?? null}
+          : null,
+    };
+  },
 };

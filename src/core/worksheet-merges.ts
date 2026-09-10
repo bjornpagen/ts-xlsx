@@ -107,11 +107,6 @@ export class WorksheetMerges {
     this.#index.invalidate();
   }
 
-  /** Report that something outside has rewritten the grid under these regions. */
-  invalidate(): void {
-    this.#index.invalidate();
-  }
-
   clear(): void {
     this.#ranges.length = 0;
     this.#rects.length = 0;

@@ -69,13 +69,19 @@ const TOTAL_BUDGET_BYTES = 580 * 1024;
 // (`/core` +0.8 KB), and a shared formula's clone shifts whole-column and whole-row ranges (+1.1 KB on
 // `.`). `.` went over, `/core` and `/xlsb` were left under a kilobyte, and the total under four; the
 // numbers below restore them against today's measurement.
+//
+// Re-baselined again when a row or column splice began moving the coordinates a cell's value carries
+// (a hyperlink's clickable range, a data table's ranges) beside the shared-formula master it already
+// moved. `core/grid-edits.ts` is on every entry that reaches the model, so the ~0.9 KB landed on five
+// entries at once, none of which had a kilobyte left after the VBA byte-splicing and model-assignment
+// fixes just before it. Each number below restores about a kilobyte against today's measurement.
 const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
-  '.': 566,
+  '.': 568,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
-  './core': 208,
-  './xlsx': 550,
+  './core': 210,
+  './xlsx': 552,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -84,7 +90,7 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 295, by the same VBA byte-splicing change as `/core`, which put this entry
   // 0.7 KB over. The new figure restores the headroom against today's measurement.
-  './xlsb': 297,
+  './xlsb': 299,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
@@ -93,7 +99,7 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 216, when a worksheet model assignment began rehearsing on a scratch sheet. The
   // entry sat at exactly its budget, and those few lines in `core/worksheet.ts` put it a tenth over;
   // the new figure restores a kilobyte of headroom against today's measurement.
-  './csv': 217,
+  './csv': 219,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //

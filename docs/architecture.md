@@ -236,8 +236,9 @@ widens the window until the query is the scan it replaced, never worse. Resolvin
 to its region's master rides the same index, which takes that scan off `getCell` as well.
 
 `GridEdits` owns that splice arithmetic for *everything* anchored to the grid, which is a wider set
-than the cell rows: line metadata, merges, tables, anchored images and shared-formula anchors move
-with the cells, and so do the four things bound to a range that live outside the cell grid entirely:
+than the cell rows: line metadata, merges, tables, anchored images and the coordinates a cell's value
+carries (a shared-formula master, a hyperlink's clickable range, a data table's ranges) move with the
+cells, and so do the four things bound to a range that live outside the cell grid entirely:
 data validations, conditional formats, comment threads and the sheet's autofilter. The invariant
 is the general one, not a list that happened to be complete once: an overlay left behind re-points a
 dropdown or a highlight rule at cells nobody chose, and the writer emits that without complaint. The
@@ -250,6 +251,11 @@ swallow it whole? -- and the projections built out of them (a span, a rectangle,
 them, so the axis ternary is written once instead of once per overlay. A range the delete swallowed
 whole takes its entry with it rather than clamping onto the cut line, because dropping a rule is
 legible and silently re-aiming one is not.
+
+Formula text is the known limit. A splice moves the coordinates a value stores as data, but it does
+not rewrite the references inside a formula's text, so `=SUM(A1:A10)` above an inserted row still
+sums `A1:A10` where Excel would move it. That needs a reference-aware rewrite over the formula
+tokenizer, which is a feature of its own rather than a participant this list forgot.
 
 The row and column axes are deliberately not mirror images, and where they diverge is a decision
 rather than a gap someone forgot to close. A row takes either input shape, a positional array or an
