@@ -98,6 +98,19 @@ test('a table keeps an empty <totalsRowFormula/> off the column that follows it'
   assert.equal(table?.columns?.[1]?.totalsRowFormula, 'SUM(T[Two])');
 });
 
+test('a table keeps an empty <calculatedColumnFormula/> off the totals formula beside it', () => {
+  const table = parseTable(
+    '<table displayName="T" ref="A1:B3" totalsRowCount="1">' +
+      '<tableColumns>' +
+      '<tableColumn name="One"/>' +
+      '<tableColumn name="Two" totalsRowFunction="custom"><calculatedColumnFormula/>' +
+      '<totalsRowFormula>SUM(T[Two])</totalsRowFormula></tableColumn>' +
+      '</tableColumns></table>',
+  );
+  assert.equal(table?.columns?.[1]?.calculatedColumnFormula, undefined);
+  assert.equal(table?.columns?.[1]?.totalsRowFormula, 'SUM(T[Two])');
+});
+
 test('a conditional formatting keeps an empty <formula/> from taking the next operand', () => {
   const back = readWithPart(
     SHEET1,

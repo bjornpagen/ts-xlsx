@@ -14,6 +14,10 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Added
 
+- **`TableColumn.calculatedColumnFormula`**, the formula that makes a table column a calculated one.
+  A read used to drop it, so a saved table's calculated column kept the formulas already in its
+  cells while every row later added to the table came in blank.
+
 - **Picture alternative text, title, crop and link.** `AnchoredImage` and `PortableImage` carry
   `description`, `title`, `crop` (`ImageCrop`, each edge a fraction of the picture) and `hyperlink`
   (`ImageHyperlink`, a URL or a `#`-prefixed place in the workbook, with a `tooltip`), and

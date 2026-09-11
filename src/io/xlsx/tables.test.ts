@@ -501,6 +501,37 @@ test('a totals-row column serialises its function and keeps every column', () =>
   assert.match(table, /<tableColumn id="2" name="Amount" totalsRowFunction="sum"\/>/);
 });
 
+test('a calculated column writes its formula before the totals formula, escaped', () => {
+  const wb = new Workbook();
+  wb.addWorksheet('S').addTable({
+    name: 'T',
+    ref: 'A1',
+    columns: [
+      {name: 'a'},
+      {
+        name: 'b',
+        calculatedColumnFormula: 'IF(T[[#This Row],[a]]<0,"<0",T[[#This Row],[a]])',
+        totalsRowFunction: 'custom',
+        totalsRowFormula: 'COUNTA(T[b])',
+      },
+    ],
+    rowCount: 1,
+    totalsRow: true,
+  });
+  const table = partIn(partsWritten(wb), 'xl/tables/table1.xml');
+  assert.match(
+    table,
+    /<tableColumn id="2" name="b" totalsRowFunction="custom"><calculatedColumnFormula>IF\(T\[\[#This Row\],\[a\]\]&lt;0,"&lt;0",T\[\[#This Row\],\[a\]\]\)<\/calculatedColumnFormula><totalsRowFormula>COUNTA\(T\[b\]\)<\/totalsRowFormula><\/tableColumn>/,
+  );
+  const [back] = roundtrip(wb).getWorksheet('S')?.tables ?? [];
+  assert.equal(
+    back?.columns[1]?.calculatedColumnFormula,
+    'IF(T[[#This Row],[a]]<0,"<0",T[[#This Row],[a]])',
+  );
+  assert.equal(back?.columns[1]?.totalsRowFormula, 'COUNTA(T[b])');
+  assert.equal(back?.columns[0]?.calculatedColumnFormula, undefined);
+});
+
 test('a no-totals table omits totalsRowShown unless the flag is set explicitly', () => {
   const wb = new Workbook();
   wb.addWorksheet('S').addTable({name: 'T', ref: 'A1', columns: [{name: 'A'}], rowCount: 1});

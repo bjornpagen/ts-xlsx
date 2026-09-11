@@ -10,7 +10,9 @@
 // ("Cannot set properties of undefined (setting 'filterButton')"), the whole workbook fails to load.
 //
 // The fixture is a three-column table (Qty, Double, Label) whose middle column, Double, is calculated
-// (`Sales[Qty]*2`). A correct reader loads all three columns without error.
+// (`Sales[Qty]*2`). A correct reader loads all three columns without error, and keeps the formula: it is
+// what Excel fills into a row added to the table, so a save that dropped it would leave the column's
+// cells as they are while every new row came in blank.
 
 import type {Assert, Case, CorpusApi} from '../case.ts';
 
@@ -48,6 +50,16 @@ export default {
           ['Qty', 'Double', 'Label'],
           'columns keep their names and order',
         );
+      },
+    },
+    {
+      name: 'the calculated column keeps its formula through a load and save',
+      expect(api: CorpusApi, assert: Assert) {
+        const [table] = api.roundtripFixtureTableXml(FIXTURE).tables;
+        assert.deepStrictEqual(table?.source.calculatedColumnFormulas, {Double: 'Sales[Qty]*2'});
+        assert.deepStrictEqual(table?.rewritten?.calculatedColumnFormulas, {
+          Double: 'Sales[Qty]*2',
+        });
       },
     },
   ],

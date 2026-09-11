@@ -66,12 +66,13 @@ function tableStyleInfoXml(style: TableStyleInfo | undefined): string {
   return `<tableStyleInfo${attrs}/>`;
 }
 
-// A `<tableColumn>` as the reader accumulates it: its attributes, then a `<totalsRowFormula>` child.
+// A `<tableColumn>` as the reader accumulates it: its attributes, then its two formula children.
 type TableColumnDraft = {
   name: string;
   totalsRowLabel?: string;
   totalsRowFunction?: TotalsRowFunction;
   totalsRowFormula?: string;
+  calculatedColumnFormula?: string;
 };
 
 function tableColumnXml(column: TableColumn, id: number): string {
@@ -82,13 +83,19 @@ function tableColumnXml(column: TableColumn, id: number): string {
   if (column.totalsRowFunction !== undefined) {
     attrs += ` totalsRowFunction="${checkedToken(column.totalsRowFunction, isTotalsRowFunction, 'totals row function')}"`;
   }
-  // A `custom` total is carried by a `<totalsRowFormula>` child rather than a built-in function, so
-  // the element is non-self-closing when one is present. The formula is stored without a leading `=`,
-  // matching how Excel writes it.
-  if (column.totalsRowFormula !== undefined) {
-    return `<tableColumn ${attrs}><totalsRowFormula>${escapeText(column.totalsRowFormula)}</totalsRowFormula></tableColumn>`;
+  // Both formulas are stored without a leading `=`, as Excel writes them, and in this order, which
+  // CT_TableColumn's sequence fixes. A `custom` total is carried by `<totalsRowFormula>` rather than a
+  // built-in function.
+  let children = '';
+  if (column.calculatedColumnFormula !== undefined) {
+    children += `<calculatedColumnFormula>${escapeText(column.calculatedColumnFormula)}</calculatedColumnFormula>`;
   }
-  return `<tableColumn ${attrs}/>`;
+  if (column.totalsRowFormula !== undefined) {
+    children += `<totalsRowFormula>${escapeText(column.totalsRowFormula)}</totalsRowFormula>`;
+  }
+  return children === ''
+    ? `<tableColumn ${attrs}/>`
+    : `<tableColumn ${attrs}>${children}</tableColumn>`;
 }
 
 /**
@@ -106,14 +113,15 @@ export function parseTable(xml: string): TableOptions | undefined {
   let style: TableStyleInfo | undefined; // Absent unless the part carries a `<tableStyleInfo>`.
   let hasAutoFilter = false; // Only present when the part carries an `<autoFilter>` element.
   const columns: TableColumnDraft[] = [];
-  // The column a `<totalsRowFormula>` belongs to. Unset while inside a column that was skipped, so
-  // its formula lands nowhere rather than on the column before it.
+  // The column a formula child belongs to. Unset while inside a column that was skipped, so its
+  // formula lands nowhere rather than on the column before it.
   let currentColumn: TableColumnDraft | undefined;
 
-  // A `<totalsRowFormula>` is a text child of the current `<tableColumn>`, so it is captured across
-  // open/text/close rather than from an attribute. `calculatedColumnFormula` is a sibling child of
-  // the same type (CT_TableFormula), which is why the capture answers only for its own element.
-  const totalsFormula = new TextCapture('totalsRowFormula');
+  // The two formulas are text children of the current `<tableColumn>`, of one type (CT_TableFormula),
+  // captured across open/text/close. Their `array` attribute is not kept: Excel refuses a multi-cell
+  // array formula in a table, so it marks a legacy single-cell one, which the body cells carry as their
+  // own.
+  const formula = new TextCapture(['totalsRowFormula', 'calculatedColumnFormula']);
 
   parseXml(xml, {
     onOpen(elementName, attrs, selfClosing) {
@@ -167,20 +175,23 @@ export function parseTable(xml: string): TableOptions | undefined {
           break;
         }
         case 'totalsRowFormula':
-          totalsFormula.open('totalsRowFormula', selfClosing);
+        case 'calculatedColumnFormula':
+          formula.open(localName(elementName), selfClosing);
           break;
       }
     },
     onText(text) {
-      totalsFormula.text(text);
+      formula.text(text);
     },
     onClose(elementName) {
-      const formula = totalsFormula.close(localName(elementName));
-      if (formula === undefined) return;
-      // Attach to the column currently being parsed. Excel writes the child only for
-      // `totalsRowFunction="custom"`, so a formula on any other column is meaningless, but preserving
-      // whatever the part carried keeps the round-trip faithful rather than second-guessing.
-      if (currentColumn !== undefined) currentColumn.totalsRowFormula = formula;
+      const local = localName(elementName);
+      const text = formula.close(local);
+      if (text === undefined || currentColumn === undefined) return;
+      // Excel writes a totals formula only for `totalsRowFunction="custom"`, so one on any other column
+      // is meaningless, but preserving whatever the part carried keeps the round-trip faithful rather
+      // than second-guessing.
+      if (local === 'totalsRowFormula') currentColumn.totalsRowFormula = text;
+      else currentColumn.calculatedColumnFormula = text;
     },
   });
 

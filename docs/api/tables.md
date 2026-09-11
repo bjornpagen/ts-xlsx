@@ -157,6 +157,15 @@ interface TableColumn {
    * `<totalsRowFormula>` child. Round-tripped verbatim and written into the totals cell as the
    * cell's formula. Meaningful only alongside `totalsRowFunction: "custom"`; ignored otherwise. */
   readonly totalsRowFormula?: string;
+  /**
+   * The formula (no leading `=`) that makes this a calculated column: OOXML's
+   * `<calculatedColumnFormula>`, spelled as it stands in the column's first data row, with a structured
+   * reference to the row written `Table[[#This Row],[Column]]`. Excel fills it into each row added to
+   * the table.
+   *
+   * It describes the column and writes no cell: the body cells hold their own formulas.
+   */
+  readonly calculatedColumnFormula?: string;
   /** A format applied to this column's body cells as they are written (see {@link TableColumnStyle}).
    * Excel bakes a table-column style into the cells rather than storing it as table metadata, so this
    * is an authoring convenience: it round-trips as the affected cells' own styles, not as the table. */

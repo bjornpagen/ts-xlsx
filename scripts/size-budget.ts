@@ -61,7 +61,10 @@ const DIST = join(ROOT, 'dist');
 //
 // Raised again, from 597, when a row or column splice began moving the references in formula text, on every sheet and in defined names. `core/formula-references.ts` is a reader of formula text
 // of its own, and `core/grid-edits.ts` the pass that hands every formula the splice. 11.1 KB over.
-const TOTAL_BUDGET_BYTES = 609 * 1024;
+//
+// Raised again, from 609, when a table column began keeping its calculated column formula, which left
+// the total sitting on its budget.
+const TOTAL_BUDGET_BYTES = 610 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -307,7 +310,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // 3.6 KB over.
   //
   // Raised again, from 425, by the same formula reference moves as `/core`, 11.1 KB over.
-  './node': 437,
+  //
+  // Raised again, from 437, when the table codec began reading and writing a calculated column
+  // formula, which left the entry sitting on its budget.
+  './node': 438,
   // Raised from 50 when the MS-OVBA encoder stopped rescanning its whole back-window for every
   // output byte. The hash chain that replaced the rescan is the cost, and it buys a time bound on a
   // path an untrusted `.xlsm` reaches through `removeVbaModule`; the CFB and `dir` guards landed

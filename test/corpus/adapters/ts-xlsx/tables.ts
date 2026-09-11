@@ -33,8 +33,8 @@ export const tables = {
   },
 
   // Load a fixture and report a named table's column count and names, used to prove a table with a
-  // calculated column (a <calculatedColumnFormula> child the reader ignores) does not truncate the
-  // column list or crash the read.
+  // calculated column (a <calculatedColumnFormula> child of the column) does not truncate the column
+  // list or crash the read.
   loadFixtureTableColumns(rel: string, tableName: string) {
     try {
       const wb = readFixture(rel);
@@ -411,9 +411,11 @@ export const tables = {
   },
 
   // Read every table part of a fixture, then load→save it and read the re-emitted parts, reporting
-  // each table's autoFilter / header-row / totals-row / column-count facts before and after. A no-op
-  // round-trip of a table that has no autoFilter must not inject one, flip the header row off, or turn
-  // totalsRowShown on; a table that does have one must keep its ref and column count.
+  // each table's autoFilter / header-row / totals-row / column-count facts before and after, and each
+  // column's calculated column formula as a map of column name → formula text (columns without one
+  // are absent). A no-op round-trip of a table that has no autoFilter must not inject one, flip the
+  // header row off, or turn totalsRowShown on; a table that does have one must keep its ref and column
+  // count.
   roundtripFixtureTableXml(rel: string) {
     const facts = (xml: string) => ({
       hasAutoFilter: /<(?:\w+:)?autoFilter\b/.test(xml),
@@ -421,6 +423,13 @@ export const tables = {
       headerRowCount: (xml.match(/\bheaderRowCount="([^"]*)"/) || [])[1] ?? null,
       totalsRowShown: (xml.match(/\btotalsRowShown="([^"]*)"/) || [])[1] ?? null,
       columnCount: (xml.match(/<tableColumns\b[^>]*\bcount="([^"]*)"/) || [])[1] ?? null,
+      calculatedColumnFormulas: Object.fromEntries(
+        [
+          ...xml.matchAll(
+            /<tableColumn\b[^>]*\bname="([^"]*)"[^>]*>\s*<calculatedColumnFormula\b[^>]*>([\s\S]*?)<\/calculatedColumnFormula>/g,
+          ),
+        ].map((match) => [match[1] ?? '', match[2] ?? '']),
+      ),
     });
     const tablePartsInOrder = (parts: PartMap) =>
       Object.keys(parts)
