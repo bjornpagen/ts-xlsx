@@ -130,6 +130,11 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Fixed
 
+- **An `.xlsb` workbook read without its sheet protection.** The binary reader ignored the protection
+  records, so a protected sheet read as unprotected and was saved unguarded. It now reads which
+  operations stay allowed, a legacy password hash, and a password's credential, into the same model the
+  sheet's `.xlsx` twin reads as.
+
 - **A pivot with a numeric field on an axis opened with Excel's repair prompt.** A cache field's
   catalogue of numbers was written without saying it holds numbers, which by the schema's defaults
   describes a field of strings. Every cache field now describes the strings, numbers and blanks it holds

@@ -101,12 +101,21 @@ try {
   $grid.Range('5:6').Group() | Out-Null
   $grid.Rows.Item(8).Font.Italic = $true       # a row-level default format
   $grid.Range('A8').Value2 = 'row format'
+  # Protected with a password, so the binary sheet carries the agile credential record beside the flags,
+  # and with formatting cells, sorting and filtering allowed and objects left editable.
+  # Protect(Password, DrawingObjects, Contents, Scenarios, UserInterfaceOnly, AllowFormattingCells,
+  #   AllowFormattingColumns, AllowFormattingRows, AllowInsertingColumns, AllowInsertingRows,
+  #   AllowInsertingHyperlinks, AllowDeletingColumns, AllowDeletingRows, AllowSorting, AllowFiltering)
+  $grid.Protect('abc', $false, $true, $true, $false, $true, $false, $false, $false, $false, $false, $false, $false, $true, $true)
 
   # --- Sheet 3: hidden, to prove sheet order/visibility survive ---
   $quiet = $wb.Worksheets.Add()
   $quiet.Name = 'Quiet'
   $quiet.Range('A1').Value2 = 'shh'
   $quiet.Visible = 0   # xlSheetHidden
+  # Protected with no password and no cell selectable, the two flags a protected sheet permits by default.
+  $quiet.Protect()
+  $quiet.EnableSelection = -4142   # xlNoSelection
 
   $wb.Worksheets.Item('Values').Activate()
   $wb.SaveAs($xlsb, 50)   # xlExcel12

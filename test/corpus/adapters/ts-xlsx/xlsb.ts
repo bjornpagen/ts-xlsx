@@ -37,6 +37,17 @@ export const xlsb = {
     return {identical: false, firstDifference: 'lengths differ'};
   },
 
+  // Each sheet's protection as the binary reading has it → a map of sheet name → the protection model,
+  // or null for a sheet that is not protected.
+  xlsbSheetProtection() {
+    return Object.fromEntries(
+      readXlsb(fixtureBytes(`${FIXTURE}/source.xlsb`)).worksheets.map((sheet) => [
+        sheet.name,
+        sheet.model.protection ?? null,
+      ]),
+    );
+  },
+
   // The sheets a binary workbook declares, in tab order, with their visibility.
   xlsbSheets() {
     return readXlsb(fixtureBytes(`${FIXTURE}/source.xlsb`)).worksheets.map((sheet) => ({
@@ -250,6 +261,7 @@ function snapshot(workbook: WorkbookInstance): string {
           columns: model.columns,
           rows: model.rows,
           merges: model.merges,
+          protection: model.protection ?? null,
           cells: model.cells.map((cell) => ({...cell, value: comparable(cell.value)})),
         };
       }),

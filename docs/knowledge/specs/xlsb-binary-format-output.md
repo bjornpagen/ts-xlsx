@@ -71,6 +71,13 @@ Excel opens, and read one back."
   what differs from the default. A reader that carries all of it through produces a *similar* model,
   not the *same* one. The rule is that each such field is compared against its default and dropped when
   it matches, which is what makes the corpus case's model-equality assertion hold.
+- **Sheet protection reads from its two records, and every flag is inverted.** *Taken.* A protected
+  sheet carries `BrtSheetProtection` (535): a 16-bit legacy hash, then sixteen `Bool32`s whose first is
+  "protected" and whose other fifteen say an operation is **allowed**, the opposite sense to the XML
+  attributes. A password adds `BrtSheetProtectionIso` (678): a spin count, the same flags, then the hash,
+  the salt and the algorithm name. Both layouts, the flag order and the sense were read off files Excel
+  saved as `.xlsb` and `.xlsx` from one workbook per setting, and the twin fixture carries a sheet
+  protected each way. A flag matching its XML default is dropped under the rule above.
 - **Formulas are decoded to text on read.** *Taken.* Of the three options, decoding to text, storing the
   token stream opaquely, or recomputing, only decoding gives the *same* model the XML reader produces,
   which is the point of the whole exercise. It is implemented as a stack machine over the postfix stream

@@ -21,6 +21,7 @@ import {encodeAddress, encodeRect, MAX_COLUMN_INDEX, MAX_ROW_INDEX} from '../../
 import type {Cell} from '../../core/cell.ts';
 import {coerceDateSerial, type DateEpoch} from '../../core/date.ts';
 import {unmangleFunctions} from '../../core/formula.ts';
+import {INTERNAL} from '../../core/internal.ts';
 import {assignStyleFacets} from '../../core/style.ts';
 import type {CellValue, ErrorValue, FormulaResult} from '../../core/value.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
@@ -32,6 +33,7 @@ import {decodeFormula, type FormulaScope, formulaAnchor} from './formula.ts';
 import {errorCodeFor, RecordReader} from './primitives.ts';
 import {readRecords} from './record-stream.ts';
 import {BRT} from './record-types.ts';
+import {SheetProtectionRecords} from './sheet-protection.ts';
 
 /** Everything reading one cell's payload needs that is not the cursor itself. */
 interface ValueContext {
@@ -128,6 +130,7 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
   const groups = new Map<string, {rgce: Uint8Array; rgcb: Uint8Array}>();
   const deferred: DeferredFormula[] = [];
   const columnBudget = new ColumnRecordBudget();
+  const protection = new SheetProtectionRecords();
 
   for (const record of readRecords(part)) {
     const cellRecord = CELL_RECORDS.get(record.type);
@@ -156,6 +159,10 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
           sheet.mergeCells(ref);
         });
       }
+    } else if (record.type === BRT.SheetProtection) {
+      protection.legacy(reader);
+    } else if (record.type === BRT.SheetProtectionIso) {
+      protection.iso(reader);
     } else if (record.type === BRT.ArrFmla) {
       const {rowFirst, colFirst} = reader.range();
       reader.skip(1); // fAlwaysCalc: a recalculation hint, not part of the formula.
@@ -168,6 +175,9 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
       if (member !== undefined) deferred.push(member);
     }
   }
+
+  const protectedAs = protection.result();
+  if (protectedAs !== undefined) sheet[INTERNAL].restoreProtection(protectedAs);
 
   for (const member of deferred) {
     // Only the group's top-left cell states the formula; the rest carry the value it produced, which

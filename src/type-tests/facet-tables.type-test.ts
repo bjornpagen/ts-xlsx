@@ -42,6 +42,7 @@ import type {
   EveryTableStyleInfoFieldIsCloned,
 } from '../core/table.ts';
 import type {EveryWorksheetModelFieldHasAFacet} from '../core/worksheet-model.ts';
+import type {EveryProtectionFlagHasARecordSlot} from '../io/xlsb/sheet-protection.ts';
 import type {EverySlotIsInSchemaOrder} from '../io/xlsx/theme-xml.ts';
 import type {Equal, Expect} from './expect.ts';
 
@@ -69,6 +70,8 @@ export type FacetTableExhaustiveness = [
   // The other ordered list, and the one whose order is not the one the model indexes by: a theme
   // colour slot missing from the schema order is dropped from every rewritten `<a:clrScheme>`.
   Expect<Equal<EverySlotIsInSchemaOrder, never>>,
+  // The same flags as BIFF12 stores them, by position: one left out shifts every flag after it.
+  Expect<Equal<EveryProtectionFlagHasARecordSlot, never>>,
   // The defensive copies: a field added to one of these types without a copy strategy would
   // otherwise be carried by reference into the model, aliasing the caller's object silently.
   Expect<Equal<EveryRuleFieldIsCloned, never>>,

@@ -53,7 +53,9 @@ const DIST = join(ROOT, 'dist');
 //
 // Raised again, from 589, by the [MS-CFB] layout records on every entry that carries the VBA editors,
 // described above the entry budgets.
-const TOTAL_BUDGET_BYTES = 591 * 1024;
+//
+// Raised again, from 591, when the BIFF12 reader began reading sheet protection, a tenth over.
+const TOTAL_BUDGET_BYTES = 592 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -132,7 +134,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 577, when the attribute scanner began reading a raw tab, LF or CR in a value as
   // the space XML 1.0 makes it, two tenths over.
-  '.': 580,
+  //
+  // Raised again, from 580, by the same BIFF12 sheet protection reader as `/xlsb`, which left this
+  // entry sitting on its budget.
+  '.': 581,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -168,7 +173,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 558, when the package-level VBA edit began finding parts through the reader's
   // case-folding accessors and removing a stale signature's references at scanner-found offsets rather
   // than by pattern, three tenths over.
-  './xlsx': 561,
+  //
+  // Raised again, from 561, by the same BIFF12 sheet protection reader as `/xlsb`: `readXlsx` hands an
+  // `.xlsb` package to that codec, six tenths over.
+  './xlsx': 562,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -192,7 +200,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 303, by the same MS-OVBA raw-chunk padding as `/core`, two tenths over.
   //
   // Raised again, from 306, by the same reference-name rule as `/core`, eight tenths over.
-  './xlsb': 307,
+  //
+  // Raised again, from 307, when the worksheet reader began reading `BrtSheetProtection` and
+  // `BrtSheetProtectionIso` into the model, which also brings the base64 encoder into this entry for
+  // the credential. A protected `.xlsb` sheet used to read as unprotected. 2.3 KB over.
+  './xlsb': 310,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never

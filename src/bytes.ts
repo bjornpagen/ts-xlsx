@@ -41,8 +41,9 @@ const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
  * Spelled out rather than delegated because both platform routes are unavailable here: `Buffer` is
  * a Node global, which is exactly what a browser-safe module may not reach for, and `btoa` is
  * declared deprecated in Node's types (so the `no-deprecated` lint rule rejects it) and takes a
- * binary string rather than bytes anyway. The one caller encodes a 16-byte salt and a 64-byte
- * hash, so the loop below is not on any path where its cost is measurable.
+ * binary string rather than bytes anyway. The callers encode a 16-byte salt and a 64-byte hash, a
+ * sheet password's when one is set and a binary sheet's credential when one is read, so the loop below
+ * is not on any path where its cost is measurable.
  */
 export function toBase64(bytes: Uint8Array): string {
   let out = '';

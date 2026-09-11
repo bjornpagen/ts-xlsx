@@ -16,8 +16,9 @@ export default {
   cluster: 'xlsx-io',
   description:
     'A binary .xlsb workbook reads into the same model its .xlsx twin does: values, number ' +
-    'formats, fonts, fills, borders, alignment, protection, sheet order and visibility, row and ' +
-    'column geometry, and merges, and a malformed binary part fails with a typed parse error.',
+    'formats, fonts, fills, borders, alignment, cell and sheet protection, sheet order and ' +
+    'visibility, row and column geometry, and merges, and a malformed binary part fails with a ' +
+    'typed parse error.',
   provenance: {source: 'upstream-issue'},
   behavior: [
     {
@@ -27,6 +28,34 @@ export default {
         // The message carries the first differing field, so a regression names itself.
         assert.equal(result.firstDifference, null);
         assert.equal(result.identical, true);
+      },
+    },
+    {
+      // Excel writes a password-protected sheet's credential in a second record beside the flags, and
+      // stores each flag as "allowed", the inverse of the XML attribute. A reading that got either wrong
+      // in both codecs at once would still pass the comparison above, so the values are stated too.
+      name: 'sheet protection, its allowed operations, and its password credential survive',
+      expect(api: CorpusApi, assert: Assert) {
+        const protection = api.xlsbSheetProtection();
+        assert.equal(protection.Values, null, 'an unprotected sheet reads as unprotected');
+        assert.deepEqual(protection.Quiet, {
+          flags: {
+            objects: false,
+            scenarios: false,
+            selectLockedCells: false,
+            selectUnlockedCells: false,
+          },
+        });
+        const grid = protection.Grid;
+        assert.deepEqual(grid?.flags, {
+          scenarios: false,
+          formatCells: true,
+          sort: true,
+          autoFilter: true,
+        });
+        assert.equal(grid?.credential?.algorithmName, 'SHA-512');
+        assert.equal(grid?.credential?.spinCount, 100000);
+        assert.equal(grid?.credential?.saltValue, 'uq7o93W/PeaNtWE6aZb8BA==');
       },
     },
     {

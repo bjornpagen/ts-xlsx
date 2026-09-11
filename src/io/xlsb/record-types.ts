@@ -72,4 +72,6 @@ export const BRT = {
   // Worksheet structure.
   WsFmtInfo: 485,
   ArrFmla: 426,
+  SheetProtection: 535,
+  SheetProtectionIso: 678,
 } as const;
