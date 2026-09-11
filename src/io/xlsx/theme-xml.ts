@@ -24,8 +24,8 @@ import {
   type ThemeOverrides,
 } from '../../core/theme.ts';
 import {elementRange, parseXml} from '../../xml/xml-read.ts';
-import {localName, type XmlAttributes} from '../../xml/xml-scan.ts';
-import {escapeAttr} from '../../xml/xml.ts';
+import {localName} from '../../xml/xml-scan.ts';
+import {emptyElement} from '../../xml/xml.ts';
 
 /**
  * Everything the three theme readers want, from one scan.
@@ -124,15 +124,6 @@ function readThemeScheme(themeXml: string): ThemeScheme {
   if (fonts.major !== undefined) scheme.major = fonts.major;
   if (fonts.minor !== undefined) scheme.minor = fonts.minor;
   return {colors, elements, fonts: scheme, prefix};
-}
-
-// Re-render an empty element from its parsed name and attributes. Attribute order is the scanner's,
-// which is the source's, so for the single-element colour children this captures it is the source
-// text, and an override merged over a `<latin>` keeps its attributes where they were.
-function emptyElement(name: string, attrs: XmlAttributes): string {
-  let out = `<${name}`;
-  for (const key in attrs) out += ` ${key}="${escapeAttr(attrs[key] ?? '')}"`;
-  return `${out}/>`;
 }
 
 /**

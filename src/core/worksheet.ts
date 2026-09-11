@@ -361,6 +361,7 @@ export class Worksheet {
       merges: this.#merges,
       tables: this.#tables,
       pivotTables: this.#pivotTables,
+      loadedPivotTables: this.#loadedPivotTables,
       images: this.#images.anchors,
       dataValidations: this.#dataValidations,
       conditionalFormattings: this.#conditionalFormattings,
@@ -617,7 +618,9 @@ export class Worksheet {
    * read-only inspection view (source range, field roles, value field, aggregation). A pivot
    * authored on this sheet via {@link addPivotTable} does not appear here; a pivot loaded from a
    * file does not appear in {@link pivotTables}. The loaded pivots re-emit verbatim through
-   * byte-preservation, so this collection is never itself serialised.
+   * byte-preservation, so this collection is never itself serialised. A row or column splice of a
+   * pivot's source sheet moves its {@link ParsedPivotSource.ref} here and in the cache the writer
+   * emits, by one rule, so the view says what is written.
    */
   get loadedPivotTables(): readonly ParsedPivotTable[] {
     return this.#loadedPivotTables;

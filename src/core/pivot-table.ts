@@ -100,6 +100,12 @@ export interface ParsedPivotSource {
   readonly kind: PivotSourceKind;
   readonly sheet: string;
   readonly ref: string;
+  /**
+   * Whether {@link sheet} and {@link ref} name a range in another workbook, which the cache reaches
+   * through a relationship. A row or column splice of this workbook moves the source of a pivot drawing
+   * from one of its own sheets, as Excel does, and never one of these.
+   */
+  readonly inAnotherWorkbook: boolean;
 }
 
 /** The semantic model reconstructed from a loaded pivot's `pivotTableDefinition` and its
@@ -107,7 +113,8 @@ export interface ParsedPivotSource {
  * {@link metric} is the aggregation the value field applies. This mirrors the authoring model's shape
  * without requiring the source sheet it was built from, so a pivot loaded from a package is
  * inspectable data rather than an opaque preserved blob. It is a read-only view: the writer emits a
- * loaded pivot from its preserved parts, not from this model, so exposing it never double-emits. */
+ * loaded pivot from its preserved parts, not from this model, so exposing it never double-emits. A
+ * splice of the source sheet moves the source range in both, by {@link splicePivotSource}. */
 export interface ParsedPivotTable {
   readonly name: string;
   readonly cacheId: string;
@@ -321,9 +328,7 @@ export class PivotTable {
   /** What a splice does to the pivot's source; see `core/internal.ts`. */
   readonly [INTERNAL]: PivotTableInternals = {
     spliceSource: (edit) => {
-      if (edit.sheet.toLowerCase() !== this.sourceSheetName.toLowerCase()) return;
-      const moved = spliceFormula(this.#sourceRef, edit.sheet, edit);
-      if (moved !== REF_ERROR) this.#sourceRef = moved;
+      this.#sourceRef = splicePivotSource(this.sourceSheetName, this.#sourceRef, edit);
     },
   };
 
@@ -511,6 +516,18 @@ function scalarOf(value: CellValue): PivotItem {
     return value.result === undefined ? BLANK : scalarOf(value.result);
   }
   return BLANK;
+}
+
+/**
+ * A pivot's worksheet source range on `sheet`, moved through a splice as Excel moves it: grown by an
+ * insert inside it, shrunk by a delete, and left as it was by a delete that takes every row or every
+ * column of it, which Excel does not turn into `#REF!`. A splice of another sheet leaves it too. The one
+ * rule for an authored pivot, a loaded pivot's view, and the preserved cache the writer edits.
+ */
+export function splicePivotSource(sheet: string, ref: string, edit: SheetSplice): string {
+  if (sheet.toLowerCase() !== edit.sheet.toLowerCase()) return ref;
+  const moved = spliceFormula(ref, sheet, edit);
+  return moved === REF_ERROR ? ref : moved;
 }
 
 /** What the library's own machinery may do to a {@link PivotTable}; reached as `pivot[INTERNAL]`. */

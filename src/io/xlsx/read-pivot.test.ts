@@ -71,6 +71,21 @@ test('the worksheet source reference and sheet name survive the round-trip', () 
   assert.equal(parsed.source.kind, 'worksheet');
   assert.equal(parsed.source.sheet, 'Data');
   assert.equal(parsed.source.ref, 'A1:C4');
+  assert.equal(parsed.source.inAnotherWorkbook, false);
+});
+
+test('a worksheet source reached through a relationship is a range in another workbook', () => {
+  const cache =
+    '<pivotCacheDefinition xmlns:q="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+    '<cacheSource type="worksheet"><worksheetSource ref="A1:B2" sheet="Data" q:id="rId1"/></cacheSource>' +
+    '<cacheFields count="1"><cacheField name="Amount"/></cacheFields></pivotCacheDefinition>';
+  const parsed = parsePivotTable('<pivotTableDefinition name="P" cacheId="1"/>', cache);
+  assert.deepEqual(parsed.source, {
+    kind: 'worksheet',
+    sheet: 'Data',
+    ref: 'A1:B2',
+    inAnotherWorkbook: true,
+  });
 });
 
 test('sum, the metric whose subtotal attribute is omitted, reads back as sum', () => {
@@ -150,7 +165,12 @@ test('a cache with no cacheSource at all defaults to a worksheet source with emp
   const table = `<pivotTableDefinition name="P" cacheId="1"><dataFields count="1"><dataField fld="0"/></dataFields></pivotTableDefinition>`;
   const cache = `<pivotCacheDefinition><cacheFields count="1"><cacheField name="Amount"/></cacheFields></pivotCacheDefinition>`;
   const parsed = parsePivotTable(table, cache);
-  assert.deepEqual(parsed.source, {kind: 'worksheet', sheet: '', ref: ''});
+  assert.deepEqual(parsed.source, {
+    kind: 'worksheet',
+    sheet: '',
+    ref: '',
+    inAnotherWorkbook: false,
+  });
   assert.equal(parsed.valueFieldName, 'Amount');
 });
 

@@ -26,7 +26,7 @@ import {type AnchoredImage, type AnchorPoint, type ImageAnchor, isOneCellAnchor}
 import {INTERNAL} from './internal.ts';
 import type {MergeRect} from './merge.ts';
 import type {PageBreak} from './page-setup.ts';
-import type {PivotTable} from './pivot-table.ts';
+import {type ParsedPivotTable, type PivotTable, splicePivotSource} from './pivot-table.ts';
 import {positionalPlacements} from './row-input.ts';
 import type {Table} from './table.ts';
 import {
@@ -58,6 +58,7 @@ interface GridStorage {
   readonly merges: WorksheetMerges;
   readonly tables: Table[];
   readonly pivotTables: readonly PivotTable[];
+  readonly loadedPivotTables: ParsedPivotTable[];
   readonly images: AnchoredImage[];
   readonly dataValidations: DataValidationOverlay;
   readonly conditionalFormattings: ConditionalFormattingOverlay;
@@ -81,6 +82,7 @@ export class GridEdits {
   readonly #merges: WorksheetMerges;
   readonly #tables: Table[];
   readonly #pivotTables: readonly PivotTable[];
+  readonly #loadedPivotTables: ParsedPivotTable[];
   readonly #images: AnchoredImage[];
   readonly #dataValidations: DataValidationOverlay;
   readonly #conditionalFormattings: ConditionalFormattingOverlay;
@@ -98,6 +100,7 @@ export class GridEdits {
     this.#merges = storage.merges;
     this.#tables = storage.tables;
     this.#pivotTables = storage.pivotTables;
+    this.#loadedPivotTables = storage.loadedPivotTables;
     this.#images = storage.images;
     this.#dataValidations = storage.dataValidations;
     this.#conditionalFormattings = storage.conditionalFormattings;
@@ -293,6 +296,15 @@ export class GridEdits {
     this.#conditionalFormattings.mapFormulas(rewrite);
     for (const table of this.#tables) table[INTERNAL].rewriteFormulas(rewrite);
     for (const pivot of this.#pivotTables) pivot[INTERNAL].spliceSource(edit);
+    // A loaded pivot is written from its preserved cache, which the writer moves by the same rule; its
+    // view moves here so that it says what will be written.
+    for (const [index, loaded] of this.#loadedPivotTables.entries()) {
+      const {source} = loaded;
+      if (source.kind !== 'worksheet' || source.inAnotherWorkbook) continue;
+      const ref = splicePivotSource(source.sheet, source.ref, edit);
+      if (ref !== source.ref)
+        this.#loadedPivotTables[index] = {...loaded, source: {...source, ref}};
+    }
   }
 
   // Everything anchored to the grid besides the cells, moved through one splice. Both axes end here, so

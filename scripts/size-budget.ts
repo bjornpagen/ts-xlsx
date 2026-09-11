@@ -67,7 +67,11 @@ const DIST = join(ROOT, 'dist');
 //
 // Raised again, from 610, when a splice began moving a table's column formulas and an authored
 // pivot's source, 0.7 to 1.6 KB over.
-const TOTAL_BUDGET_BYTES = 612 * 1024;
+//
+// Raised again, from 612, when the writer began replaying a workbook's splices over the charts and
+// pivot caches it preserves, which takes a rewriter of those parts and a scanner for every element
+// of a name, 0.8 to 4.0 KB over.
+const TOTAL_BUDGET_BYTES = 617 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -158,7 +162,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 598, when a splice began moving a table's column formulas and an authored
   // pivot's source, 0.7 to 1.6 KB over.
-  '.': 601,
+  //
+  // Raised again, from 601, when the writer began replaying a workbook's splices over the charts
+  // and pivot caches it preserves, which takes a rewriter of those parts and a scanner for every
+  // element of a name, 0.8 to 4.0 KB over.
+  '.': 606,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -223,7 +231,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 580, when a splice began moving a table's column formulas and an authored
   // pivot's source, 0.7 to 1.6 KB over.
-  './xlsx': 583,
+  //
+  // Raised again, from 583, when the writer began replaying a workbook's splices over the charts
+  // and pivot caches it preserves, which takes a rewriter of those parts and a scanner for every
+  // element of a name, 0.8 to 4.0 KB over.
+  './xlsx': 588,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -261,7 +273,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 323, when a splice began moving a table's column formulas and an authored
   // pivot's source, 0.7 to 1.6 KB over.
-  './xlsb': 325,
+  //
+  // Raised again, from 325, when the writer began replaying a workbook's splices over the charts
+  // and pivot caches it preserves, which takes a rewriter of those parts and a scanner for every
+  // element of a name, 0.8 to 4.0 KB over.
+  './xlsb': 327,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
@@ -334,7 +350,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 438, when a splice began moving a table's column formulas and an authored
   // pivot's source, 0.7 to 1.6 KB over.
-  './node': 440,
+  //
+  // Raised again, from 440, when the writer began replaying a workbook's splices over the charts
+  // and pivot caches it preserves, which takes a rewriter of those parts and a scanner for every
+  // element of a name, 0.8 to 4.0 KB over.
+  './node': 445,
   // Raised from 50 when the MS-OVBA encoder stopped rescanning its whole back-window for every
   // output byte. The hash chain that replaced the rescan is the cost, and it buys a time bound on a
   // path an untrusted `.xlsm` reaches through `removeVbaModule`; the CFB and `dir` guards landed

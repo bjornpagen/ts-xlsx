@@ -24,6 +24,7 @@ import {
 import {numInteger} from '../../xml/xml-attrs.ts';
 import {parseXml} from '../../xml/xml-read.ts';
 import {localName} from '../../xml/xml-scan.ts';
+import {relAttr} from '../opc/namespaces.ts';
 
 /** Reconstruct a pivot's semantic model from its two definition parts. The records part is not
  * consulted: the cache's field catalogue and the table's field roles fully describe the pivot's
@@ -55,16 +56,21 @@ function parsePivotCacheDefinition(cacheXml: string): {
   // A worksheet source is the assumed default until proven otherwise: it is what our writer emits and
   // the overwhelmingly common shape, and its `<worksheetSource>` child fills in the coordinates. A
   // `<cacheSource type>` we recognise overrides the kind; an unrecognised one degrades to `unknown`.
-  let source: ParsedPivotSource = {kind: 'worksheet', sheet: '', ref: ''};
+  let source: ParsedPivotSource = {kind: 'worksheet', sheet: '', ref: '', inAnotherWorkbook: false};
   parseXml(cacheXml, {
-    onOpen(name, attrs) {
+    onOpen(name, attrs, _selfClosing, scope) {
       const local = localName(name);
       if (local === 'cacheField' && attrs.name !== undefined) {
         fields.push({name: attrs.name});
       } else if (local === 'cacheSource') {
         source = {...source, kind: sourceKind(attrs.type)};
       } else if (local === 'worksheetSource') {
-        source = {...source, sheet: attrs.sheet ?? '', ref: attrs.ref ?? ''};
+        source = {
+          ...source,
+          sheet: attrs.sheet ?? '',
+          ref: attrs.ref ?? '',
+          inAnotherWorkbook: relAttr(scope, attrs, 'id') !== undefined,
+        };
       }
     },
   });

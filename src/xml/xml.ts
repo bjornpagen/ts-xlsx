@@ -172,6 +172,21 @@ export function textElement(value: string): string {
 }
 
 /**
+ * Re-render an empty element from its parsed name and attributes, for an edit that changes an
+ * attribute of an element a part already carries. Attribute order is the scanner's, which is the
+ * source's, so an element whose attributes an edit merges over keeps them where they were; only the
+ * quoting and the entity spelling become this writer's.
+ */
+export function emptyElement(
+  name: string,
+  attrs: {readonly [attribute: string]: string | undefined},
+): string {
+  let out = `<${name}`;
+  for (const key in attrs) out += ` ${key}="${escapeAttr(attrs[key] ?? '')}"`;
+  return `${out}/>`;
+}
+
+/**
  * A boolean attribute rendered with a leading space (` name="1"` / ` name="0"`), or '' when the value
  * is undefined. OOXML booleans serialise as 1/0; emitting the explicit `="0"` lets a writer force a
  * flag off against a consumer's default, while an unset (undefined) flag stays out of the element

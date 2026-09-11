@@ -4,6 +4,7 @@
 
 import type {CommentThread} from '../../core/comment-thread.ts';
 import type {WorkbookImage} from '../../core/image.ts';
+import {INTERNAL} from '../../core/internal.ts';
 import type {PivotTable} from '../../core/pivot-table.ts';
 import type {Table} from '../../core/table.ts';
 import type {Workbook} from '../../core/workbook.ts';
@@ -22,6 +23,7 @@ import {
   pivotTablePart,
   vmlDrawingPart,
 } from './part-names.ts';
+import {splicePreservedPart} from './preserved-splices.ts';
 import {applyThemeOverrides} from './theme-xml.ts';
 
 /** One relationship a generated `.rels` part declares, its target already relative to the owner. */
@@ -361,6 +363,7 @@ export function planPreservedParts(
     }
   }
   const emitted = new Map<string, PreservedPartPlan>();
+  const splices = workbook[INTERNAL].splices();
   for (const reference of allReferences) {
     for (const part of reference.parts) {
       const newPath = resolveRemapped(remap, part.path);
@@ -376,16 +379,17 @@ export function planPreservedParts(
           ? []
           : [{id: rel.id, type: rel.type, target: relativePartPath(newPath, target)}];
       });
-      // The one preserved part whose *bytes* can change: a theme the caller authored over is
+      // The two ways a preserved part's *bytes* can change. A theme the caller authored over is
       // composed onto the source part rather than carried verbatim, so the format scheme, the
       // unauthored slots' encoding, and the relationships below all still ride through; only the
-      // authored elements differ.
+      // authored elements differ. And a part that spells references to the sheets, a chart or a pivot
+      // cache, has the splices made since the read replayed over them.
       const overrides = newPath === THEME_PART_PATH ? workbook.themeOverrides : undefined;
       emitted.set(newPath, {
         path: newPath,
         bytes:
           overrides === undefined
-            ? part.bytes
+            ? splicePreservedPart(part.bytes, part.contentType, splices)
             : new TextEncoder().encode(
                 applyThemeOverrides(new TextDecoder().decode(part.bytes), overrides),
               ),

@@ -14,6 +14,10 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Added
 
+- **`ParsedPivotSource.inAnotherWorkbook`**, whether a loaded pivot draws from a range of another
+  workbook, which the cache reaches through a relationship. A splice of this workbook never moves such
+  a source.
+
 - **`TableColumn.calculatedColumnFormula`**, the formula that makes a table column a calculated one.
   A read used to drop it, so a saved table's calculated column kept the formulas already in its
   cells while every row later added to the table came in blank.
@@ -54,8 +58,10 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   master it deletes, becomes a plain formula. What an insert brings in is not rewritten. A table's
   calculated column formula and totals row formula move too, and so does an authored pivot's
   `sourceRef`, which grows and shrinks with the lines it spans and stays as written when a delete takes
-  all of it. A loaded pivot's cache and a chart's series do not move yet. A hyperlink's in-workbook
-  location does not move either, and neither does Excel's.
+  all of it. A loaded workbook's charts and pivot caches, which are written back as the bytes they were
+  read as, have the same references moved in those bytes, and `ParsedPivotSource.ref` moves with them;
+  a series whose name or categories a delete takes gets `#REF!` where Excel re-derives the series. A
+  hyperlink's in-workbook location does not move, and neither does Excel's.
 
 - **BREAKING: `duplicateRow` copies formulas as Excel copies a row.** A copy used to carry the source's
   formula text and cached result, so a line-item row `=B5*C5` duplicated down showed the first line's

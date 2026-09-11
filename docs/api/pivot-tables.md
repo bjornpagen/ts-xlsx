@@ -42,6 +42,12 @@ interface ParsedPivotSource {
   readonly kind: PivotSourceKind;
   readonly sheet: string;
   readonly ref: string;
+  /**
+   * Whether {@link sheet} and {@link ref} name a range in another workbook, which the cache reaches
+   * through a relationship. A row or column splice of this workbook moves the source of a pivot drawing
+   * from one of its own sheets, as Excel does, and never one of these.
+   */
+  readonly inAnotherWorkbook: boolean;
 }
 ```
 
@@ -56,7 +62,8 @@ The semantic model reconstructed from a loaded pivot's `pivotTableDefinition` an
 `metric` is the aggregation the value field applies. This mirrors the authoring model's shape
 without requiring the source sheet it was built from, so a pivot loaded from a package is
 inspectable data rather than an opaque preserved blob. It is a read-only view: the writer emits a
-loaded pivot from its preserved parts, not from this model, so exposing it never double-emits.
+loaded pivot from its preserved parts, not from this model, so exposing it never double-emits. A
+splice of the source sheet moves the source range in both, by `splicePivotSource`.
 
 ```ts
 interface ParsedPivotTable {

@@ -266,8 +266,19 @@ again, and a shared-formula clone is recovered from its master at the offset the
 rewritten master no longer describes becomes a formula of its own, and the writer groups what is still
 shared. A table's column formulas are formula text too and move in the same pass, and so does an
 authored pivot's source range, the one reference Excel never turns into `#REF!`: a delete that takes
-all of it leaves it as written. A loaded pivot's cache and the other preserved parts (charts among
-them) are not rewritten yet, though Excel moves them. A hyperlink's in-workbook location (`S1!B5`) is left as written on purpose:
+all of it leaves it as written.
+
+Preserved parts spell references too, a chart's series and a loaded pivot's cache source among them,
+and Excel moves those as well. The model holds them as bytes, and `core/` may not parse XML, so the
+workbook keeps a journal of every splice (`workbook[INTERNAL].splices()`) and the writer replays it
+over each such part as it plans the preserved parts (`io/xlsx/preserved-splices.ts`), editing at the
+offsets the scanner found. Replaying the whole journal over the bytes as they were read is sound for
+two reasons the model guarantees rather than assumes: a preserved part only enters a workbook as it is
+read, before anyone can splice it, and a sheet's name, which each entry is keyed by, never changes. A
+loaded pivot's model view moves in the formula pass by the same function the writer calls,
+`splicePivotSource`, so the view and the bytes cannot disagree about where the source went. What the
+replay does not reproduce is Excel re-deriving a series whose name or categories a delete takes: the
+reference the delete took becomes `#REF!`, as a formula's would. A hyperlink's in-workbook location (`S1!B5`) is left as written on purpose:
 Excel 16.0 leaves it too, even when rows are inserted above the cell it names.
 
 The row and column axes are deliberately not mirror images, and where they diverge is a decision

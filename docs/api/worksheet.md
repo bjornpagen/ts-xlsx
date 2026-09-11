@@ -595,7 +595,9 @@ Pivot tables reconstructed from a loaded package, in the order the reader found 
 read-only inspection view (source range, field roles, value field, aggregation). A pivot
 authored on this sheet via [`addPivotTable`](./worksheet.md#worksheetaddpivottable) does not appear here; a pivot loaded from a
 file does not appear in [`pivotTables`](./worksheet.md#worksheetpivottables). The loaded pivots re-emit verbatim through
-byte-preservation, so this collection is never itself serialised.
+byte-preservation, so this collection is never itself serialised. A row or column splice of a
+pivot's source sheet moves its [`ParsedPivotSource.ref`](./pivot-tables.md#parsedpivotsource) here and in the cache the writer
+emits, by one rule, so the view says what is written.
 
 #### `Worksheet.addCommentThread`
 

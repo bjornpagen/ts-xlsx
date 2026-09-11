@@ -261,6 +261,13 @@ export class Workbook {
   // and slicers they back. Empty for a workbook authored from scratch.
   readonly #preservedReferences: PreservedWorkbookReference[] = [];
 
+  // Every row and column splice made to a sheet of this workbook, in order. A preserved part spells
+  // references to the sheets in bytes the model does not read, so the writer replays these over it
+  // (see `io/xlsx/preserved-splices.ts`). Replaying the whole list over the bytes as they were read is
+  // sound because preserved parts only enter a workbook as it is read, before any splice can be made,
+  // and a sheet's name, which each entry is keyed by, never changes.
+  readonly #splices: SheetSplice[] = [];
+
   // The threaded-comment identity registry (`xl/persons/person.xml`), the workbook-level table every
   // message resolves its author through and every @mention its target. Keyed by person id. See
   // `restorePersons` for why nothing else will do. Empty for a workbook with no threaded comments.
@@ -834,9 +841,10 @@ export class Workbook {
   }
 
   // A splice of one sheet moves the references to it everywhere else a formula lives: every other sheet,
-  // and each defined name. A sheet-scoped name reads an unqualified reference against its own sheet, as
+  // each defined name, and the preserved parts the writer replays the journal over. A sheet-scoped name reads an unqualified reference against its own sheet, as
   // a formula on that sheet does; a workbook-scoped one has no sheet of its own.
   #spliceFormulasBeyond(spliced: Worksheet, edit: SheetSplice): void {
+    this.#splices.push(edit);
     for (const sheet of this.#worksheets) {
       if (sheet !== spliced) sheet[INTERNAL].spliceFormulas(edit);
     }
@@ -940,6 +948,7 @@ export class Workbook {
       this.#persons.clear();
       for (const person of persons) this.#persons.set(person.id, person);
     },
+    splices: () => this.#splices,
   };
 }
 
@@ -1028,4 +1037,10 @@ export interface WorkbookInternals {
    * {@link Workbook.addPerson} is the authoring verb.
    */
   restorePersons(persons: readonly Person[]): void;
+
+  /**
+   * Every row and column splice made to the workbook's sheets, in the order they were made, for the
+   * writer to replay over the references a preserved part spells.
+   */
+  splices(): readonly SheetSplice[];
 }

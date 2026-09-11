@@ -767,6 +767,36 @@ export const tables = {
       sheet: /\bsheet="([^"]*)"/.exec(tag)?.[1] ?? null,
     };
   },
+
+  // Read a fixture carrying a pivot and a chart, make each edit in turn, and write after each → one
+  // entry per edit of { cacheSource, loadedSource, chartReferences }: the `{ref, sheet}` of the written
+  // cache definition's `<worksheetSource>`, the same pair from the first loaded pivot's model view, and
+  // the text of every `<c:f>` in the written chart parts, in document order.
+  preservedReferencesThroughSplices(rel: string, edits: readonly SpliceEdit[]) {
+    const workbook = readFixture(rel);
+    return edits.map((edit) => {
+      applySplice(workbook.requireWorksheet(edit.sheet), edit);
+      const parts = partMapOf(writeXlsx(workbook));
+      const partsNamed = (pattern: RegExp) =>
+        Object.keys(parts)
+          .filter((name) => pattern.test(name))
+          .sort()
+          .map((name) => parts[name] ?? '');
+      const [cache = ''] = partsNamed(/^xl\/pivotCache\/pivotCacheDefinition\d+\.xml$/);
+      const tag = /<worksheetSource\b[^>]*>/.exec(cache)?.[0] ?? '';
+      const loaded = workbook.worksheets.flatMap((sheet) => sheet.loadedPivotTables)[0]?.source;
+      return {
+        cacheSource: {
+          ref: /\bref="([^"]*)"/.exec(tag)?.[1] ?? null,
+          sheet: /\bsheet="([^"]*)"/.exec(tag)?.[1] ?? null,
+        },
+        loadedSource: loaded === undefined ? null : {ref: loaded.ref, sheet: loaded.sheet},
+        chartReferences: partsNamed(/^xl\/charts\/chart\d+\.xml$/).flatMap((xml) =>
+          [...xml.matchAll(/<c:f>([^<]*)<\/c:f>/g)].map((match) => decodeText(match[1] ?? '')),
+        ),
+      };
+    });
+  },
 };
 
 /** One row or column edit of a sheet: `count` lines inserted or deleted at `start`. */

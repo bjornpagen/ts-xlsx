@@ -6,6 +6,7 @@ import {
   capturedText,
   closeEmptyElements,
   elementRange,
+  elementRanges,
   elementSubtrees,
   openElements,
   parseXml,
@@ -412,6 +413,30 @@ test('elementRange finds an element by path and bounds its content', () => {
   assert.equal(source.slice(found.start, found.end), '<b x="1">body</b>');
   assert.equal(source.slice(found.contentStart, found.contentEnd), 'body');
   assert.deepEqual({...found.attrs}, {x: '1'});
+});
+
+test('elementRanges finds every element of a name, in order, whatever its prefix', () => {
+  const source =
+    '<c:chart><c:tx><c:f>S!$B$1</c:f></c:tx><!-- <c:f>no</c:f> --><c:val><x:f/><c:f>S!$B$2:$B$5</c:f></c:val></c:chart>';
+  const found = [...elementRanges(source, 'f')].map((range) => ({
+    name: range.name,
+    content: source.slice(range.contentStart, range.contentEnd),
+    element: source.slice(range.start, range.end),
+  }));
+  assert.deepEqual(found, [
+    {name: 'c:f', content: 'S!$B$1', element: '<c:f>S!$B$1</c:f>'},
+    {name: 'x:f', content: '', element: '<x:f/>'},
+    {name: 'c:f', content: 'S!$B$2:$B$5', element: '<c:f>S!$B$2:$B$5</c:f>'},
+  ]);
+});
+
+test('elementRanges keeps a nested same-named element inside its ancestor, and refuses one unclosed', () => {
+  const source = '<a><f>1<f>2</f>3</f><f>4</f></a>';
+  assert.deepEqual(
+    [...elementRanges(source, 'f')].map((range) => source.slice(range.start, range.end)),
+    ['<f>1<f>2</f>3</f>', '<f>4</f>'],
+  );
+  assert.throws(() => [...elementRanges('<a><f>1</a>', 'f')], XmlParseError);
 });
 
 test('elementRange skips a close tag hiding in a comment or a CDATA section', () => {

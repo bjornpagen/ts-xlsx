@@ -60,15 +60,15 @@ export interface SubtreeCapture {
  * Markup that is not a tag -- a comment, a CDATA section, a processing instruction, a declaration --
  * is stepped over through {@link markupAt} and never yielded.
  *
- * The two functions below work on offsets rather than events, so neither can go through
+ * The three functions below work on offsets rather than events, so none can go through
  * {@link xmlEvents}, which hands back decoded payloads and no positions. That is the whole of what
  * they share, and it is the part that must not drift: they are run over the same part
- * (`parseStyleTable` puts both over `xl/styles.xml`), so a form one walk skipped and the other did
- * not would make them disagree about where an element ends. `markupAt` and `tagAt` are shared for
- * that reason; the loop that drives them is shared for the same one.
+ * (`parseStyleTable` puts two over `xl/styles.xml`), so a form one walk skipped and another did not
+ * would make them disagree about where an element ends. `markupAt` and `tagAt` are shared for that
+ * reason; the loop that drives them is shared for the same one.
  *
- * Deliberately private: each of the two below builds a different state machine on top of this, and
- * publishing the walk would invite a third offset scanner rather than a third caller of these two.
+ * Deliberately private: each of the three below builds a different state machine on top of this, and
+ * publishing the walk would invite another offset scanner rather than another caller of these.
  */
 function* rawTags(source: string): Generator<{lt: number; tag: Tag; local: string}> {
   const length = source.length;
@@ -270,6 +270,55 @@ export function elementRange(source: string, path: readonly string[]): ElementRa
     throw new XmlParseError(`unterminated <${pending.name}> element`);
   }
   return undefined;
+}
+
+/**
+ * Locate every element with the local name `local`, at any depth, as offsets into the source, in
+ * document order: {@link elementRange} for a part that repeats the element an edit is after, such as
+ * the `<c:f>` behind each of a chart's series. A same-named element nested in a match is part of that
+ * match's content rather than a range of its own. An element that never closes throws
+ * {@link XmlParseError}.
+ */
+export function* elementRanges(source: string, local: string): Generator<ElementRange> {
+  let pending:
+    | {start: number; contentStart: number; name: string; attrs: XmlAttributes}
+    | undefined;
+  // How many same-named elements are open inside the pending one.
+  let depth = 0;
+  for (const {lt, tag, local: tagLocal} of rawTags(source)) {
+    if (tagLocal !== local) continue;
+    if (pending !== undefined) {
+      if (tag.close) {
+        if (depth > 0) depth -= 1;
+        else {
+          const open = pending;
+          pending = undefined;
+          yield {...open, end: tag.next, contentEnd: lt};
+        }
+      } else if (!tag.selfClosing) {
+        depth += 1;
+      }
+      continue;
+    }
+    if (tag.close) continue;
+    const attrs = parseAttributes(tag.attrSource);
+    if (tag.selfClosing) {
+      yield {
+        start: lt,
+        end: tag.next,
+        contentStart: tag.next,
+        contentEnd: tag.next,
+        name: tag.name,
+        attrs,
+      };
+    } else {
+      pending = {start: lt, contentStart: tag.next, name: tag.name, attrs};
+      depth = 0;
+    }
+  }
+  if (pending !== undefined) {
+    throw new XmlParseError(`unterminated <${pending.name}> element`);
+  }
 }
 
 /** An element start surfaced by {@link openElements}: its qualified `name`, the namespace-stripped
