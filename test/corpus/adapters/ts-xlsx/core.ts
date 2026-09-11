@@ -376,6 +376,37 @@ export const core = {
     };
   },
 
+  // Read a fixture, write it, and report how the written package spells what the source spelled in
+  // ISO/IEC 29500 Strict → { strictParts, relationshipTypes, attributes }. `strictParts` names every
+  // written part whose text still mentions a `purl.oclc.org/ooxml/` URI; `relationshipTypes` is every
+  // distinct Type the written `.rels` parts declare, sorted; `attributes` maps each requested
+  // `<part>#<element> <attribute>` (the element by its qualified name as written) to the values that
+  // attribute takes in that written part, in document order.
+  strictSpellingsAfterWrite(rel: string, attributes: string[] = []) {
+    const parts = partMapOf(writeXlsx(readFixture(rel)));
+    const names = Object.keys(parts).sort();
+    return {
+      strictParts: names.filter((name) => (parts[name] ?? '').includes('purl.oclc.org/ooxml/')),
+      relationshipTypes: [
+        ...new Set(
+          names
+            .filter((name) => name.endsWith('.rels'))
+            .flatMap((name) =>
+              [...(parts[name] ?? '').matchAll(/\bType="([^"]*)"/g)].map((match) => match[1] ?? ''),
+            ),
+        ),
+      ].sort(),
+      attributes: Object.fromEntries(
+        attributes.map((key) => {
+          const [part = '', selector = ''] = key.split('#');
+          const [element = '', attribute = ''] = selector.split(' ');
+          const pattern = new RegExp(String.raw`<${element}\b[^>]*\s${attribute}="([^"]*)"`, 'g');
+          return [key, [...(parts[part] ?? '').matchAll(pattern)].map((match) => match[1] ?? '')];
+        }),
+      ),
+    };
+  },
+
   // Read a fixture and report which date system it declares plus the requested cells three ways →
   // { epoch, eager, streaming, roundtrip }, each a map of A1 reference → { type, value }. A workbook
   // declaring the 1904 system counts its serials from 1904-01-01 rather than 1900-01-01, so all three

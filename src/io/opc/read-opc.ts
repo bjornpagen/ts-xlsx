@@ -12,6 +12,7 @@ import {openElements} from '../../xml/xml-read.ts';
 import {extensionOf, relsPathFor, resolveRelativePart} from './part-paths.ts';
 import {DEFAULT_MAX_UNCOMPRESSED} from './read-options.ts';
 import {inflateSpreadsheetPackage} from './sniff-format.ts';
+import {transitionalRelationshipType} from './strict-relationships.ts';
 
 // The two ways a reader reaches into an inflated package: a part's UTF-8-decoded text, or its raw
 // bytes. Built once per read (see {@link packageAccessors}) so the buffered and streaming readers
@@ -149,7 +150,9 @@ export function parseRelationshipRecords(xml: string): RelationshipRecord[] {
     if (attrs.Id !== undefined && attrs.Type !== undefined && attrs.Target !== undefined) {
       records.push({
         id: attrs.Id,
-        type: attrs.Type,
+        // In its Transitional spelling, so a Strict package's relationships are recognised by the same
+        // names and a preserved one is written back in the spelling of the package it lands in.
+        type: transitionalRelationshipType(attrs.Type),
         target: attrs.Target,
         external: attrs.TargetMode === 'External',
       });

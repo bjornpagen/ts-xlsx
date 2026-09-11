@@ -1014,6 +1014,24 @@ The stack is deliberately small and each choice is recorded as an ADR under
   halves fail: a workbook part not found is loud, while a pool not found reads every `t="s"` cell as
   the empty string and a stylesheet not found leaves every cell without a number format, which
   changes a date cell's _type_, silently, because the date test reads `numFmt` off the resolved style.
+- **A Strict package is read into Transitional at the container, because every write is Transitional.**
+  ISO/IEC 29500 Strict is the same vocabulary under `purl.oclc.org` namespaces, with two relationship
+  types renamed and DrawingML percentages written `60%` where Transitional stores `60000`. The parts
+  the model reads are matched by local name and written from the model, so Strict never reaches them;
+  a part carried through as bytes kept its Strict spelling, though, inside a package whose
+  relationships said Transitional, and the Open XML SDK could not load such a theme at all.
+  The translation happens at the two places a package's own spelling enters the model: a relationship
+  Type as the container's `parseRelationshipRecords` reads it (`io/opc/strict-relationships.ts`), and
+  a preserved part's bytes as the XML reader captures them (`io/xlsx/strict-parts.ts`: namespace
+  declarations, a graphic frame's `uri`, and the percentage attributes, re-rendering only the tags
+  that change). The second is the XML codec's rather than the container's because a binary workbook
+  has no Strict form, and the size budget measured what `/xlsb` would have paid for the XML machinery
+  it needs: 11.5 KB. Both tables come out of the schema graph rather
+  than from memory: the namespace pairs are every vocabulary declared under both profiles, and the
+  percentages every attribute whose Strict type is a DrawingML, chart or diagram percentage, with a
+  chart's in whole percent and the others in thousandths, as Transitional types them. Nothing past the
+  container needs to know a package was ever Strict, which is why the reader's own spelling check for
+  `extendedProperties` could go.
 - **Part-name lookups fold ASCII case; the package's own spelling is what gets written back.** OPC
   compares part names case-insensitively, so `/XL/Workbook.XML` and `/xl/workbook.xml` name one part,
   and a package cased differently from the references to it used to read as a package with no

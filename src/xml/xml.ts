@@ -172,18 +172,19 @@ export function textElement(value: string): string {
 }
 
 /**
- * Re-render an empty element from its parsed name and attributes, for an edit that changes an
- * attribute of an element a part already carries. Attribute order is the scanner's, which is the
- * source's, so an element whose attributes an edit merges over keeps them where they were; only the
- * quoting and the entity spelling become this writer's.
+ * Re-render an opening tag, `<name …>` or the empty `<name …/>`, from its parsed name and attributes,
+ * for an edit that changes an attribute of an element a part already carries. Attribute order is the
+ * scanner's, which is the source's, so an element whose attributes an edit merges over keeps them
+ * where they were; only the quoting and the entity spelling become this writer's.
  */
-export function emptyElement(
+export function startTag(
   name: string,
   attrs: {readonly [attribute: string]: string | undefined},
+  selfClosing: boolean,
 ): string {
   let out = `<${name}`;
   for (const key in attrs) out += ` ${key}="${escapeAttr(attrs[key] ?? '')}"`;
-  return `${out}/>`;
+  return `${out}${selfClosing ? '/>' : '>'}`;
 }
 
 /**

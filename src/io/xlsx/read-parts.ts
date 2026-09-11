@@ -10,7 +10,7 @@ import type {CommentThread} from '../../core/comment-thread.ts';
 import type {PictureProperties} from '../../core/image.ts';
 import {INTERNAL} from '../../core/internal.ts';
 import {mergesOverlappingTables} from '../../core/merge.ts';
-import type {PreservedWorksheetReference} from '../../core/preserved.ts';
+import type {PreservedPart, PreservedWorksheetReference} from '../../core/preserved.ts';
 import {Workbook} from '../../core/workbook.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
 import {isAnyRelType} from '../../rel-type.ts';
@@ -29,6 +29,7 @@ import {admitting} from '../read-policy/read-repair.ts';
 import {type ParsedImageAnchor, parseDrawing} from './images.ts';
 import {type ParsedComment, parseComments} from './read-comments.ts';
 import {parsePivotTable} from './read-pivot.ts';
+import {transitionalPart} from './strict-parts.ts';
 import {parseTable} from './tables.ts';
 import {parseThemeSchemes} from './theme-xml.ts';
 import {buildCommentThreads, parsePersons, parseThreadedComments} from './threaded-comments.ts';
@@ -49,6 +50,19 @@ export interface PackageReadContext {
   readonly workbook: Workbook;
   readonly contentTypeOf: (path: string) => string;
   readonly imageIdByMediaPath: Map<string, number>;
+}
+
+// The closure of parts a preserved reference reaches, each translated out of ISO/IEC 29500 Strict as it
+// is captured: the write that carries it is a Transitional package, and a part left in the other
+// profile's names is one its consumers cannot place (see `strict-parts.ts`).
+function capturePreservedClosure(
+  {pkg, contentTypeOf}: PackageReadContext,
+  entryPath: string,
+): readonly PreservedPart[] | undefined {
+  return capturePartClosure(entryPath, pkg.partText, pkg.partBytes, contentTypeOf)?.map((part) => {
+    const bytes = transitionalPart(part.bytes, part.contentType);
+    return bytes === part.bytes ? part : {...part, bytes};
+  });
 }
 
 // A sheet's comments live in a comments part reached through the sheet's own relationships: the sheet
@@ -87,10 +101,10 @@ export function readWorkbookTheme(
   context: PackageReadContext,
   workbookRels: PartRelationships,
 ): void {
-  const {pkg, contentTypeOf, workbook} = context;
+  const {pkg, workbook} = context;
   const entryPath = workbookRels.targetPath('theme');
   if (entryPath === undefined) return;
-  const parts = capturePartClosure(entryPath, pkg.partText, pkg.partBytes, contentTypeOf);
+  const parts = capturePreservedClosure(context, entryPath);
   if (parts === undefined) return;
   // The schemes are decoded here rather than on demand from the model: the part rides through the
   // model as opaque bytes, and only the codec knows how to read one.
@@ -231,16 +245,13 @@ export function readSheetPreservedReferences(
   referenceRelIds: WorksheetReferenceRelIds,
   sheet: Worksheet,
 ): void {
-  const {contentTypeOf} = context;
-  const {partText, partBytes} = context.pkg;
-
   const capture = (
     element: PreservedWorksheetReference['element'],
     relType: string,
     target: string,
   ): void => {
     const entryPath = sheetRels.pathOf(target);
-    const parts = capturePartClosure(entryPath, partText, partBytes, contentTypeOf);
+    const parts = capturePreservedClosure(context, entryPath);
     if (parts !== undefined)
       sheet[INTERNAL].addPreservedReference({element, relType, entryPath, parts});
   };
@@ -285,13 +296,12 @@ export function readWorkbookPreservedReferences(
   workbookRels: PartRelationships,
   registrations: WorkbookRegistrations,
 ): void {
-  const {contentTypeOf, workbook} = context;
-  const {partText, partBytes} = context.pkg;
+  const {workbook} = context;
   const {cacheIdByRelId, externalIndexByRelId} = registrations;
   for (const record of workbookRels.records) {
     if (record.external || !isPreservedWorkbookRelType(record.type)) continue;
     const entryPath = workbookRels.pathOf(record.target);
-    const parts = capturePartClosure(entryPath, partText, partBytes, contentTypeOf);
+    const parts = capturePreservedClosure(context, entryPath);
     if (parts === undefined) continue;
     const cacheId = cacheIdByRelId.get(record.id);
     const externalReferenceIndex = externalIndexByRelId.get(record.id);
@@ -311,14 +321,13 @@ export function readWorkbookPreservedReferences(
 // relationship's target would be dropped on write; capturing its closure here re-declares it verbatim.
 // External targets and the three regenerated relationship types are skipped.
 export function readRootPreservedReferences(context: PackageReadContext): void {
-  const {contentTypeOf, workbook} = context;
-  const {partText, partBytes} = context.pkg;
-  const relsXml = partText('_rels/.rels');
+  const {workbook} = context;
+  const relsXml = context.pkg.partText('_rels/.rels');
   if (relsXml === undefined) return;
   for (const record of parseRelationshipRecords(relsXml)) {
     if (record.external || isRegeneratedRootRelType(record.type)) continue;
     const entryPath = resolveRelativePart('', record.target);
-    const parts = capturePartClosure(entryPath, partText, partBytes, contentTypeOf);
+    const parts = capturePreservedClosure(context, entryPath);
     if (parts === undefined) continue;
     workbook[INTERNAL].addPreservedRootReference({relType: record.type, entryPath, parts});
   }
@@ -326,20 +335,10 @@ export function readRootPreservedReferences(context: PackageReadContext): void {
 
 // The three root relationships the writer regenerates from the model on every write: the office
 // document and the core/extended document properties. Every other root relationship is unmodeled and
-// is preserved verbatim by {@link readRootPreservedReferences} rather than dropped.
-//
-// The extended properties have two spellings: ISO/IEC 29500 Strict renamed the segment to
-// `extendedProperties` (under `purl.oclc.org`), where Transitional keeps `extended-properties`. Missing
-// the Strict one preserved a Strict package's `docProps/app.xml` beside the part the writer generates
-// at that same path, so no Strict workbook could be written back out.
+// is preserved verbatim by {@link readRootPreservedReferences} rather than dropped. A Strict package's
+// `extendedProperties` arrives here already spelled `extended-properties` (see `io/opc/strict.ts`).
 function isRegeneratedRootRelType(type: string): boolean {
-  return isAnyRelType(
-    type,
-    'officeDocument',
-    'core-properties',
-    'extended-properties',
-    'extendedProperties',
-  );
+  return isAnyRelType(type, 'officeDocument', 'core-properties', 'extended-properties');
 }
 
 // A workbook relationship the model does not consume but must round-trip: a pivot cache, a slicer

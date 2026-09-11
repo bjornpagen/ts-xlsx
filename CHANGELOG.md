@@ -176,6 +176,14 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Fixed
 
+- **A Strict workbook's charts, drawings and theme were written back in Strict.** A package saved as
+  ISO/IEC 29500 Strict is written back as Transitional, but the parts carried through as bytes kept
+  their `purl.oclc.org` namespaces, their Strict relationship types and their `60%` percentages,
+  so the Open XML SDK could not load the theme and refused the percentages. They are translated as they
+  are read now: namespaces, a graphic frame's vocabulary, the relationship types (`extendedProperties`
+  and `customProperties` renamed as Transitional names them), and DrawingML, chart and diagram
+  percentages into the integers Transitional stores.
+
 - **A data table whose input cell a row or column delete took kept reading from the old address.**
   The splice left `r1`/`r2` as they were with nothing to say the cell was gone, so the table was written
   reading its input from whatever now sat there. `DataTableFormulaValue` gains `r1Deleted` and

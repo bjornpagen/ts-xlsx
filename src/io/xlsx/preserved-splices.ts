@@ -17,7 +17,7 @@ import {splicePivotSource} from '../../core/pivot-table.ts';
 import {XmlParseError} from '../../xml/errors.ts';
 import {elementRange, elementRanges, openElements} from '../../xml/xml-read.ts';
 import {decodeEntities} from '../../xml/xml-scan.ts';
-import {emptyElement, escapeText} from '../../xml/xml.ts';
+import {escapeText, startTag} from '../../xml/xml.ts';
 import {relAttr} from '../opc/namespaces.ts';
 
 interface PartEdit {
@@ -66,7 +66,7 @@ const pivotCacheSource: Rewriter = (xml, splices) => {
     {
       start: range.start,
       end: range.end,
-      text: emptyElement(range.name, {...range.attrs, ref: moved}),
+      text: startTag(range.name, {...range.attrs, ref: moved}, true),
     },
   ];
 };

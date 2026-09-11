@@ -24,6 +24,7 @@ import {
 
 import {scratchDir} from '../../scripts/repo.ts';
 import {Workbook} from '../../src/core/workbook.ts';
+import {readXlsx} from '../../src/io/xlsx/read.ts';
 import {WorkbookStreamWriter} from '../../src/io/xlsx/write-stream.ts';
 import {writeXlsx} from '../../src/io/xlsx/write.ts';
 
@@ -42,9 +43,22 @@ const BASELINE = JSON.parse(
   await readFile(path.join(HERE, 'allowed-errors.json'), 'utf8'),
 ) as Baseline;
 
-// The buffered and both streaming outputs are the packages under test: every one must validate against
-// the frozen baseline (empty today, so: clean). A new diagnostic on any of them fails the gate.
-const WRITER_FILES = ['buffered.xlsx', 'streaming-inline.xlsx', 'streaming-shared.xlsx'] as const;
+// The buffered and both streaming outputs, and a Strict workbook written back, are the packages under
+// test: every one must validate against the frozen baseline (empty today, so: clean). A new diagnostic on any of them fails the gate.
+const WRITER_FILES = [
+  'buffered.xlsx',
+  'streaming-inline.xlsx',
+  'streaming-shared.xlsx',
+  'strict-rewritten.xlsx',
+] as const;
+
+// A Strict workbook read and written back: every write is Transitional, so a part carried through as
+// bytes has to come out Transitional too. Its theme, spelled in Strict, is one the oracle once could not
+// load at all.
+async function writeStrictRewrite(file: string): Promise<void> {
+  const strict = path.join(HERE, '../corpus/fixtures/strict-mode-iso8601-date/sample.xlsx');
+  await writeFile(file, writeXlsx(readXlsx(await readFile(strict))));
+}
 
 // Exercise a representative slice of the buffered writer: styled font, data validation, a formula, and
 // a table over its own cells with a totals row carrying a custom <totalsRowFormula>, so the oracle sees
@@ -175,6 +189,7 @@ async function main(): Promise<void> {
     await writeBufferedWorkbook(at('buffered.xlsx'));
     await writeStreamingWorkbook(at('streaming-inline.xlsx'), false);
     await writeStreamingWorkbook(at('streaming-shared.xlsx'), true);
+    await writeStrictRewrite(at('strict-rewritten.xlsx'));
     await makeSchemaInvalidControl(at('buffered.xlsx'), invalid);
     await writeFile(truncated, (await readFile(at('buffered.xlsx'))).subarray(0, 128));
     await writeFile(unsupported, 'not an xlsx');
@@ -235,7 +250,7 @@ async function main(): Promise<void> {
 
     console.log(
       `ooxml validation (${report.format}, SDK ${report.sdkVersion}): ` +
-        'buffered + streaming outputs clean; error controls detected',
+        'buffered, streaming and Strict-rewrite outputs clean; error controls detected',
     );
   } finally {
     await rm(temp, {recursive: true, force: true});

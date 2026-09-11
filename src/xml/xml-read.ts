@@ -60,15 +60,16 @@ export interface SubtreeCapture {
  * Markup that is not a tag -- a comment, a CDATA section, a processing instruction, a declaration --
  * is stepped over through {@link markupAt} and never yielded.
  *
- * The three functions below work on offsets rather than events, so none can go through
+ * The four functions below work on offsets rather than events, so none can go through
  * {@link xmlEvents}, which hands back decoded payloads and no positions. That is the whole of what
  * they share, and it is the part that must not drift: they are run over the same part
  * (`parseStyleTable` puts two over `xl/styles.xml`), so a form one walk skipped and another did not
  * would make them disagree about where an element ends. `markupAt` and `tagAt` are shared for that
  * reason; the loop that drives them is shared for the same one.
  *
- * Deliberately private: each of the three below builds a different state machine on top of this, and
- * publishing the walk would invite another offset scanner rather than another caller of these.
+ * Deliberately private: three of the four below build a different state machine on top of this, and
+ * `tagRanges`, the fourth, hands the tags out with their attributes parsed for an edit that visits
+ * every one. Publishing the raw walk would invite another offset scanner rather than another caller.
  */
 function* rawTags(source: string): Generator<{lt: number; tag: Tag; local: string}> {
   const length = source.length;
@@ -270,6 +271,41 @@ export function elementRange(source: string, path: readonly string[]): ElementRa
     throw new XmlParseError(`unterminated <${pending.name}> element`);
   }
   return undefined;
+}
+
+/** A tag as {@link tagRanges} yields it. */
+export interface TagRange {
+  /** Offset of the tag's `<`. */
+  readonly start: number;
+  /** One past the tag's `>`. */
+  readonly end: number;
+  /** The name as written, namespace prefix included. */
+  readonly name: string;
+  /** The parsed attributes of an opening tag; empty for a closing one. */
+  readonly attrs: XmlAttributes;
+  readonly close: boolean;
+  readonly selfClosing: boolean;
+}
+
+const NO_ATTRIBUTES: XmlAttributes = Object.freeze(Object.create(null) as XmlAttributes);
+
+/**
+ * Every tag in `source`, opening and closing, as offsets into the source: for an edit that rewrites a
+ * tag wherever it sits rather than one element a path names, such as translating the namespaces a
+ * part declares. A caller that resolves names keeps its own `NamespaceScope` in step, opening it on
+ * each opening tag and closing it on each closing one and after each self-closing one.
+ */
+export function* tagRanges(source: string): Generator<TagRange> {
+  for (const {lt, tag} of rawTags(source)) {
+    yield {
+      start: lt,
+      end: tag.next,
+      name: tag.name,
+      attrs: tag.close ? NO_ATTRIBUTES : parseAttributes(tag.attrSource),
+      close: tag.close,
+      selfClosing: tag.selfClosing,
+    };
+  }
 }
 
 /**

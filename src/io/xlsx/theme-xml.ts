@@ -25,7 +25,7 @@ import {
 } from '../../core/theme.ts';
 import {elementRange, parseXml} from '../../xml/xml-read.ts';
 import {localName} from '../../xml/xml-scan.ts';
-import {emptyElement} from '../../xml/xml.ts';
+import {startTag} from '../../xml/xml.ts';
 
 /**
  * Everything the three theme readers want, from one scan.
@@ -91,7 +91,7 @@ function readThemeScheme(themeXml: string): ThemeScheme {
           // thing here a consumer without the same OS theme can use.
           const value = local === 'sysClr' ? attrs.lastClr : attrs.val;
           if (value !== undefined && isThemeRgb(value)) colors[slot] = value.toUpperCase();
-          elements[slot] = emptyElement(name, attrs);
+          elements[slot] = startTag(name, attrs, true);
           slot = undefined;
         }
         return;
@@ -245,7 +245,7 @@ export function applyThemeOverrides(baseXml: string, overrides: ThemeOverrides):
     edits.push({
       start: found.start,
       end: found.end,
-      text: emptyElement(found.name, {...found.attrs, typeface}),
+      text: startTag(found.name, {...found.attrs, typeface}, true),
     });
   };
   if (major !== undefined) latin('majorFont', major);
