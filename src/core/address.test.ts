@@ -9,6 +9,7 @@ import {
   encodeAddress,
   MAX_COLUMN,
   MAX_ROW,
+  nameReadsAsReference,
   numberToColumn,
   tryColumnToNumber,
   tryDecodeCellRef,
@@ -227,4 +228,29 @@ test('a coordinate past the end of the grid is refused on both axes, not just th
   assert.throws(() => encodeAddress(1, MAX_ROW + 1), RangeError);
   assert.throws(() => encodeAddress(MAX_COLUMN + 1, 1), RangeError);
   assert.equal(encodeAddress(MAX_COLUMN, MAX_ROW), 'XFD1048576');
+});
+
+// Observed in Excel 16.0 build 20326, twice over: the names it quotes in a formula's sheet prefix, and
+// the table names that make it offer to repair a package. The two sets agreed on every name tried.
+const NAMES_READ_AS_REFERENCES = [
+  // A1 cells on the grid, in any case and with a leading zero.
+  ['A1', 'T1', 'Q1', 'Z1', 'c1', 'A01', 'R01', 'RR1', 'CR1', 'Rx1', 'XFD1048576', 'C16385'],
+  // R1C1 references, whole: a row, a column, both, each with or without its number.
+  ['R', 'C', 'r', 'RC', 'Rc', 'rC1', 'R1C', 'RC1', 'R1C1', 'R1048576', 'C16384'],
+  // An R1C1 row or column number followed by a name character.
+  ['R1X', 'R1A', 'C1X', 'R1C0', 'R1R1', 'C1C1', 'R1C1A', 'R1C1X', 'R1C1_', 'R1C1.x', 'R2C3D4'],
+  ['TRUE', 'FALSE', 'True', 'fAlse'],
+].flat();
+
+const NAMES_NOT_READ_AS_REFERENCES = [
+  // Past the grid, or naming row 0.
+  ['XFE1', 'XFD1048577', 'A1048577', 'R1048577', 'R99999999', 'AAAA1', 'A0', 'R0', 'RC0', 'R0C1'],
+  // No R1C1 number for a name character to follow, or no name character after it.
+  ['RCX', 'RX', 'CX', 'RC_', 'R_1', 'C_', 'R1.5', 'R1.A', 'RC.1'],
+  ['TRUE1', 'TRUEX', 'A1B', 'AB1C', 'Q1X', 'CC', 'RR', 'T', 'Table1', 'Sales.1'],
+].flat();
+
+test('nameReadsAsReference answers what Excel reads as a reference where it expects a name', () => {
+  for (const name of NAMES_READ_AS_REFERENCES) assert.ok(nameReadsAsReference(name), name);
+  for (const name of NAMES_NOT_READ_AS_REFERENCES) assert.ok(!nameReadsAsReference(name), name);
 });

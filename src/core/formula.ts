@@ -23,7 +23,13 @@
 // per-run transform cannot carry, so it runs its own forward walk, still deferring to `skipOpaque`.
 
 import {assertWritableNumber} from '../errors.ts';
-import {MAX_COLUMN, MAX_ROW, numberToColumn, tryColumnToNumber} from './address.ts';
+import {
+  MAX_COLUMN,
+  MAX_ROW,
+  nameReadsAsReference,
+  numberToColumn,
+  tryColumnToNumber,
+} from './address.ts';
 import {FUTURE_FUNCTION_PREFIXES} from './future-functions.ts';
 import {REF_ERROR} from './value.ts';
 
@@ -31,7 +37,7 @@ const XLPM = '_xlpm.';
 
 /**
  * Quote a sheet name for use in a reference exactly when Excel would: a name that is not a plain
- * identifier, or that would read as a cell address, is wrapped in single quotes with its internal
+ * identifier, or that would read as a reference, is wrapped in single quotes with its internal
  * quotes doubled, and a simple name is left bare. Shared by everything that *builds* a qualified
  * reference: the `_FilterDatabase` name the writer derives from an autofilter, and the `.xlsb`
  * reader's Ptg decoder, which has only a sheet index to work from and must spell the prefix itself.
@@ -48,8 +54,11 @@ export function quoteSheetName(name: string, last?: string): string {
   return names.every(isBareSheetName) ? joined : `'${joined.replace(/'/g, "''")}'`;
 }
 
+// A name that reads as a reference is quoted even though every character in it is a name character:
+// bare, `R1C1!A1` and `TRUE!A1` are not sheet prefixes. Testing only for an A1 cell left those two,
+// `R`, `C` and `R1X` bare, and quoted `XFE1`, which names no column.
 function isBareSheetName(name: string): boolean {
-  return /^[A-Za-z_][A-Za-z0-9_.]*$/.test(name) && !/^[A-Za-z]{1,3}\d+$/.test(name);
+  return /^[A-Za-z_][A-Za-z0-9_.]*$/.test(name) && !nameReadsAsReference(name);
 }
 
 // LET and LAMBDA are the only functions that bind names. Their parameter identifiers are persisted
@@ -345,6 +354,10 @@ export function mangleFormula(formula: string): string {
 // character, opening a call `(`, or preceding a sheet `!`: a token before `!` is the sheet name
 // (`Q1!A1`), not a cell. A sheet-qualified reference still shifts, because the `!` before it is not a
 // name character. Applied per code run, where opaque regions such as a `"10:30"` literal are gone.
+//
+// Only the token directly before `!` is a sheet. `Q1:Q4!B2` is not a 3-D span over two sheets named
+// like cells, which would have to be quoted as a whole (`'Q1:Q4'!B2`): Excel reads it as the range from
+// cell Q1 to `Q4!B2`, so Q1 shifts here too.
 //
 // One pattern rather than a pass per shape, so a shifted result is never scanned again, and `A1:B2`
 // still resolves as two cells: a range alternative needs a bare letter run or a bare digit run on both

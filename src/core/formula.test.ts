@@ -399,6 +399,14 @@ test('translateFormula shifts a sheet-qualified cell but not the sheet name', ()
   );
 });
 
+test('translateFormula reads a bare cell-shaped name before a colon as a cell, as Excel does', () => {
+  // `Q1:Q4!B2` looks like a 3-D span over quarter-named sheets, but a span over sheets named like
+  // cells must be quoted, `'Q1:Q4'!B2`. Excel reads the bare form as the range from cell Q1 to Q4!B2
+  // and re-spells it `Q1:'Q4'!B2` (Excel 16.0 build 20326), so Q1 is a relative cell and moves.
+  assert.equal(translateFormula('SUM(Q1:Q4!B2)', 0, 1), 'SUM(Q2:Q4!B3)');
+  assert.equal(translateFormula("SUM('Q1:Q4'!B2)", 0, 1), "SUM('Q1:Q4'!B3)", 'the quoted span');
+});
+
 test('translateFormula copies a string literal verbatim, references outside it still move', () => {
   assert.equal(translateFormula('IF(A1>0,"A1 is B2",B2)', 0, 1), 'IF(A2>0,"A1 is B2",B3)');
 });
@@ -411,6 +419,17 @@ test('quoteSheetName leaves a plain identifier bare and quotes anything else', (
   // A name that would read as a cell address has to be quoted, or `A1!A1` is ambiguous.
   assert.equal(quoteSheetName('A1'), "'A1'");
   assert.equal(quoteSheetName("Bob's"), "'Bob''s'");
+});
+
+test('quoteSheetName quotes an R1C1 reference and a boolean, and leaves a column past XFD bare', () => {
+  // As Excel 16.0 build 20326 spells `='<name>'!B2` back.
+  for (const name of ['R1C1', 'RC', 'R', 'C', 'R1C', 'R1X', 'TRUE', 'false']) {
+    assert.equal(quoteSheetName(name), `'${name}'`, name);
+  }
+  for (const name of ['XFE1', 'RR', 'CC', 'RCX', 'R1.5', 'TRUE1']) {
+    assert.equal(quoteSheetName(name), name, name);
+  }
+  assert.equal(quoteSheetName('Data', 'RC'), "'Data:RC'", 'either end of a span');
 });
 
 test('quoteSheetName quotes a 3-D span as a whole or not at all', () => {

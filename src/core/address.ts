@@ -397,3 +397,57 @@ export function encodeAddress(col: number, row: number): string {
   assertRowInBounds(row);
   return `${numberToColumn(col)}${row}`;
 }
+
+// A number an R1C1 reference or an A1 row may carry: digits naming a line the axis has.
+function isLineNumber(digits: string, bound: number): boolean {
+  const n = Number(digits);
+  return n >= 1 && n <= bound;
+}
+
+const A1_NAME = /^([A-Za-z]{1,3})(\d+)$/;
+const R1C1_NAME = /^(?:R(\d*)C(\d*)|R(\d*)|C(\d*))$/i;
+// An R1C1 row or column number followed by a letter or underscore. Digits cannot follow it: the number
+// takes them all, and `R1048577` is a row past the grid rather than row 104857 followed by a 7.
+const R1C1_PREFIX = /^(?:R(\d+)|C(\d+))[A-Za-z_]/i;
+
+/**
+ * Does Excel read this name as a reference, where it expects a name? Such a name must be quoted as a
+ * sheet prefix (`'R1C1'!A1`), and cannot name a table at all.
+ *
+ * Four shapes, case-insensitive, all found by asking Excel (16.0 build 20326) rather than read off a
+ * specification, which states the rule as "not the same as a cell reference, and not `C` or `R`" and
+ * leaves the edges to the implementation:
+ *
+ * - an A1 cell **on the grid**: `T1`, `a01`, `XFD1048576`, but not `XFE1` or `A0`;
+ * - a whole R1C1 reference, each number optional and on the grid: `R`, `C`, `RC`, `R1C`, `R1C1`;
+ * - an R1C1 row or column number followed by a letter or underscore: `R1X`, `C1X`, `R1C1_`, but
+ *   not `R1.5`, nor `RCX`, which carries no number;
+ * - `TRUE` or `FALSE`.
+ *
+ * Every name tried both ways was quoted in a formula exactly when a table by that name made Excel
+ * offer to repair the package, so the two rules are one.
+ */
+export function nameReadsAsReference(name: string): boolean {
+  const a1 = A1_NAME.exec(name);
+  if (a1 !== null) {
+    const [, letters = '', digits = ''] = a1;
+    if (tryColumnToNumber(letters.toUpperCase()) !== undefined && isLineNumber(digits, MAX_ROW)) {
+      return true;
+    }
+  }
+  const r1c1 = R1C1_NAME.exec(name);
+  if (r1c1 !== null) {
+    const [, row, column, rowOnly, columnOnly] = r1c1;
+    const on = (digits: string | undefined, bound: number) =>
+      digits === undefined || digits === '' || isLineNumber(digits, bound);
+    if (on(row ?? rowOnly, MAX_ROW) && on(column ?? columnOnly, MAX_COLUMN)) return true;
+  }
+  const prefix = R1C1_PREFIX.exec(name);
+  if (prefix !== null) {
+    const [, row, column] = prefix;
+    if (row !== undefined ? isLineNumber(row, MAX_ROW) : isLineNumber(column ?? '', MAX_COLUMN)) {
+      return true;
+    }
+  }
+  return /^(?:TRUE|FALSE)$/i.test(name);
+}
