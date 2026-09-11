@@ -64,7 +64,19 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   cell receives `{richText: [...]}`. That includes rich text in files this library wrote, since its
   writer stores rich text inline.
 
+- **BREAKING: `addPivotTable` refuses a field used twice and a source with a repeated header.** A
+  field named as both a row and a column field, or twice in one of them, was accepted and written on
+  one axis while listed on both, and a source header row naming two columns the same (in any case)
+  gave the cache two fields of that name. Excel opens each with its repair prompt. All three now throw
+  `AuthoringError` when the pivot is added. A value field that is also a row or column field is still
+  accepted.
+
 ### Fixed
+
+- **A pivot whose value field is also a row or column field opened with Excel's repair prompt.** The
+  writer marked that field with its axis and not as a data field, so the `<dataField>` pointed at a
+  field that did not say it was one. It now carries both, and a pivot such as "Count of Name" by Name
+  opens clean.
 
 - **A typed cell with no value read as `FALSE` or `""`.** A `<c t="b"/>` read as `false`, and a
   `t="s"`, `t="e"`, `t="str"` or `t="inlineStr"` cell with no payload read as `""`, in both readers.

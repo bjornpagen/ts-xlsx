@@ -164,8 +164,10 @@ const BLANK: PivotItem = {kind: 'blank'};
  * the full cache (fields + records) and the axis-field wiring the renderer needs; nothing here
  * touches XML.
  *
- * Supported shape: exactly one value field aggregated by `sum`, at least one row field and one
- * column field. An unsupported request throws at authoring time rather than emitting a corrupt file.
+ * Supported shape: at least one row field and one column field, each source field on at most one
+ * axis and at most once, over a header row whose names are unique ignoring case; and exactly one value
+ * field, aggregated by any {@link PivotMetric} (`sum` by default), which may also be an axis field. An
+ * unsupported request throws at authoring time rather than emitting a corrupt file.
  */
 export class PivotTable {
   readonly metric: PivotMetric;
@@ -311,15 +313,29 @@ interface SourceField {
   readonly col: number;
 }
 
-// Every non-blank header cell in row 1 defines a field, in ascending column order.
+// Every non-blank header cell in row 1 defines a field, in ascending column order. A cache names each
+// field once, and Excel compares those names ignoring case: two headers that differ only in case make
+// it repair the package just as an exact repeat does. Refused rather than renamed the way a table's
+// columns are, because the caller names pivot fields by header text, and a silent rename would leave
+// the second column unreachable by the name the caller can see in the sheet.
 function discoverFields(
   valueAt: (row: number, col: number) => CellValue,
   columnCount: number,
 ): SourceField[] {
   const fields: SourceField[] = [];
+  const seen = new Map<string, string>();
   for (let col = 1; col <= columnCount; col++) {
     const name = textOf(scalarOf(valueAt(1, col)));
-    if (name !== '') fields.push({name, col});
+    if (name === '') continue;
+    const clash = seen.get(name.toLowerCase());
+    if (clash !== undefined) {
+      throw new AuthoringError(
+        `the pivot source header ${quoted(name)} repeats ${quoted(clash)}: pivot field names must ` +
+          'be unique, ignoring case',
+      );
+    }
+    seen.set(name.toLowerCase(), name);
+    fields.push({name, col});
   }
   if (fields.length === 0) throw new AuthoringError('the pivot source header row is empty');
   return fields;
@@ -334,6 +350,11 @@ interface FieldRoles {
 
 // Bind the caller's field *names* to positions in the source. Every refusal here is the caller's
 // mistake, so every one is an AuthoringError naming the field and the role it was asked to play.
+//
+// A field sits on at most one axis, once: `<pivotField axis>` holds a single axis, so a field listed
+// under both `<rowFields>` and `<colFields>`, or twice under one, contradicts its own declaration and
+// Excel repairs the package. The value field is the exception that is not one: aggregating a field that
+// is also an axis ("Count of Name" by Name) is an ordinary pivot, and the writer flags it as both.
 function resolveRoles(options: PivotTableOptions, fields: readonly SourceField[]): FieldRoles {
   const resolve = (role: string, name: string): number => {
     const index = fields.findIndex((field) => field.name === name);
@@ -352,9 +373,26 @@ function resolveRoles(options: PivotTableOptions, fields: readonly SourceField[]
   if (valueName === undefined || extraValues.length > 0) {
     throw new AuthoringError('a pivot table needs exactly one value field');
   }
+  const axisRoles = new Map<number, string>();
+  const resolveAxis = (role: string, names: readonly string[]): number[] =>
+    names.map((name) => {
+      const index = resolve(role, name);
+      const earlier = axisRoles.get(index);
+      if (earlier === role) {
+        throw new AuthoringError(`pivot ${role} field ${quoted(name)} is named more than once`);
+      }
+      if (earlier !== undefined) {
+        throw new AuthoringError(
+          `pivot field ${quoted(name)} is named as both a ${earlier} and a ${role} field: a field ` +
+            'sits on one axis',
+        );
+      }
+      axisRoles.set(index, role);
+      return index;
+    });
   return {
-    rowFields: options.rows.map((name) => resolve('row', name)),
-    columnFields: options.columns.map((name) => resolve('column', name)),
+    rowFields: resolveAxis('row', options.rows),
+    columnFields: resolveAxis('column', options.columns),
     valueField: resolve('value', valueName),
   };
 }

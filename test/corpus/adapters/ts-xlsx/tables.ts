@@ -601,6 +601,66 @@ export const tables = {
         .sort(),
     };
   },
+
+  // Author a pivot over a small source whose header row is `headers`, naming fields for each role, and
+  // report → { refusal, pivotFields, rowFields, columnFields, dataFields }. A refused pivot carries
+  // `refusal: {code, message}` and nulls elsewhere; a written one carries `refusal: null`, each
+  // `<pivotField>` as `{axis, dataField}`, and the row, column and data fields as indices into the cache
+  // fields. Data rows fill every header column with a short string or number.
+  pivotFieldWiring(spec: {
+    headers: readonly string[];
+    rows: readonly string[];
+    columns: readonly string[];
+    values: readonly string[];
+  }) {
+    const wb = new Workbook();
+    const source = wb.addWorksheet('Data');
+    const data = [
+      ['a', 'x', 1],
+      ['b', 'y', 2],
+      ['a', 'y', 3],
+    ];
+    spec.headers.forEach((header, col) => {
+      const letter = String.fromCharCode(65 + col);
+      source.getCell(`${letter}1`).value = header;
+      data.forEach((row, i) => {
+        source.getCell(`${letter}${i + 2}`).value = row[col % row.length] ?? null;
+      });
+    });
+    try {
+      wb.addWorksheet('Pivot').addPivotTable({
+        source,
+        rows: spec.rows,
+        columns: spec.columns,
+        values: spec.values,
+      });
+    } catch (e) {
+      return {
+        refusal: {code: String((e as Untyped)?.code ?? ''), message: messageOf(e)},
+        pivotFields: null,
+        rowFields: null,
+        columnFields: null,
+        dataFields: null,
+      };
+    }
+    const xml = partMapOf(writeXlsx(wb))['xl/pivotTables/pivotTable1.xml'] ?? '';
+    const indicesIn = (element: string, child: string, attribute: string) =>
+      [
+        ...(new RegExp(`<${element}\\b[^>]*>(.*?)</${element}>`).exec(xml)?.[1] ?? '').matchAll(
+          new RegExp(`<${child}\\b[^>]*\\b${attribute}="(\\d+)"`, 'g'),
+        ),
+      ].map((match) => Number(match[1]));
+    return {
+      refusal: null,
+      pivotFields: [...xml.matchAll(/<pivotField\b([^>]*)>/g)].map((match) => ({
+        axis: /\baxis="([^"]*)"/.exec(match[1] ?? '')?.[1] ?? null,
+        dataField: /\bdataField="(1|true)"/.test(match[1] ?? ''),
+      })),
+      rowFields: indicesIn('rowFields', 'field', 'x'),
+      columnFields: indicesIn('colFields', 'field', 'x'),
+      dataFields: indicesIn('dataFields', 'dataField', 'fld'),
+    };
+  },
 };
 
 // A table's range, or the message reading it threw. An anchor moved past the last column makes

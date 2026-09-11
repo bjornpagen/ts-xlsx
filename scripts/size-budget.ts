@@ -38,7 +38,10 @@ const DIST = join(ROOT, 'dist');
 //
 // Raised again, from 584, when the stylesheet reader's one-slot-per-`<fill>` draft put the sum a tenth
 // over.
-const TOTAL_BUDGET_BYTES = 585 * 1024;
+//
+// Raised again, from 585, when an authored pivot began refusing a field used twice and a repeated
+// source header, and flagging a value field that is also an axis, three tenths over.
+const TOTAL_BUDGET_BYTES = 586 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -98,7 +101,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 573, when a typed cell without a value began reading as blank, which needs the
   // run machine to report whether an `<is>` opened at all, a tenth over.
-  '.': 574,
+  //
+  // Raised again, from 574, when an authored pivot began refusing a field used twice and a repeated
+  // source header, and the writer began flagging a value field that is also an axis, which left this
+  // entry sitting on its budget.
+  '.': 575,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -109,7 +116,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 211, when merged ranges began to be stored canonically (a sheet prefix refused,
   // a declared range without its rectangle an `InternalError`) and the merge-over-table test moved into
   // `core/merge.ts` for both codecs to share, which put this entry a kilobyte over.
-  './core': 212,
+  //
+  // Raised again, from 212, when `core/pivot-table.ts` began refusing a field placed on two axes or twice
+  // on one, and a source header row that repeats a name, nine tenths over.
+  './core': 213,
   // Raised from 554 by the same future-function registry as `.`, which put this entry nine tenths over.
   //
   // Raised again, from 555, by the same conditional-format boundaries as `.`, eight tenths over.
@@ -117,7 +127,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 556, when the stylesheet reader began committing exactly one fill slot per
   // `<fill>` from a per-fill draft, so a malformed fill table no longer shifts every later `fillId`.
   // Half a kilobyte over.
-  './xlsx': 557,
+  //
+  // Raised again, from 557, by the same pivot role refusals as `/core`, eight tenths over.
+  './xlsx': 558,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -135,7 +147,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // names Excel prefixes beyond it, fifty-odd names more, which put this entry four tenths over.
   //
   // Raised again, from 301, by the same canonical merge storage as `/core`, eight tenths over.
-  './xlsb': 302,
+  //
+  // Raised again, from 302, by the same pivot role refusals as `/core`, seven tenths over.
+  './xlsb': 303,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
@@ -152,7 +166,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // every entry carrying the model pays for, a tenth over.
   //
   // Raised again, from 221, by the same canonical merge storage as `/core`, three tenths over.
-  './csv': 222,
+  //
+  // Raised again, from 222, by the same pivot role refusals as `/core`, two tenths over.
+  './csv': 223,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //
@@ -177,7 +193,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // which left the entry sitting exactly on its budget.
   //
   // Raised again, from 417, by the same conditional-format boundaries as `.`, seven tenths over.
-  './node': 418,
+  //
+  // Raised again, from 418, by the same pivot role refusals as `/core`, three tenths over.
+  './node': 419,
   // Raised from 50 when the MS-OVBA encoder stopped rescanning its whole back-window for every
   // output byte. The hash chain that replaced the rescan is the cost, and it buys a time bound on a
   // path an untrusted `.xlsm` reaches through `removeVbaModule`; the CFB and `dir` guards landed

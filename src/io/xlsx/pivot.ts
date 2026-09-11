@@ -105,14 +105,16 @@ export function pivotTableXml(table: PivotTable, name: string, cacheId: string):
 
   const pivotFields = table.cacheFields
     .map((field, index) => {
+      // The value field may also sit on an axis, and then it carries both attributes: Excel repairs a
+      // package whose `<dataField fld>` points at a `<pivotField>` not flagged as one.
+      const dataField = index === table.valueField ? ' dataField="1"' : '';
       if (table.rowFields.includes(index) || table.columnFields.includes(index)) {
         const axis = table.rowFields.includes(index) ? 'axisRow' : 'axisCol';
         const items = field.sharedItems ?? [];
         const entries = `${items.map((_item, i) => `<item x="${i}"/>`).join('')}<item t="default"/>`;
-        return `<pivotField axis="${axis}" showAll="0"><items count="${items.length + 1}">${entries}</items></pivotField>`;
+        return `<pivotField axis="${axis}"${dataField} showAll="0"><items count="${items.length + 1}">${entries}</items></pivotField>`;
       }
-      if (index === table.valueField) return '<pivotField dataField="1" showAll="0"/>';
-      return '<pivotField showAll="0"/>';
+      return `<pivotField${dataField} showAll="0"/>`;
     })
     .join('');
 

@@ -188,8 +188,10 @@ A pivot table built over a source sheet's data. Construction reads the source on
 the full cache (fields + records) and the axis-field wiring the renderer needs; nothing here
 touches XML.
 
-Supported shape: exactly one value field aggregated by `sum`, at least one row field and one
-column field. An unsupported request throws at authoring time rather than emitting a corrupt file.
+Supported shape: at least one row field and one column field, each source field on at most one
+axis and at most once, over a header row whose names are unique ignoring case; and exactly one value
+field, aggregated by any [`PivotMetric`](./pivot-tables.md#pivotmetric) (`sum` by default), which may also be an axis field. An
+unsupported request throws at authoring time rather than emitting a corrupt file.
 
 ```ts
 class PivotTable {

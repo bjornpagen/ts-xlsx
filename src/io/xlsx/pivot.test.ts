@@ -288,44 +288,27 @@ test('two pivot tables number their parts and caches independently', () => {
   assert.match(workbook, /<pivotCache cacheId="2"/);
 });
 
-test('authoring rejects unsupported shapes at add time', () => {
-  const wb = new Workbook();
-  const src = wb.addWorksheet('Data');
-  src.getCell('A1').value = 'Name';
-  src.getCell('B1').value = 'Region';
-  src.getCell('C1').value = 'Amount';
-  src.getCell('A2').value = 'a';
-  src.getCell('B2').value = 'x';
-  src.getCell('C2').value = 1;
-  const dst = wb.addWorksheet('P');
+test('a value field that is also an axis field is flagged as a data field on its axis', () => {
+  for (const [values, axis] of [
+    [['Name'], 'axisRow'],
+    [['Region'], 'axisCol'],
+  ] as const) {
+    const wb = new Workbook();
+    const src = wb.addWorksheet('Data');
+    src.getCell('A1').value = 'Name';
+    src.getCell('B1').value = 'Region';
+    src.getCell('A2').value = 'a';
+    src.getCell('B2').value = 'x';
+    wb.addWorksheet('P').addPivotTable({
+      source: src,
+      rows: ['Name'],
+      columns: ['Region'],
+      values,
+      metric: 'count',
+    });
 
-  assert.throws(
-    () =>
-      dst.addPivotTable({
-        source: src,
-        rows: ['Name'],
-        columns: ['Region'],
-        values: ['Amount'],
-        metric: 'avg' as never,
-      }),
-    /unsupported pivot metric "avg"/,
-  );
-  assert.throws(
-    () => dst.addPivotTable({source: src, rows: ['Nope'], columns: ['Region'], values: ['Amount']}),
-    /"Nope" is not a column header/,
-  );
-  assert.throws(
-    () =>
-      dst.addPivotTable({
-        source: src,
-        rows: ['Name'],
-        columns: ['Region'],
-        values: ['Amount', 'Name'],
-      }),
-    /exactly one value field/,
-  );
-  assert.throws(
-    () => dst.addPivotTable({source: src, rows: [], columns: ['Region'], values: ['Amount']}),
-    /at least one row field/,
-  );
+    const table = partIn(partsWritten(wb), 'xl/pivotTables/pivotTable1.xml');
+    assert.match(table, new RegExp(`<pivotField axis="${axis}" dataField="1" showAll="0">`));
+    assert.equal(table.match(/dataField="1"/g)?.length, 1, 'only the value field is flagged');
+  }
 });
