@@ -15,7 +15,7 @@ import {
   type RichTextValue,
 } from '../../core/value.ts';
 import {decodeSpreadsheetText, numFinite, numInteger} from '../../xml/xml-attrs.ts';
-import {boolStrict} from '../../xml/xml-scan.ts';
+import {boolStrict, boolTristate} from '../../xml/xml-scan.ts';
 
 /**
  * One entry of the shared-strings pool. A `<si>` built from a bare `<t>` is a plain string; a `<si>`
@@ -30,8 +30,11 @@ export interface RawCell {
   readonly type: string;
   readonly hasFormula: boolean;
   readonly formula: string;
+  /** Whether a `<v>` was present, `<v/>` included. */
   readonly hasValue: boolean;
   readonly valueText: string;
+  /** Whether an `<is>` was present, `<is/>` included. */
+  readonly hasInlineString: boolean;
   readonly inlineText: string;
   /** The formatted runs of a rich inline string, when the `<is>` held `<r>` elements rather than a
    * bare `<t>`. Absent (or empty) for a plain inline string, which decodes to `inlineText`. */
@@ -63,25 +66,26 @@ export function decodeCellContent(
   if (raw.type === 'inlineStr' && raw.richTextRuns !== undefined && raw.richTextRuns.length > 0) {
     return {richText: raw.richTextRuns};
   }
-  const value = decodeValue(raw.type, raw.valueText, raw.inlineText, raw.hasValue, sharedStrings);
+  const value = decodeValue(raw, sharedStrings);
   // A number stored under a date format is a date serial: surface it as a Date so a written date
   // round-trips as a date, not a bare number.
   return coerceDateSerial(value, numFmt, epoch);
 }
 
-function decodeValue(
-  type: string,
-  valueText: string,
-  inlineText: string,
-  hasValue: boolean,
-  sharedStrings: readonly SharedString[],
-): CellValue {
-  switch (type) {
+// A cell Excel shows as blank reads as `null`, whatever its `t` claims. The two string types are text
+// once their carrier is present, so `<v/>` under `t="str"` and `<is/>` under `t="inlineStr"` are empty
+// strings; every other type is only its `<v>` text, and an empty `<v>` is the same blank as a missing
+// one (Excel 16.0 build 20326, `test/corpus/cases/typed-cell-without-value-reads-blank.case.ts`). A
+// token the type has no reading for (`<v>2</v>` under `t="b"`, a pool index past the end) is a package
+// Excel refuses to open, so there is no answer to match, and it reads as no value too.
+function decodeValue(raw: RawCell, sharedStrings: readonly SharedString[]): CellValue {
+  const {valueText} = raw;
+  switch (raw.type) {
     case 'inlineStr':
       // Already decoded per `<t>` as it was gathered; the accumulator owns that seam.
-      return inlineText;
+      return raw.hasInlineString ? raw.inlineText : null;
     case 'str':
-      return decodeSpreadsheetText(valueText);
+      return raw.hasValue ? decodeSpreadsheetText(valueText) : null;
     case 'd':
       // A Strict-mode (ISO/IEC 29500 Strict) date cell stores an ISO 8601 value directly, not a
       // serial. Parse it literally, since an ISO date is UTC, so it reads as the date it states rather
@@ -90,28 +94,22 @@ function decodeValue(
     case 's': {
       // A `t="s"` cell indexes the shared pool; the entry is a plain string or, when Excel pooled a
       // rich value, a {@link RichTextValue} whose runs surface here rather than being flattened.
-      //
-      // Read through the integer grammar rather than a bare `Number()`, for the reason the numeric
-      // default branch below spells out: `Number('')` is 0 and 0 is an integer, so a present-but-empty
-      // `<v/>` would resolve to the *first* pooled string: a wrong value, not a missing one.
+      // Through the integer grammar, because `Number('')` is 0 and would resolve an empty `<v>` to the
+      // first pooled string.
       const index = numInteger(valueText, 0);
-      return index === undefined ? '' : (sharedStrings[index] ?? '');
+      return index === undefined ? null : (sharedStrings[index] ?? null);
     }
     case 'b':
-      return boolStrict(valueText);
+      return boolTristate(valueText) ?? null;
     case 'e':
+      if (valueText === '') return null;
+      // A code this library does not list keeps its text: Excel adds codes (`#BUSY!`, `#FIELD!`), and
+      // a newer workbook's error is data, not a malformed token.
       return isErrorCode(valueText) ? {error: valueText} : valueText;
-    default: {
-      if (!hasValue) return null;
-      // The same grammar the numeric *attributes* read through, for the same reason: a bare
-      // `Number()` turns a token it cannot parse into `NaN`, which is a number and so satisfies
-      // every guard downstream. The writer already refuses to emit a `<v>` for a non-finite number,
-      // so `NaN` was only ever a claim the model held for one step before the next write dropped it;
-      // reading it as no value reaches the same file with no lie in the middle. A blank `<v>` goes
-      // the same way rather than becoming `Number('')`'s zero: Excel writes no `<v>` at all for an
-      // empty cell, so a present-but-empty one is malformed, and "nothing" is the honest reading.
+    default:
+      // Not a bare `Number()`, which reads an unparseable token as `NaN`, a number that satisfies every
+      // guard downstream and that the writer then refuses to emit, and an empty `<v>` as zero.
       return numFinite(valueText) ?? null;
-    }
   }
 }
 

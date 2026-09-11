@@ -6,7 +6,8 @@
 // self-closing element commits no entry for the second form, so the pool it builds is one short and
 // every cell indexing past that point resolves to its *neighbour's* string. The same table is where
 // an empty `<v/>` on a `t="s"` cell lands: read through a bare `Number()`, the empty string is 0, an
-// integer, so the cell resolves to the first pooled string.
+// integer, so the cell resolves to the first pooled string. Excel shows that cell as blank, not as
+// an empty string (`test/corpus/fixtures/excel-oracle/typed-cell-without-value.json`).
 //
 // Both are the worst failure this library has: not a missing value, a different one. A downstream
 // consumer sees a plausible string in every cell and has no way to tell it is the wrong one.
@@ -19,8 +20,8 @@ export default {
   description:
     'An empty shared-string entry written as `<si/>` occupies its slot exactly as `<si><t/></si>` ' +
     'does, so a `t="s"` cell indexing past it resolves to the string actually stored at that ' +
-    'ordinal; and a `t="s"` cell whose `<v>` is present but empty resolves to the empty string ' +
-    'rather than to shared string 0.',
+    'ordinal; and a `t="s"` cell whose `<v>` is present but empty holds no value, as Excel shows ' +
+    'it, rather than shared string 0.',
   provenance: {source: 'audit'},
 
   behavior: [
@@ -45,12 +46,12 @@ export default {
       },
     },
     {
-      name: 'a `t="s"` cell with a present-but-empty `<v/>` is empty, not shared string 0',
+      name: 'a `t="s"` cell with a present-but-empty `<v/>` is blank, not shared string 0',
       expect(api: CorpusApi, assert: Assert) {
         const {emptyValueCell} = api.pooledStringIndexReport();
         assert.strictEqual(
           emptyValueCell,
-          '',
+          null,
           'an empty `<v/>` carries no ordinal, so the cell holds no pooled string',
         );
       },

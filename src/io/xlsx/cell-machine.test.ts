@@ -144,6 +144,78 @@ test('a formula whose cached <v> is unparseable keeps its formula and caches not
   assert.deepEqual(streamed[0]?.value, {formula: 'B1*2'}, 'and the two readers agree');
 });
 
+// Excel shows each of these as blank (Excel 16.0 build 20326), and a reader decoding by `t` alone read
+// the boolean as FALSE and the rest as "", which a save then wrote back as data.
+const TYPED_WITHOUT_VALUE: readonly (readonly [string, string])[] = [
+  ['b', '<c r="A1" t="b"/>'],
+  ['s', '<c r="A1" t="s"/>'],
+  ['e', '<c r="A1" t="e"/>'],
+  ['str', '<c r="A1" t="str"/>'],
+  ['d', '<c r="A1" t="d"/>'],
+  ['n', '<c r="A1" t="n"/>'],
+  ['inlineStr', '<c r="A1" t="inlineStr"/>'],
+  ['b, empty <v>', '<c r="A1" t="b"><v></v></c>'],
+  ['b, <v/>', '<c r="A1" t="b"><v/></c>'],
+  ['s, empty <v>', '<c r="A1" t="s"><v></v></c>'],
+  ['s, blank <v>', '<c r="A1" t="s"><v> </v></c>'],
+  ['e, empty <v>', '<c r="A1" t="e"><v></v></c>'],
+  ['inlineStr, <v> and no <is>', '<c r="A1" t="inlineStr"><v>ignored</v></c>'],
+];
+
+test('a typed cell with no value reads as none, identically both ways', () => {
+  for (const [label, cell] of TYPED_WITHOUT_VALUE) {
+    const patched = patchSheetBody(seeded(), `${cell}<c r="B1"><v>1</v></c>`);
+    assert.equal(readXlsx(patched).getWorksheet('S')!.getCell('A1').value, null, `${label}`);
+    const streamed = [...readSheetRows(patched)][0]?.cells ?? [];
+    assert.deepEqual(
+      streamed.map((c) => c.address),
+      ['B1'],
+      `${label} is not a data cell`,
+    );
+  }
+});
+
+test('a string cell whose <v> or <is> is present but empty reads as the empty string both ways', () => {
+  for (const cell of [
+    '<c r="A1" t="str"><v></v></c>',
+    // The self-closing spelling fires no close, and is still the same element as `<v></v>`.
+    '<c r="A1" t="str"><v/></c>',
+    '<c r="A1" t="inlineStr"><is/></c>',
+    '<c r="A1" t="inlineStr"><is></is></c>',
+  ]) {
+    const patched = patchSheetBody(seeded(), cell);
+    assert.equal(readXlsx(patched).getWorksheet('S')!.getCell('A1').value, '', cell);
+    assert.deepEqual(
+      ([...readSheetRows(patched)][0]?.cells ?? []).map((c) => [c.address, c.value]),
+      [['A1', '']],
+      cell,
+    );
+  }
+});
+
+// Each of these makes Excel refuse the package, so there is no reading to match, and none is invented.
+test('a typed token with no reading for its type is no value, but an unlisted error code is kept', () => {
+  const patched = patchSheetBody(
+    seeded(),
+    '<c r="A1" t="b"><v>2</v></c><c r="B1" t="s"><v>abc</v></c><c r="C1" t="s"><v>99</v></c>' +
+      '<c r="D1" t="e"><v>#BUSY!</v></c>',
+  );
+  const sheet = readXlsx(patched).getWorksheet('S')!;
+  assert.equal(sheet.getCell('A1').value, null, 'not FALSE');
+  assert.equal(sheet.getCell('B1').value, null, 'not ""');
+  assert.equal(sheet.getCell('C1').value, null, 'nor "" for an index past the pool');
+  assert.equal(sheet.getCell('D1').value, '#BUSY!', 'a newer error code is data');
+});
+
+test('a typed cell with no value is not written back as one', () => {
+  const body = TYPED_WITHOUT_VALUE.map(([, cell], i) =>
+    cell.replace('A1', `${String.fromCharCode(65 + i)}1`),
+  ).join('');
+  const xml = sheetXml(writeXlsx(readXlsx(patchSheetBody(seeded(), body))));
+  // The cell elements themselves may stay, as a bare `<c r="A1"/>` does; the invented values may not.
+  assert.doesNotMatch(xml, /<c [^>]*\bt="|<v>|<is>/);
+});
+
 // A row past the grid is dropped by both readers, cells included: the streamer dropped them, and the
 // buffered reader placed one whose own `r` was in the grid.
 test('buffered and streamed reads agree that a row past the grid places no cell', () => {
@@ -159,6 +231,13 @@ test('buffered and streamed reads agree that a row past the grid places no cell'
   assert.equal(readXlsx(data).getWorksheet('S')?.getCell('A5').value, null, 'buffered');
   assert.deepEqual([...readSheetRows(data)], [], 'streamed');
 });
+
+// A one-sheet package whose pool holds one string, for a patched body to index into.
+function seeded(): Uint8Array {
+  const wb = new Workbook();
+  wb.addWorksheet('S').getCell('A1').value = 'seed';
+  return writeXlsx(wb, {useSharedStrings: true});
+}
 
 // Replace the whole `<sheetData>` body of the first worksheet part with one authored row.
 function patchSheetBody(data: Uint8Array, cells: string): Uint8Array {

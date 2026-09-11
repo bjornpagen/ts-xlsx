@@ -63,6 +63,7 @@ export class RunAccumulator {
   #plain = '';
   #inRun = false;
   #isRich = false;
+  #opened = false;
   #inContainer = false;
   // How deep the machine is inside `<rPh>` phonetic runs, 0 outside any. A `<t>` opened at any depth
   // above 0 captures nothing, so furigana never reaches a run or the plain text.
@@ -90,6 +91,12 @@ export class RunAccumulator {
     return this.#isRich;
   }
 
+  /** Whether a container element opened at all since the last {@link beginContainer}. An `<is/>` is an
+   * empty string and a `<c t="inlineStr">` with no `<is>` is no string, and only this tells them apart. */
+  get opened(): boolean {
+    return this.#opened;
+  }
+
   /** The container's own text: every `<t>` no run claimed, concatenated and already unescaped. */
   get plainText(): string {
     return this.#plain;
@@ -112,6 +119,7 @@ export class RunAccumulator {
     this.#plain = '';
     this.#inRun = false;
     this.#isRich = false;
+    this.#opened = false;
     // Every field the container owns, these two included, so a caller opening a container of its own
     // (a `<c>` around an `<is>`) cannot inherit a latch left behind by truncated markup. The capture
     // is one of them: markup that opens a `<t>` and never closes it leaves it armed, and without this
@@ -130,6 +138,7 @@ export class RunAccumulator {
         // latching here would leave the machine believing it is inside a container that has already
         // ended, and the next `<t>` in the document would be absorbed as that container text.
         this.#inContainer = !selfClosing;
+        this.#opened = true;
         return true;
       case 'r':
         if (!this.#readRuns || !this.#inContainer) return false;

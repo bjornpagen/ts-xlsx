@@ -233,7 +233,10 @@ export class CellAccumulator {
         this.#beginFormula(attrs, selfClosing);
         return true;
       case 'v':
+        // `<v/>` is `<v></v>`, and under `t="str"` Excel reads either as empty text rather than blank,
+        // so the self-closing spelling, which fires no close, records its empty value here.
         this.#capture = !selfClosing;
+        if (selfClosing) this.#setValue('');
         return true;
       default:
         return false;
@@ -355,6 +358,7 @@ export class CellAccumulator {
       formula: this.#formula,
       hasValue: this.#hasValue,
       valueText: this.#valueText,
+      hasInlineString: this.#runs.opened,
       inlineText: this.#runs.plainText,
       richTextRuns: this.#runs.runs,
     };

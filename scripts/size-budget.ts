@@ -95,7 +95,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 572, when conditional formats gained an integer boundary for priority, rank
   // and stdDev, a range filter on read and a refusal of an empty range, a tenth over.
-  '.': 573,
+  //
+  // Raised again, from 573, when a typed cell without a value began reading as blank, which needs the
+  // run machine to report whether an `<is>` opened at all, a tenth over.
+  '.': 574,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.

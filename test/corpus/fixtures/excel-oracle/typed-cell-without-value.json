@@ -1,0 +1,44 @@
+{
+  "invariant": "typed-cell-without-value",
+  "description": "One column of `<c>` elements whose `t` names a type but whose payload is missing or empty: every `t` with no `<v>`, an empty `<v>` under b/s/e/d, a self-closing `<v/>`, an inlineStr carrying a `<v>` and no `<is>`, a whitespace-only pool index, and the string types with their carrier present but empty. A20 (`t=\"b\"` `<v>0</v>`) and A21 (`t=\"s\"` `<v>0</v>`) are controls. The package is hand-built, because the writer never emits these shapes, so it was observed directly rather than emitted from a probe spec.",
+  "probeSpecRef": "test/corpus/fixtures/typed-cell-without-value-reads-blank/typed-cells.xlsx",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-11",
+  "openClass": "automation-open (DisplayAlerts=false, AutomationSecurity=ForceDisable)",
+  "open": {
+    "threw": false,
+    "error": null,
+    "repairedMarker": false
+  },
+  "readback": "Range.Value2 type, Range.Text, and Worksheet.Evaluate of ISBLANK/TYPE/COUNTA per cell; UsedRange.Address",
+  "cells": [
+    {"address": "A1", "xml": "<c t=\"b\"/>", "value2": null, "isBlank": true},
+    {"address": "A2", "xml": "<c t=\"s\"/>", "value2": null, "isBlank": true},
+    {"address": "A3", "xml": "<c t=\"e\"/>", "value2": null, "isBlank": true},
+    {"address": "A4", "xml": "<c t=\"str\"/>", "value2": null, "isBlank": true},
+    {"address": "A5", "xml": "<c t=\"d\"/>", "value2": null, "isBlank": true},
+    {"address": "A6", "xml": "<c t=\"n\"/>", "value2": null, "isBlank": true},
+    {"address": "A7", "xml": "<c t=\"inlineStr\"/>", "value2": null, "isBlank": true},
+    {"address": "A8", "xml": "<c t=\"b\"><v></v></c>", "value2": null, "isBlank": true},
+    {"address": "A9", "xml": "<c t=\"s\"><v></v></c>", "value2": null, "isBlank": true},
+    {"address": "A10", "xml": "<c t=\"e\"><v></v></c>", "value2": null, "isBlank": true},
+    {"address": "A11", "xml": "<c t=\"d\"><v></v></c>", "value2": null, "isBlank": true},
+    {"address": "A12", "xml": "<c t=\"b\"><v/></c>", "value2": null, "isBlank": true},
+    {"address": "A13", "xml": "<c t=\"inlineStr\"><v>ignored</v></c>", "value2": null, "isBlank": true},
+    {"address": "A14", "xml": "<c t=\"s\"><v> </v></c>", "value2": null, "isBlank": true},
+    {"address": "A15", "xml": "<c t=\"str\"><v></v></c>", "value2": "", "isBlank": false},
+    {"address": "A16", "xml": "<c t=\"str\"><v/></c>", "value2": "", "isBlank": false},
+    {"address": "A17", "xml": "<c t=\"inlineStr\"><is/></c>", "value2": "", "isBlank": false},
+    {"address": "A18", "xml": "<c t=\"inlineStr\"><is></is></c>", "value2": "", "isBlank": false},
+    {"address": "A19", "xml": "<c t=\"inlineStr\"><is><t></t></is></c>", "value2": "", "isBlank": false},
+    {"address": "A20", "xml": "<c t=\"b\"><v>0</v></c>", "value2": false, "isBlank": false},
+    {"address": "A21", "xml": "<c t=\"s\"><v>0</v></c>", "value2": "pooled", "isBlank": false}
+  ],
+  "usedRange": "$A$15:$A$21",
+  "resave": "Observed on an earlier package of the same shapes: Excel's SaveAs dropped every blank cell from `<sheetData>` and wrote each empty-text cell as a pooled empty string (`<c t=\"s\"><v>0</v></c>` over `<si><t/></si>`).",
+  "malformedTokens": "Observed in separate packages, one cell each: `t=\"s\"` with `<v>abc</v>`, `t=\"s\"` with an index past the pool, `t=\"b\"` with `<v>2</v>`, and `t=\"e\"` with `<v>junk</v>` all make Workbooks.Open throw (a package Excel refuses without repair).",
+  "verdict": "A cell Excel shows as blank carries no value, whatever its `t`. The string types are text once their carrier is present, empty or self-closing, and blank without it; every other type is blank unless its `<v>` holds a token, an empty `<v>` reading the same as a missing one. An inlineStr ignores `<v>`. The readers match: blank shapes read as null and are not streamed, carrier-present string cells read as the empty string."
+}

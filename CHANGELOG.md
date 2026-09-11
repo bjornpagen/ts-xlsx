@@ -66,6 +66,14 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Fixed
 
+- **A typed cell with no value read as `FALSE` or `""`.** A `<c t="b"/>` read as `false`, and a
+  `t="s"`, `t="e"`, `t="str"` or `t="inlineStr"` cell with no payload read as `""`, in both readers.
+  A save then wrote the invented value back. Excel shows every such cell as blank. Such a cell now
+  reads as `null` and is not streamed, and so does one whose `<v>` is empty or holds a token its type
+  cannot read (`<v>2</v>` under `t="b"`, a shared-string index past the pool). A `str` cell with a
+  `<v/>` and an `inlineStr` cell with an `<is/>` are still the empty string, as in Excel. An error
+  code the library does not list keeps its text.
+
 - **A refused cell position left the sheet unreadable and unwritable.** `getCell('A0')`,
   `getCell('A1048577')` and `addTable({ref: 'A0', …})` threw, but only after storing the row they
   were refusing, so `rows()` and `writeXlsx` threw `row 0 is out of bounds` on every call from then
