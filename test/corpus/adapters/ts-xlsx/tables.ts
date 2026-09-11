@@ -619,6 +619,36 @@ export const tables = {
     };
   },
 
+  // Author a pivot over `source` (header → the five data values, null for a missing one) plus a numeric
+  // `Amount` value field, with the named fields on each axis, and report → a map of header → the
+  // attributes of its `<sharedItems>` in the written cache definition, in written order, `count` included
+  // for a field that carries a catalogue. A field the source did not produce is absent.
+  pivotCacheFieldKinds(spec: {
+    source: Readonly<Record<string, readonly (string | number | null)[]>>;
+    rows: readonly string[];
+    columns: readonly string[];
+  }) {
+    const wb = new Workbook();
+    const source = wb.addWorksheet('Data');
+    const headers = Object.keys(spec.source);
+    source.addRow([...headers, 'Amount']);
+    for (let row = 0; row < 5; row++) {
+      source.addRow([...headers.map((header) => spec.source[header]?.[row] ?? null), row + 1]);
+    }
+    wb.addWorksheet('Pivot').addPivotTable({
+      source,
+      rows: spec.rows,
+      columns: spec.columns,
+      values: ['Amount'],
+    });
+    const cache = partMapOf(writeXlsx(wb))['xl/pivotCache/pivotCacheDefinition1.xml'] ?? '';
+    return Object.fromEntries(
+      [...cache.matchAll(/<cacheField name="([^"]*)"[^>]*><sharedItems ?([^>]*?)\/?>/g)].map(
+        (match) => [match[1] ?? '', match[2] ?? ''],
+      ),
+    );
+  },
+
   // Author a pivot over a small source whose header row is `headers`, naming fields for each role, and
   // report → { refusal, pivotFields, rowFields, columnFields, dataFields }. A refused pivot carries
   // `refusal: {code, message}` and nulls elsewhere; a written one carries `refusal: null`, each

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
 import {Workbook} from '../../core/workbook.ts';
-import {partIn, partsWritten, roundtrip} from './package.test-support.ts';
+import {captureIn, partIn, partsWritten, roundtrip} from './package.test-support.ts';
 import {writeXlsx} from './write.ts';
 
 // A source sheet whose data carries every XML-special character plus a missing value in an axis
@@ -310,5 +310,77 @@ test('a value field that is also an axis field is flagged as a data field on its
     const table = partIn(partsWritten(wb), 'xl/pivotTables/pivotTable1.xml');
     assert.match(table, new RegExp(`<pivotField axis="${axis}" dataField="1" showAll="0">`));
     assert.equal(table.match(/dataField="1"/g)?.length, 1, 'only the value field is flagged');
+  }
+});
+
+// Each descriptor below is what Excel 16.0 (build 20326) wrote for a pivot it built over the same column,
+// as an axis field (with `count` and the items) and as a field no axis uses. A catalogue of numbers that
+// did not say so, `<sharedItems count="2"><n v="2025"/>…`, made Excel offer to repair the package.
+const TYPED_COLUMNS: Record<string, readonly (string | number | null)[]> = {
+  Num: [1, 2, 3, 4, 2],
+  NumBlank: [1, null, 3, 4, 1],
+  Mixed: ['a', 2, 'b', 4, 'a'],
+  StrBlank: ['a', null, 'b', 'c', 'a'],
+  Float: [1.5, 2, 3.25, 4, 2],
+  Str: ['x', 'y', 'z', 'x', 'y'],
+};
+
+const EXCEL_DESCRIPTORS: Record<string, string> = {
+  Num: 'containsSemiMixedTypes="0" containsString="0" containsNumber="1" containsInteger="1" minValue="1" maxValue="4"',
+  NumBlank:
+    'containsString="0" containsBlank="1" containsNumber="1" containsInteger="1" minValue="1" maxValue="4"',
+  Mixed: 'containsMixedTypes="1" containsNumber="1" containsInteger="1" minValue="2" maxValue="4"',
+  StrBlank: 'containsBlank="1"',
+  Float:
+    'containsSemiMixedTypes="0" containsString="0" containsNumber="1" minValue="1.5" maxValue="4"',
+  Str: '',
+};
+
+function typedCache(axis: boolean): string {
+  const wb = new Workbook();
+  const src = wb.addWorksheet('Data');
+  const names = ['Name', ...Object.keys(TYPED_COLUMNS), 'Amount'];
+  src.addRow(names);
+  for (let row = 0; row < 5; row++) {
+    src.addRow([
+      ['a', 'b', 'a', 'c', 'b'][row] ?? null,
+      ...Object.values(TYPED_COLUMNS).map((column) => column[row] ?? null),
+      row + 1,
+    ]);
+  }
+  const fields = Object.keys(TYPED_COLUMNS);
+  wb.addWorksheet('Pivot').addPivotTable({
+    source: src,
+    rows: axis ? fields.slice(0, -1) : ['Name'],
+    columns: axis ? fields.slice(-1) : ['Str'],
+    values: ['Amount'],
+  });
+  return partIn(partsWritten(wb), 'xl/pivotCache/pivotCacheDefinition1.xml');
+}
+
+test('an axis field describes the kinds of value its catalogue holds, as Excel does', () => {
+  const cache = typedCache(true);
+  for (const [name, descriptor] of Object.entries(EXCEL_DESCRIPTORS)) {
+    const attributes = captureIn(
+      cache,
+      new RegExp(`name="${name}" numFmtId="0"><sharedItems ?([^>]*?)>`),
+    );
+    assert.equal(
+      attributes,
+      `${descriptor}${descriptor === '' ? '' : ' '}count="${new Set(TYPED_COLUMNS[name]).size}"`,
+      name,
+    );
+  }
+});
+
+test('a field no axis uses describes its inline values the same way, without a count', () => {
+  const cache = typedCache(false);
+  for (const [name, descriptor] of Object.entries(EXCEL_DESCRIPTORS)) {
+    if (name === 'Str') continue;
+    const attributes = captureIn(
+      cache,
+      new RegExp(`name="${name}" numFmtId="0"><sharedItems ?([^>]*?)/>`),
+    );
+    assert.equal(attributes, descriptor, name);
   }
 });

@@ -138,7 +138,7 @@ export type PivotItem =
   | {readonly kind: 'number'; readonly value: number}
   | {readonly kind: 'blank'};
 
-/** The numeric summary Excel expects on a non-shared field whose every present value is a number. */
+/** The range and integrality of the numbers a cache field holds, which Excel records beside them. */
 export interface PivotNumericSummary {
   readonly allInteger: boolean;
   readonly min: number;
@@ -146,13 +146,18 @@ export interface PivotNumericSummary {
 }
 
 /** One field of the pivot cache. An axis field (row or column) carries a `sharedItems` catalogue its
- * records reference by index; any other field stores its values inline in the records and, when they
- * are all numeric, describes them with a `numeric` summary. */
+ * records reference by index; any other field stores its values inline in the records. Either way the
+ * cache describes which kinds of value the field holds, because Excel reads the catalogue against that
+ * description: a catalogue of numbers that does not say it holds numbers opens with the repair prompt. */
 export interface PivotCacheField {
   readonly name: string;
   readonly sharedItems: readonly PivotItem[] | null;
-  readonly numeric: PivotNumericSummary | null;
+  /** Whether any value is a string. */
+  readonly containsString: boolean;
+  /** Whether any value is missing. */
   readonly containsBlank: boolean;
+  /** The field's numbers, summarised, or `null` when it holds none. */
+  readonly numeric: PivotNumericSummary | null;
 }
 
 /** One cell of a cache record: an index into a shared-items catalogue, or an inline value. */
@@ -248,7 +253,11 @@ export class PivotTable {
     const catalogues: (Map<string, number> | null)[] = fields.map(() => null);
     this.cacheFields = fields.map((field, fieldIndex) => {
       const scalars = columnScalars[fieldIndex] ?? missingColumn(fieldIndex);
-      const containsBlank = scalars.some((scalar) => scalar.kind === 'blank');
+      const kinds = {
+        containsString: scalars.some((scalar) => scalar.kind === 'string'),
+        containsBlank: scalars.some((scalar) => scalar.kind === 'blank'),
+        numeric: numericSummary(scalars),
+      };
       if (axisFields.has(fieldIndex)) {
         const items: PivotItem[] = [];
         const catalogue = new Map<string, number>();
@@ -260,9 +269,9 @@ export class PivotTable {
           }
         }
         catalogues[fieldIndex] = catalogue;
-        return {name: field.name, sharedItems: items, numeric: null, containsBlank};
+        return {name: field.name, sharedItems: items, ...kinds};
       }
-      return {name: field.name, sharedItems: null, numeric: numericSummary(scalars), containsBlank};
+      return {name: field.name, sharedItems: null, ...kinds};
     });
 
     // Both lookups are resolved once per field rather than once per cell. The column's scalars were
@@ -423,16 +432,15 @@ function itemKey(item: PivotItem): string {
   }
 }
 
-/** The numeric summary for an inline field, or null when any present value is non-numeric (a string
- * present means the field is not a pure numeric column; blanks alone do not disqualify it). */
+/** The summary of a field's numbers, or null when it holds none. Strings and blanks beside them do not
+ * change it: Excel records the range of a mixed field's numbers as it does a pure one's. */
 function numericSummary(scalars: readonly PivotItem[]): PivotNumericSummary | null {
   let min = Infinity;
   let max = -Infinity;
   let allInteger = true;
   let sawNumber = false;
   for (const scalar of scalars) {
-    if (scalar.kind === 'blank') continue;
-    if (scalar.kind !== 'number') return null;
+    if (scalar.kind !== 'number') continue;
     sawNumber = true;
     if (scalar.value < min) min = scalar.value;
     if (scalar.value > max) max = scalar.value;

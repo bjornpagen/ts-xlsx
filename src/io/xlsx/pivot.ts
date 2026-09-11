@@ -11,8 +11,14 @@
 // rather than lean on an invariant three modules away.
 
 import {encodeAddress} from '../../core/address.ts';
-import type {PivotItem, PivotMetric, PivotRecordCell, PivotTable} from '../../core/pivot-table.ts';
-import {boolAttr, escapeAttr, numberText, XML_DECLARATION} from '../../xml/xml.ts';
+import type {
+  PivotCacheField,
+  PivotItem,
+  PivotMetric,
+  PivotRecordCell,
+  PivotTable,
+} from '../../core/pivot-table.ts';
+import {escapeAttr, numberText, XML_DECLARATION} from '../../xml/xml.ts';
 import {RELATIONSHIPS_NS} from '../opc/namespaces.ts';
 import {SPREADSHEETML_NS} from './namespaces.ts';
 
@@ -40,24 +46,11 @@ export function pivotCacheDefinitionXml(table: PivotTable, recordsRelId: string)
   const fields = table.cacheFields
     .map((field) => {
       const shared = field.sharedItems;
-      if (shared !== null) {
-        const items = shared.map(sharedItemXml).join('');
-        const blank = field.containsBlank ? ' containsBlank="1"' : '';
-        return (
-          `<cacheField name="${escapeAttr(field.name)}" numFmtId="0">` +
-          `<sharedItems${blank} count="${shared.length}">${items}</sharedItems>` +
-          `</cacheField>`
-        );
-      }
-      const blank = field.containsBlank ? ' containsBlank="1"' : '';
-      const numeric = field.numeric;
+      const kinds = sharedItemsKinds(field);
       const descriptor =
-        numeric === null
-          ? `<sharedItems${blank}/>`
-          : `<sharedItems containsSemiMixedTypes="0" containsString="0" containsNumber="1"` +
-            boolAttr('containsInteger', numeric.allInteger) +
-            blank +
-            ` minValue="${numberText(numeric.min)}" maxValue="${numberText(numeric.max)}"/>`;
+        shared === null
+          ? `<sharedItems${kinds}/>`
+          : `<sharedItems${kinds} count="${shared.length}">${shared.map(sharedItemXml).join('')}</sharedItems>`;
       return `<cacheField name="${escapeAttr(field.name)}" numFmtId="0">${descriptor}</cacheField>`;
     })
     .join('');
@@ -100,7 +93,10 @@ export function pivotTableXml(table: PivotTable, name: string, cacheId: string):
   const columnGroups = table.cacheFields[columnField]?.sharedItems?.length ?? 1;
   // A generous bounding box on the destination sheet: a row-label column plus one column per column
   // group plus a grand-total column; two header rows plus one row per row group plus a grand total.
-  // Excel recomputes the exact extent from the cache on refresh, so this only has to be valid.
+  // Excel recomputes the exact extent from the cache on refresh, so this only has to be valid. That
+  // holds for nested fields too: sized from the first row and column field alone, with grand-total-only
+  // items and `firstDataRow="2"`, a pivot with two row fields and two column fields opens clean in
+  // Excel 16.0, although Excel itself writes `firstDataRow="3"` and every item for that layout.
   const location = `A1:${encodeAddress(2 + columnGroups, 3 + rowGroups)}`;
 
   const pivotFields = table.cacheFields
@@ -152,6 +148,29 @@ function dataFieldXml(table: PivotTable): string {
   return (
     `<dataField name="${escapeAttr(caption)}" fld="${table.valueField}"${subtotal} ` +
     `baseField="0" baseItem="0"/>`
+  );
+}
+
+// Which kinds of value a cache field holds, spelled as Excel 16.0 spells it for every mix of strings,
+// numbers and blanks, in schema order. Each flag defaults to what a field of strings would say, so only a
+// departure is written: `containsString="0"` for a field with none, `containsSemiMixedTypes="0"` only when
+// it holds nothing but numbers (a blank counts as the other type), `containsMixedTypes="1"` when strings
+// and numbers share it, and `containsNumber` with the range and integrality whenever it holds a number.
+// The same attributes describe a catalogue and a field stored inline; a catalogue of numbers that
+// omitted them opened with Excel's repair prompt.
+function sharedItemsKinds(field: PivotCacheField): string {
+  const {containsString, containsBlank, numeric} = field;
+  const hasNumber = numeric !== null;
+  return (
+    (!containsString && !containsBlank && hasNumber ? ' containsSemiMixedTypes="0"' : '') +
+    (containsString ? '' : ' containsString="0"') +
+    (containsBlank ? ' containsBlank="1"' : '') +
+    (containsString && hasNumber ? ' containsMixedTypes="1"' : '') +
+    (numeric === null
+      ? ''
+      : ' containsNumber="1"' +
+        (numeric.allInteger ? ' containsInteger="1"' : '') +
+        ` minValue="${numberText(numeric.min)}" maxValue="${numberText(numeric.max)}"`)
   );
 }
 

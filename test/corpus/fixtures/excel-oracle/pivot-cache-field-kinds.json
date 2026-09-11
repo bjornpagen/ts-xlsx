@@ -1,0 +1,45 @@
+{
+  "invariant": "pivot-cache-field-kinds",
+  "description": "How a pivot cache field says which kinds of value it holds, and what happens when it does not. Excel built a pivot over a source whose columns mix strings, numbers and blanks in each combination, once with those columns on the row axis and once with none of them on an axis, and saved it; the <sharedItems> attributes below are copied from its pivotCacheDefinition. Separately, pivots this library wrote were opened interactively.",
+  "probe": "a one-off COM script (PivotCaches.Create, CreatePivotTable, PivotField.Orientation, AddDataField, SaveAs) and .claude/skills/excel-gui-automation/scripts/open-verdict.ps1",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-11",
+  "columns": {
+    "Num": [1, 2, 3, 4, 2],
+    "NumBlank": [1, null, 3, 4, 1],
+    "Mixed": ["a", 2, "b", 4, "a"],
+    "StrBlank": ["a", null, "b", "c", "a"],
+    "Float": [1.5, 2, 3.25, 4, 2],
+    "Str": ["x", "y", "z", "x", "y"]
+  },
+  "sharedItemsAttributesExcelWrote": {
+    "Num": "containsSemiMixedTypes=\"0\" containsString=\"0\" containsNumber=\"1\" containsInteger=\"1\" minValue=\"1\" maxValue=\"4\"",
+    "NumBlank": "containsString=\"0\" containsBlank=\"1\" containsNumber=\"1\" containsInteger=\"1\" minValue=\"1\" maxValue=\"4\"",
+    "Mixed": "containsMixedTypes=\"1\" containsNumber=\"1\" containsInteger=\"1\" minValue=\"2\" maxValue=\"4\"",
+    "StrBlank": "containsBlank=\"1\"",
+    "Float": "containsSemiMixedTypes=\"0\" containsString=\"0\" containsNumber=\"1\" minValue=\"1.5\" maxValue=\"4\"",
+    "Str": ""
+  },
+  "sharedItemsNote": "The same attributes on an axis field, followed by count and the items, and on a field no axis uses, with neither.",
+  "openVerdicts": {
+    "beforeTheFix": {
+      "rows Name, columns Region": "clean",
+      "rows Name and Quarter, columns Region": "clean",
+      "rows Name, columns Region and Quarter": "clean",
+      "rows Year, columns Region": "repair-prompt",
+      "rows Name, columns Region and Year": "repair-prompt",
+      "rows Name and Quarter, columns Region and Year": "repair-prompt",
+      "note": "Year is the one numeric axis field, and its catalogue was written <sharedItems count=\"2\"><n v=\"2025\"/><n v=\"2026\"/></sharedItems>. Patching firstDataRow to Excel's 3 did not clear the prompt."
+    },
+    "afterTheFix": {
+      "rows Year, columns Region": "clean",
+      "rows Name, columns Region and Year": "clean",
+      "rows Name and Quarter, columns Region and Year": "clean",
+      "every typed column on the row axis": "clean",
+      "every typed column off the axes": "clean"
+    }
+  }
+}

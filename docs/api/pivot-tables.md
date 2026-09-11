@@ -82,15 +82,20 @@ interface ParsedPivotTable {
 <sub>interface</sub>
 
 One field of the pivot cache. An axis field (row or column) carries a `sharedItems` catalogue its
-records reference by index; any other field stores its values inline in the records and, when they
-are all numeric, describes them with a `numeric` summary.
+records reference by index; any other field stores its values inline in the records. Either way the
+cache describes which kinds of value the field holds, because Excel reads the catalogue against that
+description: a catalogue of numbers that does not say it holds numbers opens with the repair prompt.
 
 ```ts
 interface PivotCacheField {
   readonly name: string;
   readonly sharedItems: readonly PivotItem[] | null;
-  readonly numeric: PivotNumericSummary | null;
+  /** Whether any value is a string. */
+  readonly containsString: boolean;
+  /** Whether any value is missing. */
   readonly containsBlank: boolean;
+  /** The field's numbers, summarised, or `null` when it holds none. */
+  readonly numeric: PivotNumericSummary | null;
 }
 ```
 
@@ -141,7 +146,7 @@ type PivotMetric =
 
 <sub>interface</sub>
 
-The numeric summary Excel expects on a non-shared field whose every present value is a number.
+The range and integrality of the numbers a cache field holds, which Excel records beside them.
 
 ```ts
 interface PivotNumericSummary {

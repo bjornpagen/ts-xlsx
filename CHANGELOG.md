@@ -124,6 +124,14 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Fixed
 
+- **A pivot with a numeric field on an axis opened with Excel's repair prompt.** A cache field's
+  catalogue of numbers was written without saying it holds numbers, which by the schema's defaults
+  describes a field of strings. Every cache field now describes the strings, numbers and blanks it holds
+  with the attributes Excel writes for that mix, whether it carries a catalogue or stores its values
+  inline, which also corrects a numeric field with a blank and a field mixing strings and numbers.
+  `PivotCacheField` gains `containsString`, and its `numeric` summary is present whenever the field
+  holds a number.
+
 - **A Strict workbook could not be written back out.** `writeXlsx` threw `InternalError: two package
   parts claim the path "docProps/app.xml"` for any workbook read from an ISO/IEC 29500 Strict
   package, because Strict names the app-properties relationship `extendedProperties` and the reader
