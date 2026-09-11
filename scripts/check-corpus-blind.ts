@@ -11,6 +11,11 @@
 // is written in, and `node:` built-ins. Anything else is a violation, a bare package specifier
 // included: a case that imports `fflate` to unzip a package is doing the adapter's job.
 //
+// One step further in, the adapter holds the same line for its own modules. `runtime.ts` is the one
+// file that knows where the implementation lives, which is what lets `CORPUS_TARGET=dist` swap `src/`
+// for the emitted JS in one place. Any other adapter module naming `src/` by path is loaded from there
+// whatever the target says, or, as a type-only import, compiles against a tree the run is not testing.
+//
 //   node scripts/check-corpus-blind.ts
 
 import {readFileSync} from 'node:fs';
@@ -22,6 +27,9 @@ import {reportCrash, verdict} from './verdict.ts';
 const ROOT = toPosix(REPO_ROOT);
 const CASES = 'test/corpus/cases';
 const ALLOWED = new Set(['test/corpus/case.ts', 'test/corpus/untyped.ts']);
+const ADAPTERS = 'test/corpus/adapters';
+const RUNTIME = 'test/corpus/adapters/ts-xlsx/runtime.ts';
+const IMPLEMENTATION = /^(?:src|dist)\//;
 
 const repoRelative = (path: string): string => toPosix(path).slice(ROOT.length + 1);
 
@@ -42,11 +50,27 @@ function main(): void {
     }
   }
 
+  const adapters = sourceFiles(`${ROOT}/${ADAPTERS}`, '.ts');
+  for (const file of adapters) {
+    if (repoRelative(file) === RUNTIME) continue;
+    for (const specifier of specifiers(readFileSync(file, 'utf8'))) {
+      if (!specifier.startsWith('.')) continue;
+      const target = repoRelative(resolveSpecifier(file, specifier));
+      if (!IMPLEMENTATION.test(target)) continue;
+      problems.push(
+        `  ${repoRelative(file)}\n    imports ${target}\n    only ${RUNTIME} names the implementation;\n` +
+          '    import the binding or type through it',
+      );
+    }
+  }
+
   verdict({
     gate: 'corpus blindness',
     problems,
-    ok: `${files.length} cases import nothing but the case vocabulary`,
-    failure: 'import(s) break a corpus case’s blindness',
+    ok:
+      `${files.length} cases import nothing but the case vocabulary, and the adapter reaches ` +
+      `the implementation only through ${RUNTIME}`,
+    failure: 'import(s) break a corpus case’s blindness or the adapter’s one route to the library',
   });
 }
 

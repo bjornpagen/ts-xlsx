@@ -2,7 +2,6 @@
 // levels, freeze panes, print areas and page breaks, and the print settings that ride alongside
 // them: page margins, and the header/footer definition text.
 
-import type {RowInput} from '../../../../src/core/worksheet.ts';
 import {messageOf} from '../../thrown.ts';
 import type {Untyped} from '../../untyped.ts';
 import {type PartMap, partMapOf, partOf, patchedPackage, roundtrip} from './package-facts.ts';
@@ -15,6 +14,7 @@ import {
   readFixture,
   readWorkbookStream,
   readXlsx,
+  type RowInput,
   Workbook,
   type WorkbookInstance,
   writeXlsx,

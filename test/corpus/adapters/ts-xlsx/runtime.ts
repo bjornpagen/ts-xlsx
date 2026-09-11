@@ -71,6 +71,7 @@ export const {addVbaReference, removeVbaModule} =
 export type WorkbookInstance = InstanceType<typeof Workbook>;
 export type WorksheetInstance = ReturnType<WorkbookInstance['addWorksheet']>;
 export type CellInstance = ReturnType<WorksheetInstance['getCell']>;
+export type RowInput = Parameters<WorksheetInstance['addRow']>[0];
 
 // JSZip is an independent zip implementation used only to VERIFY the streaming writer's output (CRC
 // integrity), a hostile-input posture toward our own archive, never in the production src path.

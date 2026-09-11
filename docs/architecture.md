@@ -70,7 +70,10 @@ into src the way a co-located unit test may. Put a white-box test in `src/`; kee
 for the blind corpus and the external oracles. A "corpus" case that imports a src internal
 has quietly stopped being implementation-blind, and `corpus-blind:check`
 (`scripts/check-corpus-blind.ts`, in the `invariants` gate) refuses it: a case may import
-`test/corpus/case.ts`, `test/corpus/untyped.ts` and `node:` built-ins, and nothing else.
+`test/corpus/case.ts`, `test/corpus/untyped.ts` and `node:` built-ins, and nothing else. The same gate
+holds the adapter to one route into the library: only `test/corpus/adapters/ts-xlsx/runtime.ts` names
+`src/` by path, because it is where `CORPUS_TARGET=dist` swaps in the emitted JS, and every other
+adapter module imports its bindings and types through it.
 
 ## Spec and schema reference
 
