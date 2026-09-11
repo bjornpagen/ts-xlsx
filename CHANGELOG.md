@@ -111,6 +111,10 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   A file carrying such a table reads without it. `TABLE_NAME_PATTERN` still states only the character
   grammar.
 
+- **`addPivotTable` binds a field name to its header ignoring case.** `rows: ['name']` over a `Name`
+  header was refused as not a column header. Headers are already unique ignoring case, so a name in
+  any case binds exactly one; naming the same field in two cases is refused as naming it twice.
+
 ### Fixed
 
 - **A Strict workbook could not be written back out.** `writeXlsx` threw `InternalError: two package

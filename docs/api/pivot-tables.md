@@ -240,7 +240,8 @@ The value field's header name, used to label the aggregated data column ("Sum of
 <sub>interface</sub>
 
 How a pivot table is authored: a source sheet and the header names that drive each axis.
-`rows`/`columns`/`values` name columns by their header text in the source's first row.
+`rows`/`columns`/`values` name columns by their header text in the source's first row, ignoring
+case, as the headers themselves must be unique ignoring case.
 
 ```ts
 interface PivotTableOptions {

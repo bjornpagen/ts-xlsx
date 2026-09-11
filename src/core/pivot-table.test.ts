@@ -68,6 +68,15 @@ test('a source header row that repeats a name, in any case, is refused', () => {
   }
 });
 
+test('a field name binds its header in any case, and naming one field in two cases is a repeat', () => {
+  const folded = pivot({rows: ['name'], columns: ['REGION'], values: ['aMOUNT']});
+  assert.deepEqual([folded.rowFields, folded.columnFields, folded.valueField], [[0], [1], 2]);
+  assert.throws(
+    () => pivot({rows: ['Name', 'NAME']}),
+    refusal(/pivot row field "NAME" is named more than once/),
+  );
+});
+
 test('valid role sets construct and bind each field where it was named', () => {
   const plain = pivot({});
   assert.deepEqual(plain.rowFields, [0]);

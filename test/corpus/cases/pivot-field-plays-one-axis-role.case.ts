@@ -73,6 +73,36 @@ export default {
       },
     },
     {
+      // Header names are unique ignoring case, so a name in any case binds exactly one column. Matched
+      // exactly, `name` over a `Name` header was "not a column header" of a sheet that shows one.
+      name: 'a field is named by its header in any case',
+      expect(api: CorpusApi, assert: Assert) {
+        const report = api.pivotFieldWiring({
+          headers: HEADERS,
+          rows: ['name'],
+          columns: ['REGION'],
+          values: ['amount'],
+        });
+        assert.strictEqual(report.refusal, null, JSON.stringify(report));
+        assert.deepStrictEqual(report.rowFields, [0]);
+        assert.deepStrictEqual(report.columnFields, [1]);
+        assert.deepStrictEqual(report.dataFields, [2]);
+      },
+    },
+    {
+      name: 'one field named twice in two cases is still named twice',
+      expect(api: CorpusApi, assert: Assert) {
+        const report = api.pivotFieldWiring({
+          headers: HEADERS,
+          rows: ['Name', 'NAME'],
+          columns: ['Region'],
+          values: ['Amount'],
+        });
+        assert.ok(report.refusal, JSON.stringify(report));
+        assert.strictEqual(report.refusal.code, 'authoring');
+      },
+    },
+    {
       name: 'a value field that is also a row field is written on its axis and flagged as data',
       expect(api: CorpusApi, assert: Assert) {
         const report = api.pivotFieldWiring({

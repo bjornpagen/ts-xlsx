@@ -121,7 +121,8 @@ export interface ParsedPivotTable {
 }
 
 /** How a pivot table is authored: a source sheet and the header names that drive each axis.
- * `rows`/`columns`/`values` name columns by their header text in the source's first row. */
+ * `rows`/`columns`/`values` name columns by their header text in the source's first row, ignoring
+ * case, as the headers themselves must be unique ignoring case. */
 export interface PivotTableOptions {
   readonly source: Worksheet;
   readonly rows: readonly string[];
@@ -355,9 +356,14 @@ interface FieldRoles {
 // under both `<rowFields>` and `<colFields>`, or twice under one, contradicts its own declaration and
 // Excel repairs the package. The value field is the exception that is not one: aggregating a field that
 // is also an axis ("Count of Name" by Name) is an ordinary pivot, and the writer flags it as both.
+//
+// A name binds its header ignoring case, which is the same comparison `discoverFields` holds the
+// headers unique under, so it can never bind two. Matched exactly, `name` over a `Name` header was
+// refused as not a header of a sheet that visibly has one.
 function resolveRoles(options: PivotTableOptions, fields: readonly SourceField[]): FieldRoles {
   const resolve = (role: string, name: string): number => {
-    const index = fields.findIndex((field) => field.name === name);
+    const key = name.toLowerCase();
+    const index = fields.findIndex((field) => field.name.toLowerCase() === key);
     if (index < 0) {
       throw new AuthoringError(
         `pivot ${role} field ${quoted(name)} is not a column header in the source sheet`,
