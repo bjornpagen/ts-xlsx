@@ -179,7 +179,11 @@ export function dxfXml(style: DifferentialStyle): string {
     if (font !== '') parts.push(`<font>${font}</font>`);
   }
   // A dxf numFmt still needs an id; the code is what matters (dxf formats are not shared by id like
-  // cell formats), so a fixed custom id carries it without a <numFmts> entry.
+  // cell formats), so a fixed custom id carries it without a <numFmts> entry. Measured rather than
+  // assumed: with a cell format at 164 and three dxfs all at 164, Excel 16.0 (build 20326) opens the
+  // package clean and renders each rule by its own code (`0.0%`, `0.000`, a `"EUR"` suffix). Its own
+  // save renumbers them into the custom id space, reusing a cell format's id for the same code, but
+  // nothing it displays depends on that.
   if (typeof style.numFmt === 'string' && style.numFmt !== '') {
     parts.push(
       `<numFmt numFmtId="${CUSTOM_NUMFMT_BASE}" formatCode="${escapeFormatCode(style.numFmt)}"/>`,
