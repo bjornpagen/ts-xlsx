@@ -159,7 +159,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 216, when `core/address.ts` began stating which names Excel reads as a
   // reference, the rule that quotes a sheet named `R1C1` and refuses a table named `T1`. Every entry
   // carrying the model loads that module; seven tenths over.
-  './core': 217,
+  //
+  // Raised again, from 217, when a splice began flagging a data table's deleted input cell rather than
+  // leaving the reference to be read from whatever moved into its place, a tenth over.
+  './core': 218,
   // Raised from 554 by the same future-function registry as `.`, which put this entry nine tenths over.
   //
   // Raised again, from 555, by the same conditional-format boundaries as `.`, eight tenths over.
@@ -176,7 +179,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 561, by the same BIFF12 sheet protection reader as `/xlsb`: `readXlsx` hands an
   // `.xlsb` package to that codec, six tenths over.
-  './xlsx': 562,
+  //
+  // Raised again, from 562, by the same data-table input flag as `/core`, read and written here as
+  // `del1`/`del2`, three tenths over.
+  './xlsx': 563,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which

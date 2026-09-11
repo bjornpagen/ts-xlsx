@@ -3,10 +3,35 @@
 import {messageOf} from '../../thrown.ts';
 import type {Untyped} from '../../untyped.ts';
 import {partOf, patchedPackage, roundtrip} from './package-facts.ts';
-import {readXlsx, Workbook, writeXlsx} from './runtime.ts';
+import {readFixture, readXlsx, Workbook, type WorkbookInstance, writeXlsx} from './runtime.ts';
 import {buildFrom, isoOrNull} from './spec-model.ts';
 
 export const formulas = {
+  // Two readings of a data table whose input cell was deleted → { excel, spliced }. `excel` is the cell
+  // Excel itself saved after deleting the input row (`<dir>/input-row-deleted.xlsx`, B3), `spliced` the
+  // same table read from `<dir>/before.xlsx` (B4) with row 1 spliced out here and the package written.
+  // Each is { ref, r1, r1Deleted, written }, where `written` is the attributes of the `<f>` the cell is
+  // written with, as a map.
+  dataTableInputDeletionReport(dir: string) {
+    const factsOf = (workbook: WorkbookInstance, address: string) => {
+      const value: Untyped = workbook.worksheets[0]?.getCell(address).value;
+      const xml = partOf(writeXlsx(workbook), 'xl/worksheets/sheet1.xml');
+      const tag = new RegExp(`<c r="${address}"[^>]*><f ([^>]*?)/>`).exec(xml)?.[1] ?? '';
+      return {
+        ref: value?.ref ?? null,
+        r1: value?.r1 ?? null,
+        r1Deleted: value?.r1Deleted ?? null,
+        written: Object.fromEntries([...tag.matchAll(/(\w+)="([^"]*)"/g)].map((m) => [m[1], m[2]])),
+      };
+    };
+    const spliced = readFixture(`${dir}/before.xlsx`);
+    spliced.worksheets[0]?.spliceRows(1, 1);
+    return {
+      excel: factsOf(readFixture(`${dir}/input-row-deleted.xlsx`), 'B3'),
+      spliced: factsOf(spliced, 'B3'),
+    };
+  },
+
   // Inject a `<f t="dataTable">` into a written sheet, read it back, and re-write → { reloadOk,
   // readShareType, readRef, readResult, outHasDataTable }. The reader must surface the data-table
   // kind/range/result, and a read-modify-write must re-emit t="dataTable" rather than dropping it.

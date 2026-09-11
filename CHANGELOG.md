@@ -130,6 +130,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Fixed
 
+- **A data table whose input cell a row or column delete took kept reading from the old address.**
+  The splice left `r1`/`r2` as they were with nothing to say the cell was gone, so the table was written
+  reading its input from whatever now sat there. `DataTableFormulaValue` gains `r1Deleted` and
+  `r2Deleted`, read from and written as `del1`/`del2`, and a delete that takes an input cell keeps the
+  reference and sets the flag, which is what Excel does; the table's own range still moves.
+
 - **A formula whose cached result was an empty boolean read as `FALSE`.** `<c t="b"><f>…</f><v></v></c>`
   read with `result: false`, which a save wrote back as a real FALSE, and an empty result under
   `t="e"` read as `""`. Excel shows an empty cached result under either type, and under a number, as it

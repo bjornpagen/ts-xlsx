@@ -78,6 +78,54 @@ test("a data table's filled range and input cells move with inserts above and to
   });
 });
 
+// Excel 16.0 (build 20326), deleting a one-variable table's input cell by its row, by its column, and by
+// itself with the cells below shifting up, kept `r1` as it was written and flagged it `del1="1"` every
+// time, and the table then shows `#REF!`. See
+// `test/corpus/fixtures/excel-oracle/data-table-input-deleted.json`.
+test('a data table whose input cell a delete takes keeps the reference and flags it deleted', () => {
+  const table = (): Workbook => {
+    const workbook = new Workbook();
+    workbook.addWorksheet('S').getCell('B4').value = {
+      shareType: 'dataTable',
+      ref: 'B4:B6',
+      r1: 'D1',
+      r2: 'E1',
+      dataTable2D: true,
+      result: 2,
+    };
+    return workbook;
+  };
+
+  const byRow = table().requireWorksheet('S');
+  byRow.spliceRows(1, 1);
+  assert.deepEqual(byRow.getCell('B3').value, {
+    shareType: 'dataTable',
+    ref: 'B3:B5',
+    r1: 'D1',
+    r2: 'E1',
+    r1Deleted: true,
+    r2Deleted: true,
+    dataTable2D: true,
+    result: 2,
+  });
+
+  const byColumn = table().requireWorksheet('S');
+  byColumn.spliceColumns(4, 1);
+  assert.deepEqual(
+    byColumn.getCell('B4').value,
+    {
+      shareType: 'dataTable',
+      ref: 'B4:B6',
+      r1: 'D1',
+      r2: 'D1',
+      r1Deleted: true,
+      dataTable2D: true,
+      result: 2,
+    },
+    'the input the delete missed still moves, and only the one it took is flagged',
+  );
+});
+
 // A page break falls between line `id` and the line after it, and Excel moves it with that later line:
 // a break above row 10 moved above row 11 when a row was inserted at row 1, and went when row 11 was
 // deleted. Breaks sat outside the splice, so a printout split in the wrong place after any insert.

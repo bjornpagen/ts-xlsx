@@ -436,6 +436,8 @@ function cellFormulaXml(
       `ref="${escapeAttr(value.ref)}"` +
       boolAttr('dt2D', value.dataTable2D) +
       boolAttr('dtr', value.dataTableRow) +
+      (value.r1Deleted === true ? ' del1="1"' : '') +
+      (value.r2Deleted === true ? ' del2="1"' : '') +
       textAttr('r1', value.r1) +
       textAttr('r2', value.r2);
     return formulaBodyXml(ref, s, `<f t="dataTable" ${attrs}/>`, value.result, epoch);

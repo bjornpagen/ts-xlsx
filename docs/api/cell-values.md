@@ -93,6 +93,14 @@ interface DataTableFormulaValue {
   readonly r1?: string;
   /** The second (column) input-cell reference, present for a 2-D table. */
   readonly r2?: string;
+  /**
+   * Whether the cell {@link r1} named has been deleted. Excel keeps the reference as it was written and
+   * sets this flag, and the table then shows `#REF!`; a row or column delete that takes the input cell
+   * does the same here.
+   */
+  readonly r1Deleted?: boolean;
+  /** Whether the cell {@link r2} named has been deleted, as {@link r1Deleted} is for {@link r1}. */
+  readonly r2Deleted?: boolean;
   readonly result?: FormulaResult;
 }
 ```

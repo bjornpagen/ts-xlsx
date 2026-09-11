@@ -43,6 +43,8 @@ interface DataTableDeclaration {
   dtr: string | undefined;
   r1: string | undefined;
   r2: string | undefined;
+  del1: string | undefined;
+  del2: string | undefined;
 }
 
 /**
@@ -199,6 +201,8 @@ export class CellAccumulator {
         dtr: attrs.dtr,
         r1: attrs.r1,
         r2: attrs.r2,
+        del1: attrs.del1,
+        del2: attrs.del2,
       };
     }
   }
@@ -313,6 +317,8 @@ export class CellAccumulator {
         ...(boolStrict(this.#dataTable.dtr) ? {dataTableRow: true} : {}),
         ...(this.#dataTable.r1 !== undefined ? {r1: this.#dataTable.r1} : {}),
         ...(this.#dataTable.r2 !== undefined ? {r2: this.#dataTable.r2} : {}),
+        ...(boolStrict(this.#dataTable.del1) ? {r1Deleted: true} : {}),
+        ...(boolStrict(this.#dataTable.del2) ? {r2Deleted: true} : {}),
         ...this.#cachedResult(style),
       };
     }

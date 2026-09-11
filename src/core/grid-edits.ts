@@ -353,10 +353,17 @@ function reanchoredValue(value: CellValue, splice: AxisSplice): CellValue {
   if (isDataTableFormulaValue(value)) {
     // The filled range holds the table's own cell, so a cell that survived keeps a range that did.
     const ref = shiftedRange(value.ref, splice) ?? value.ref;
-    const r1 = value.r1 === undefined ? undefined : shiftedInputCell(value.r1, splice);
-    const r2 = value.r2 === undefined ? undefined : shiftedInputCell(value.r2, splice);
-    if (ref === value.ref && r1 === value.r1 && r2 === value.r2) return value;
-    return {...value, ref, ...(r1 === undefined ? {} : {r1}), ...(r2 === undefined ? {} : {r2})};
+    const r1 = inputAfter(value.r1, value.r1Deleted, splice);
+    const r2 = inputAfter(value.r2, value.r2Deleted, splice);
+    if (ref === value.ref && r1.same && r2.same) return value;
+    return {
+      ...value,
+      ref,
+      ...(r1.ref === undefined ? {} : {r1: r1.ref}),
+      ...(r2.ref === undefined ? {} : {r2: r2.ref}),
+      ...(r1.deleted ? {r1Deleted: true} : {}),
+      ...(r2.deleted ? {r2Deleted: true} : {}),
+    };
   }
   return value;
 }
@@ -372,16 +379,21 @@ function shiftedRange(ref: string, splice: AxisSplice): string | undefined {
   return sameRect(moved, rect) ? ref : encodeRect(moved);
 }
 
-// A data table's input cell moved with its line. One the delete took is left as it was: whether Excel
-// re-points the table or turns the input into `#REF!` was not checked, and a guess would rewrite the
-// file's formula on a hunch.
-function shiftedInputCell(ref: string, splice: AxisSplice): string {
-  const cell = tryDecodeCellRef(ref);
-  const moved = cell === undefined ? undefined : shiftPoint(cell, splice);
-  if (cell === undefined || moved === undefined) return ref;
-  return moved.row === cell.row && moved.col === cell.col
-    ? ref
-    : encodeAddress(moved.col, moved.row);
+// A data table's input cell after a splice. One that survived moves with its line. One the delete took
+// keeps the reference as it was written and is flagged deleted, which is what Excel 16.0 does whichever
+// way the cell goes (its row, its column, or itself with the cells below shifting up), and the table
+// then shows `#REF!`. A reference already flagged names no cell any more, so nothing moves it.
+function inputAfter(
+  ref: string | undefined,
+  deleted: boolean | undefined,
+  splice: AxisSplice,
+): {readonly ref: string | undefined; readonly deleted: boolean; readonly same: boolean} {
+  const cell = ref === undefined || deleted === true ? undefined : tryDecodeCellRef(ref);
+  if (cell === undefined) return {ref, deleted: deleted === true, same: true};
+  const moved = shiftPoint(cell, splice);
+  if (moved === undefined) return {ref, deleted: true, same: false};
+  const same = moved.row === cell.row && moved.col === cell.col;
+  return {ref: same ? ref : encodeAddress(moved.col, moved.row), deleted: false, same};
 }
 
 function sameRect(a: GridRect, b: GridRect): boolean {

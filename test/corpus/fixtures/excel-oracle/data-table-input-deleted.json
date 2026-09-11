@@ -1,0 +1,22 @@
+{
+  "invariant": "data-table-input-deleted",
+  "description": "What Excel does to a data table when a splice deletes its input cell. A one-variable column table at A3:B6 over the input cell D1 was built over COM, and the input cell was then deleted three ways in three copies: its row, its column, and the cell alone with the cells below shifting up. Each copy's B4 formula was read back and each was saved.",
+  "probe": "test/corpus/fixtures/data-table-input-cell-deleted/author.ps1 for the committed pair; a one-off COM script covering all three deletions",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-11",
+  "readBack": {
+    "before": {"formula": "=TABLE(,D1)", "text": "2"},
+    "row 1 deleted": {"formula": "=TABLE(,#REF!)", "text": "#REF!"},
+    "column D deleted": {"formula": "=TABLE(,#REF!)", "text": "#REF!"},
+    "D1 deleted, cells shifted up": {"formula": "=TABLE(,#REF!)", "text": "#REF!"}
+  },
+  "saved": {
+    "before": "<c r=\"B4\"><f t=\"dataTable\" ref=\"B4:B6\" dt2D=\"0\" dtr=\"0\" r1=\"D1\"/><v>2</v></c>",
+    "row 1 deleted": "<c r=\"B3\" t=\"e\"><f t=\"dataTable\" ref=\"B3:B5\" dt2D=\"0\" dtr=\"0\" del1=\"1\" r1=\"D1\"/><v>#REF!</v></c>",
+    "column D deleted": "<c r=\"B4\" t=\"e\"><f t=\"dataTable\" ref=\"B4:B6\" dt2D=\"0\" dtr=\"0\" del1=\"1\" r1=\"D1\"/><v>#REF!</v></c>"
+  },
+  "verdict": "Excel keeps the input reference exactly as it was written and flags it deleted with del1 (del2 for the second input of a two-variable table), whichever way the cell goes; the table's own range moves with the grid, and its cells show #REF!."
+}
