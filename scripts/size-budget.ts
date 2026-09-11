@@ -47,7 +47,10 @@ const DIST = join(ROOT, 'dist');
 //
 // Raised again, from 587, when the CSV writer began keeping row positions and refusing delimiters it
 // cannot round-trip, three tenths over.
-const TOTAL_BUDGET_BYTES = 588 * 1024;
+//
+// Raised again, from 588, when the MS-OVBA compressor began padding a raw chunk to the 4096 bytes the
+// format fixes, a tenth over.
+const TOTAL_BUDGET_BYTES = 589 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -130,7 +133,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 212, when `core/pivot-table.ts` began refusing a field placed on two axes or twice
   // on one, and a source header row that repeats a name, nine tenths over.
-  './core': 213,
+  //
+  // Raised again, from 213, when the MS-OVBA compressor began storing a chunk raw only at the 4096 bytes
+  // the format fixes, padding a short one. `Workbook` reaches the VBA editors, so this entry pays for it,
+  // two tenths over.
+  './core': 214,
   // Raised from 554 by the same future-function registry as `.`, which put this entry nine tenths over.
   //
   // Raised again, from 555, by the same conditional-format boundaries as `.`, eight tenths over.
@@ -164,7 +171,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 301, by the same canonical merge storage as `/core`, eight tenths over.
   //
   // Raised again, from 302, by the same pivot role refusals as `/core`, seven tenths over.
-  './xlsb': 303,
+  //
+  // Raised again, from 303, by the same MS-OVBA raw-chunk padding as `/core`, two tenths over.
+  './xlsb': 304,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never

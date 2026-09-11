@@ -19,6 +19,7 @@ import {VbaParseError} from './errors.ts';
 // 2.4.1.3.6). The chunk header's bits 12-14 carry a fixed 0b011 signature, bit 15 the compressed flag.
 const MAX_CHUNK_DECOMPRESSED = 4096;
 const CHUNK_SIGNATURE = 0b011 << 12;
+const CHUNK_SIGNATURE_MASK = 0b111 << 12;
 const CHUNK_COMPRESSED_FLAG = 0x8000;
 
 // The encoder's match search: how far down a prefix's chain it will walk, and how wide the table of
@@ -61,8 +62,8 @@ export function decompressContainer(
 
     // Bits 0-11: (chunk data size - 1). Bit 15: compressed flag. Bits 12-14: the fixed 0b011 signature.
     const chunkDataSize = (header & 0x0fff) + 1;
-    const compressed = (header & 0x8000) !== 0;
-    if (((header >> 12) & 0x7) !== 0b011) {
+    const compressed = (header & CHUNK_COMPRESSED_FLAG) !== 0;
+    if ((header & CHUNK_SIGNATURE_MASK) !== CHUNK_SIGNATURE) {
       throw new VbaParseError(`chunk header has a bad 0b011 signature (0x${header.toString(16)})`);
     }
     const chunkEnd = pos + chunkDataSize;
@@ -71,7 +72,9 @@ export function decompressContainer(
     }
 
     if (!compressed) {
-      // A raw chunk carries its bytes verbatim (Excel emits one only when compression would expand).
+      // A raw chunk carries its bytes verbatim. [MS-OVBA] fixes its length at 4096, but the length is
+      // read from the header all the same: the bound that matters here is the stream's, checked above,
+      // and a shorter raw chunk is what earlier versions of this encoder wrote.
       for (let i = pos; i < chunkEnd; i++) out.push(buf[i] as number);
       pos = chunkEnd;
       continue;
@@ -186,8 +189,12 @@ class ByteSink {
 /**
  * Compress `data` into an MS-OVBA CompressedContainer: the inverse of {@link decompressContainer}.
  * Every 4096-decompressed-byte window is emitted as a compressed chunk of literal and copy tokens, or
- * stored verbatim when compression would not shrink it (so the encoded chunk never exceeds the 12-bit
- * size field). The result re-expands to `data` byte-for-byte.
+ * stored raw when those tokens would not fit the 4096 bytes a chunk's data may hold.
+ *
+ * The result re-expands to `data` byte-for-byte, with one exception the format itself prescribes: a
+ * final window that is shorter than 4096 bytes and does not compress (only possible past about 3640
+ * bytes, where a literal's flag-bit overhead first overflows the chunk) is stored raw and padded with
+ * `0x00` to 4096, so it re-expands with those zeros after it ([MS-OVBA] 2.4.1.3.10).
  */
 export function compressContainer(data: Uint8Array): Uint8Array {
   const out = new ByteSink();
@@ -195,10 +202,12 @@ export function compressContainer(data: Uint8Array): Uint8Array {
   for (let start = 0; start < data.length; start += MAX_CHUNK_DECOMPRESSED) {
     const chunk = data.subarray(start, Math.min(start + MAX_CHUNK_DECOMPRESSED, data.length));
     const tokens = compressChunk(chunk);
-    // Prefer the token stream only when it is strictly smaller; otherwise store the chunk raw. Both
-    // encode their exact length in the header, so the decompressor reconstructs the window either way.
-    const compressed = tokens.length < chunk.length;
-    const body = compressed ? tokens : chunk;
+    // [MS-OVBA] 2.4.1.3.7 goes raw only when the token stream overflows the chunk, and a raw chunk is
+    // always 4096 bytes: its size field MUST be 4095 (2.4.1.1.5), and a conforming decompressor reads
+    // exactly 4096 bytes from one (2.4.1.3.3). Storing a short chunk raw whenever its tokens were no
+    // smaller, as this did, wrote 1-byte and 4095-byte raw chunks a conforming reader overruns.
+    const compressed = tokens.length <= MAX_CHUNK_DECOMPRESSED;
+    const body = compressed ? tokens : padToChunk(chunk);
     const header =
       (compressed ? CHUNK_COMPRESSED_FLAG : 0) | CHUNK_SIGNATURE | ((body.length - 1) & 0x0fff);
     out.push(header & 0xff);
@@ -206,6 +215,14 @@ export function compressContainer(data: Uint8Array): Uint8Array {
     out.pushAll(body);
   }
   return out.bytes();
+}
+
+// A raw chunk's data at the one length the format allows it, zero-filled past the window's own bytes.
+function padToChunk(chunk: Uint8Array): Uint8Array {
+  if (chunk.length === MAX_CHUNK_DECOMPRESSED) return chunk;
+  const padded = new Uint8Array(MAX_CHUNK_DECOMPRESSED);
+  padded.set(chunk);
+  return padded;
 }
 
 // Encode one decompressed chunk (≤ 4096 bytes) as a sequence of MS-OVBA token groups: a flag byte whose

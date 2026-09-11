@@ -89,6 +89,73 @@ test('compressContainer round-trips arbitrary data across the chunk boundary', (
   }
 });
 
+/** Each chunk of a container as `{compressed, dataLength}`, read straight off the chunk headers. */
+function chunkShapes(container: Uint8Array): {compressed: boolean; dataLength: number}[] {
+  const shapes = [];
+  for (let pos = 1; pos + 2 <= container.length;) {
+    const header = (container[pos] as number) | ((container[pos + 1] as number) << 8);
+    const dataLength = (header & 0x0fff) + 1;
+    shapes.push({compressed: (header & 0x8000) !== 0, dataLength});
+    pos += 2 + dataLength;
+  }
+  return shapes;
+}
+
+/** Bytes with no three-byte repeat worth a copy token: the input that makes a chunk go raw. */
+function incompressible(length: number): Uint8Array {
+  let state = 0x2545_f491;
+  return new Uint8Array(length).map(() => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return state & 0xff;
+  });
+}
+
+test('every chunk compressContainer emits is compressed, or raw at exactly 4096 bytes', () => {
+  // [MS-OVBA] 2.4.1.1.5 fixes a raw chunk's size field at 4095, and 2.4.1.3.3 reads 4096 bytes from one.
+  // The encoder used to store any chunk raw whose tokens were no smaller, so one random byte went out
+  // as a 1-byte raw chunk and 4097 random bytes as `[raw 4096, raw 1]`.
+  const lengths = [0, 1, 2, 3, 6, 4095, 4096, 4097, 8193];
+  const inputs = [
+    ...lengths.map((n) => incompressible(n)),
+    ...lengths.map((n) => new Uint8Array(n).map((_, i) => (i * 131 + 7) & 0xff)),
+    ...lengths.map((n) => new Uint8Array(n)),
+  ];
+  for (const data of inputs) {
+    for (const [index, shape] of chunkShapes(compressContainer(data)).entries()) {
+      assert.ok(
+        shape.compressed || shape.dataLength === 4096,
+        `n=${data.length}, chunk ${index}: raw with ${shape.dataLength} bytes`,
+      );
+      assert.ok(shape.dataLength <= 4096, `n=${data.length}, chunk ${index}: over 4096 bytes`);
+    }
+  }
+});
+
+test('a short final chunk that fits as tokens is compressed, even when the tokens are larger', () => {
+  // Six random bytes cost seven as tokens (a flag byte and six literals). Raw is not an option for
+  // them: a raw chunk is 4096 bytes, and padding would add bytes the input never had.
+  const data = incompressible(6);
+  const packed = compressContainer(data);
+  assert.deepEqual(chunkShapes(packed), [{compressed: true, dataLength: 7}]);
+  assert.deepEqual(decompressContainer(packed), data);
+});
+
+test('a short final chunk too incompressible for tokens is raw and zero-padded, as MS-OVBA prescribes', () => {
+  // 4000 bytes with no matches take 4500 bytes of tokens, past the 4096 a chunk may hold. [MS-OVBA]
+  // 2.4.1.3.10 stores such a chunk raw and pads it with 0x00, and says the padding re-expands with it.
+  const data = incompressible(4096 + 4000);
+  const packed = compressContainer(data);
+  assert.deepEqual(chunkShapes(packed), [
+    {compressed: false, dataLength: 4096},
+    {compressed: false, dataLength: 4096},
+  ]);
+  const expanded = decompressContainer(packed);
+  assert.deepEqual(expanded.subarray(0, data.length), data);
+  assert.deepEqual(expanded.subarray(data.length), new Uint8Array(96));
+});
+
 test('compressContainer emits copy tokens, shrinking repetitive data via run-length overlap', () => {
   const runs = new Uint8Array(4096).fill(0x41); // one byte repeated → a single overlapping back-reference
   const packed = compressContainer(runs);

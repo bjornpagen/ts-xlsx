@@ -98,6 +98,13 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Fixed
 
+- **The VBA compressor wrote raw chunks shorter than [MS-OVBA] allows.** When a chunk's tokens were
+  no smaller than its bytes, it was stored raw at its own length, so a short incompressible tail of a
+  recompressed `dir` stream went out as a raw chunk of 1 to 4,095 bytes. [MS-OVBA] fixes a raw chunk
+  at 4,096 bytes, and a reader that follows it reads past the end of a shorter one. A chunk is now
+  stored raw only when its tokens would not fit in 4,096 bytes, and a short one is zero-padded to that
+  length as the spec prescribes.
+
 - **An absolute relationship target with `..` or a doubled slash named no part.** A target such as
   `/xl/../xl/worksheets/sheet1.xml` or `//xl/styles.xml` had only its leading slash removed, so the
   sheet, string pool or stylesheet it names read as missing. Absolute targets are now normalised the
