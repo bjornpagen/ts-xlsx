@@ -184,8 +184,8 @@ export function worksheetXml(inputs: WorksheetXmlInputs): string {
     mergeCellsXml(sheet.merges) +
     // CT_Worksheet order: <conditionalFormatting> blocks follow <mergeCells>, then <dataValidations>,
     // then <hyperlinks>, all of which precede the print settings.
-    conditionalFormattingsXml(sheet.conditionalFormattings, styles, extLinks) +
-    dataValidationsXml(sheet.dataValidations) +
+    conditionalFormattingsXml(sheet.conditionalFormattings, styles, extLinks, formulaNames) +
+    dataValidationsXml(sheet.dataValidations, formulaNames) +
     hyperlinksXml(hyperlinks) +
     // CT_Worksheet order: <printOptions> precedes <pageMargins>, which precedes <pageSetup>.
     printOptionsXml(sheet.printOptions) +
@@ -208,7 +208,7 @@ export function worksheetXml(inputs: WorksheetXmlInputs): string {
     // x14 conditional-formatting extensions (data-bar gradient/negative-fill/axis) and the extended
     // (x14) data validations ride inside it as sibling `<ext>` blocks, so they are gathered here into
     // a single `<extLst>` rather than each emitting its own.
-    worksheetExtLstXml(sheet, references.slicerRelIds, extLinks) +
+    worksheetExtLstXml(sheet, references.slicerRelIds, extLinks, formulaNames) +
     '</worksheet>'
   );
 }
@@ -219,10 +219,11 @@ function worksheetExtLstXml(
   sheet: Worksheet,
   slicerRelIds: readonly string[],
   extLinks: DataBarExtLinks,
+  formulaNames: ReadonlySet<string>,
 ): string {
   const exts = [
-    conditionalFormattingsExtXml(sheet.conditionalFormattings, extLinks),
-    dataValidationsExtXml(sheet.dataValidations),
+    conditionalFormattingsExtXml(sheet.conditionalFormattings, extLinks, formulaNames),
+    dataValidationsExtXml(sheet.dataValidations, formulaNames),
     slicerListExtXml(slicerRelIds),
   ].filter((ext) => ext !== '');
   return exts.length === 0 ? '' : `<extLst>${exts.join('')}</extLst>`;

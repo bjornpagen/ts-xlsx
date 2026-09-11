@@ -264,9 +264,9 @@ function readSheet(sheet: Worksheet, path: string | undefined, context: SheetRea
   // they share one parse of it rather than scanning it once each. Only the body commits as it goes;
   // the other five gather, and are applied below in the order they were always applied.
   const hyperlinks = sheetHyperlinkPass();
-  const validations = dataValidationPass();
-  const extendedValidations = extendedDataValidationPass();
-  const formattings = conditionalFormattingPass();
+  const validations = dataValidationPass(definedNames);
+  const extendedValidations = extendedDataValidationPass(definedNames);
+  const formattings = conditionalFormattingPass(definedNames);
   const references = worksheetReferencePass();
   if (sheetXml !== undefined) {
     parseXmlPasses(sheetXml, [
@@ -300,7 +300,7 @@ function readSheet(sheet: Worksheet, path: string | undefined, context: SheetRea
     readSheetPreservedReferences(context, sheetRels, references.result(), sheet);
   }
 
-  readSheetTables(context, sheetRels, sheet);
+  readSheetTables(context, sheetRels, sheet, definedNames);
   readSheetPivotTables(context, sheetRels, sheet);
   const printerSettings = readSheetPrinterSettings(sheetRels);
   if (printerSettings !== undefined) sheet.pageSetup.printerSettings = printerSettings;

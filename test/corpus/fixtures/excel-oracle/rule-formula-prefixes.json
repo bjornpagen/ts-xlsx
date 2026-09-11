@@ -1,0 +1,30 @@
+{
+  "invariant": "rule-formula-prefixes",
+  "description": "Whether Excel reads a conditional format, data validation or table column formula without its function prefixes. A workbook authored through this library carries an expression format over A1:A3 calling XLOOKUP (true for A1 only, bold), a colour scale over E1:E3 anchored at MINIFS and MAXIFS (red to blue), custom validations calling XLOOKUP on D1 and, reaching S2 through the x14 extension, on D3 (both hold 2, which XLOOKUP finds), and a table T whose column b is calculated from XLOOKUP and LET. The control is the same package with _xlfn. and _xlpm. removed from the rules, the validations and the table part, and nowhere else. Each was opened over COM, recalculated, and a row added to the table.",
+  "probe": "a one-off COM script: Workbooks.Open, Application.CalculateFull, Range.DisplayFormat, Validation.Value, ListRows.Add then the new cell's Formula2",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-12",
+  "openClass": "headless COM (DisplayAlerts off), opened for editing and closed unsaved",
+  "writtenByThisLibrary": {
+    "A1 bold": true,
+    "A2 bold": false,
+    "E1 fill": 255,
+    "E3 fill": 16711680,
+    "D1 Validation.Value": true,
+    "D3 Validation.Value": true,
+    "new table row b": "=XLOOKUP([@a],$A$1:$A$3,$B$1:$B$3)+LET(x,1,x)"
+  },
+  "controlWithoutThePrefixes": {
+    "A1 bold": false,
+    "A2 bold": false,
+    "E1 fill": 16777215,
+    "E3 fill": 16777215,
+    "D1 Validation.Value": false,
+    "D3 Validation.Value": false,
+    "new table row b": "=@XLOOKUP([@a],$A$1:$A$3,$B$1:$B$3)+@LET(x,1,x)"
+  },
+  "note": "Range.Formula1 reports the same text for both packages (=XLOOKUP(A1,$B$1:$B$3,$B$1:$B$3)=1), so the formula text Excel shows cannot tell the two apart; only evaluating the rule can."
+}

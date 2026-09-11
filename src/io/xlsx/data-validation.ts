@@ -22,7 +22,7 @@ import {
   isDataValidationOperator,
   isDataValidationType,
 } from '../../core/data-validation.ts';
-import {stripFormulaEquals} from '../../core/formula.ts';
+import {mangleFormula, stripFormulaEquals, unmangleFunctions} from '../../core/formula.ts';
 import {decodeSqrefRects} from '../../core/merge.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
 import {coerceNumericLiteral, enumToken} from '../../xml/xml-attrs.ts';
@@ -46,21 +46,34 @@ const TYPED = new Set<string>(['whole', 'decimal', 'date', 'time', 'textLength']
 
 /** The standard `<dataValidations>` element for the rules stored in the legacy form, or '' when the
  * sheet has none of them, so a sheet with only extended (or no) validations stays byte-clean here.
- * The extended rules are emitted separately by {@link dataValidationsExtXml}. */
-export function dataValidationsXml(entries: readonly DataValidationEntry[]): string {
+ * The extended rules are emitted separately by {@link dataValidationsExtXml}.
+ *
+ * An operand is stored with the function prefixes a cell formula takes, as Excel stores it;
+ * `formulaNames` is `formulaNamesInScope` for the sheet. */
+export function dataValidationsXml(
+  entries: readonly DataValidationEntry[],
+  formulaNames: ReadonlySet<string>,
+): string {
   const standard = entries.filter((entry) => !entry.extended);
   if (standard.length === 0) return '';
-  const items = standard.map(({sqref, rule}) => dataValidationXml(sqref, rule)).join('');
+  const items = standard
+    .map(({sqref, rule}) => dataValidationXml(sqref, rule, formulaNames))
+    .join('');
   return `<dataValidations count="${standard.length}">${items}</dataValidations>`;
 }
 
 /** The `<ext>` carrying the extended (`<x14:dataValidation>`) rules, or '' when the sheet declares
  * none. Emitted bare (no `<extLst>` wrapper) so the worksheet serialiser can gather it into a single
  * `<extLst>` beside the conditional-formatting extension: a worksheet may carry at most one. */
-export function dataValidationsExtXml(entries: readonly DataValidationEntry[]): string {
+export function dataValidationsExtXml(
+  entries: readonly DataValidationEntry[],
+  formulaNames: ReadonlySet<string>,
+): string {
   const extended = entries.filter((entry) => entry.extended);
   if (extended.length === 0) return '';
-  const items = extended.map(({sqref, rule}) => extendedDataValidationXml(sqref, rule)).join('');
+  const items = extended
+    .map(({sqref, rule}) => extendedDataValidationXml(sqref, rule, formulaNames))
+    .join('');
   return x14Ext(
     DATA_VALIDATION_EXT_URI,
     `<x14:dataValidations count="${extended.length}" xmlns:xm="${XM_NS}">${items}</x14:dataValidations>`,
@@ -100,36 +113,53 @@ function ruleAttrs(rule: DataValidation): string {
 // `stripFormulaEquals` in both forms, as a conditional format's operand is: a number the format cannot
 // spell is refused where it becomes bytes. It used to be dropped, which quietly turned a `between`
 // into a rule with one bound.
-function dataValidationXml(sqref: string, rule: DataValidation): string {
+function dataValidationXml(
+  sqref: string,
+  rule: DataValidation,
+  formulaNames: ReadonlySet<string>,
+): string {
   const [f1, f2] = rule.formulae ?? [];
   const body =
-    (f1 !== undefined ? `<formula1>${escapeText(stripFormulaEquals(f1))}</formula1>` : '') +
-    (f2 !== undefined ? `<formula2>${escapeText(stripFormulaEquals(f2))}</formula2>` : '');
+    (f1 !== undefined ? `<formula1>${operandText(f1, formulaNames)}</formula1>` : '') +
+    (f2 !== undefined ? `<formula2>${operandText(f2, formulaNames)}</formula2>` : '');
   return `<dataValidation${ruleAttrs(rule)} sqref="${escapeAttr(sqref)}">${body}</dataValidation>`;
 }
 
 // The extended element: same shared attributes, but each operand wraps in `<x14:formula1><xm:f>…` and
 // the target range is an `<xm:sqref>` child that follows the formulae. The `xr:uid` Excel adds is
 // revision metadata it regenerates freely, so it is not modelled or re-emitted.
-function extendedDataValidationXml(sqref: string, rule: DataValidation): string {
+function extendedDataValidationXml(
+  sqref: string,
+  rule: DataValidation,
+  formulaNames: ReadonlySet<string>,
+): string {
   const [f1, f2] = rule.formulae ?? [];
   const body =
     (f1 !== undefined
-      ? `<x14:formula1><xm:f>${escapeText(stripFormulaEquals(f1))}</xm:f></x14:formula1>`
+      ? `<x14:formula1><xm:f>${operandText(f1, formulaNames)}</xm:f></x14:formula1>`
       : '') +
     (f2 !== undefined
-      ? `<x14:formula2><xm:f>${escapeText(stripFormulaEquals(f2))}</xm:f></x14:formula2>`
+      ? `<x14:formula2><xm:f>${operandText(f2, formulaNames)}</xm:f></x14:formula2>`
       : '') +
     `<xm:sqref>${escapeText(sqref)}</xm:sqref>`;
   return `<x14:dataValidation${ruleAttrs(rule)}>${body}</x14:dataValidation>`;
+}
+
+// One operand as element text, the same in both forms: without the author's `=`, with the function
+// prefixes Excel stores, escaped.
+function operandText(operand: string | number, formulaNames: ReadonlySet<string>): string {
+  return escapeText(mangleFormula(stripFormulaEquals(operand), formulaNames));
 }
 
 // The two operand elements a validation carries, either of which may be absent.
 const FORMULA_ELEMENTS: ReadonlySet<string> = new Set(['formula1', 'formula2']);
 
 /** A pass gathering the standard `<dataValidation>` elements of a worksheet part, for a caller
- * reading the part alongside its other readers in one parse. */
-export function dataValidationPass(): CollectingPass<DataValidationEntry[]> {
+ * reading the part alongside its other readers in one parse. An operand sheds its function prefixes
+ * against `definedNames`, the workbook's names as `definedNameKeys` spells them. */
+export function dataValidationPass(
+  definedNames: ReadonlySet<string>,
+): CollectingPass<DataValidationEntry[]> {
   const entries: DataValidationEntry[] = [];
   let current: {attrs: Record<string, string>; formulae: string[]} | undefined;
   // Through the shared machine, like its extended sibling thirty lines below already was. The
@@ -161,7 +191,7 @@ export function dataValidationPass(): CollectingPass<DataValidationEntry[]> {
         return;
       }
       if (ln === 'dataValidation' && current !== undefined) {
-        const built = buildEntry(current.attrs, current.formulae);
+        const built = buildEntry(current.attrs, current.formulae, definedNames);
         if (built !== undefined) entries.push(built);
         current = undefined;
       }
@@ -173,10 +203,11 @@ export function dataValidationPass(): CollectingPass<DataValidationEntry[]> {
 function buildEntry(
   attrs: Record<string, string>,
   formulae: readonly string[],
+  definedNames: ReadonlySet<string>,
 ): DataValidationEntry | undefined {
   const {sqref} = attrs;
   if (sqref === undefined) return undefined;
-  const rule = buildRule(attrs, formulae);
+  const rule = buildRule(attrs, formulae, definedNames);
   return rule === undefined ? undefined : {sqref, rule};
 }
 
@@ -186,6 +217,7 @@ function buildEntry(
 function buildRule(
   attrs: Record<string, string>,
   formulae: readonly string[],
+  definedNames: ReadonlySet<string>,
 ): DataValidation | undefined {
   const {type} = attrs;
   // A type outside `ST_DataValidationType` does not name a constraint this model can hold, and the
@@ -223,6 +255,7 @@ function buildRule(
   // number while a cell reference or defined name survives as its verbatim string.
   const parsed = formulae
     .filter((f): f is string => f !== undefined)
+    .map((f) => unmangleFunctions(f, definedNames))
     .map((f) => (type === 'list' || type === 'custom' ? f : coerceNumericLiteral(f)));
   if (parsed.length > 0) rule.formulae = parsed;
 
@@ -232,8 +265,11 @@ function buildRule(
 /** A pass gathering the extended `<x14:dataValidation>` elements of a worksheet's `<extLst>`, so a
  * cross-sheet or whole-column list validation Excel stored only in the 2009 extension form is read
  * back rather than dropped. The standard pass ignores these (they are prefixed); this one,
- * symmetrically, handles only the prefixed elements. */
-export function extendedDataValidationPass(): CollectingPass<DataValidationEntry[]> {
+ * symmetrically, handles only the prefixed elements. An operand sheds its function prefixes against
+ * `definedNames`, as the standard pass's does. */
+export function extendedDataValidationPass(
+  definedNames: ReadonlySet<string>,
+): CollectingPass<DataValidationEntry[]> {
   const entries: DataValidationEntry[] = [];
   let current: {attrs: Record<string, string>; formulae: string[]; sqref: string} | undefined;
   // Which operand an `<xm:f>` feeds, set by the enclosing `<x14:formula1>`/`<x14:formula2>`.
@@ -274,7 +310,12 @@ export function extendedDataValidationPass(): CollectingPass<DataValidationEntry
       } else if ((ln === 'formula1' || ln === 'formula2') && extension) {
         slot = undefined;
       } else if (ln === 'dataValidation' && extension && current !== undefined) {
-        const built = buildExtendedEntry(current.attrs, current.formulae, current.sqref);
+        const built = buildExtendedEntry(
+          current.attrs,
+          current.formulae,
+          current.sqref,
+          definedNames,
+        );
         if (built !== undefined) entries.push(built);
         current = undefined;
       }
@@ -287,9 +328,10 @@ function buildExtendedEntry(
   attrs: Record<string, string>,
   formulae: readonly string[],
   sqref: string,
+  definedNames: ReadonlySet<string>,
 ): DataValidationEntry | undefined {
   if (sqref === '') return undefined;
-  const rule = buildRule(attrs, formulae);
+  const rule = buildRule(attrs, formulae, definedNames);
   return rule === undefined ? undefined : {sqref, rule, extended: true};
 }
 

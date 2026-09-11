@@ -92,6 +92,7 @@ test('a table keeps an empty <totalsRowFormula/> off the column that follows it'
       '<tableColumn name="Two" totalsRowFunction="custom">' +
       '<totalsRowFormula>SUM(T[Two])</totalsRowFormula></tableColumn>' +
       '</tableColumns></table>',
+    new Set(),
   );
   // An element that carries no text records no formula, rather than the next column's.
   assert.equal(table?.columns?.[0]?.totalsRowFormula, undefined);
@@ -106,6 +107,7 @@ test('a table keeps an empty <calculatedColumnFormula/> off the totals formula b
       '<tableColumn name="Two" totalsRowFunction="custom"><calculatedColumnFormula/>' +
       '<totalsRowFormula>SUM(T[Two])</totalsRowFormula></tableColumn>' +
       '</tableColumns></table>',
+    new Set(),
   );
   assert.equal(table?.columns?.[1]?.calculatedColumnFormula, undefined);
   assert.equal(table?.columns?.[1]?.totalsRowFormula, 'SUM(T[Two])');

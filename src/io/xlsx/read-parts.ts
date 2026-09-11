@@ -435,15 +435,17 @@ export function worksheetReferencePass(): CollectingPass<WorksheetReferenceRelId
 // type `.../table` on the sheet's own rels. The writer emits one relationship per table; each part
 // is parsed back into the model and re-registered in definition order. A part that fails to parse
 // (missing name/ref/columns, which is Excel corruption) is skipped rather than crashing the whole read.
+// `definedNames` is the workbook's names as `definedNameKeys` spells them, for the column formulas.
 export function readSheetTables(
   {pkg}: PackageReadContext,
   sheetRels: PartRelationships,
   sheet: Worksheet,
+  definedNames: ReadonlySet<string>,
 ): void {
   for (const tablePath of sheetRels.targetPaths('table')) {
     const tableXml = pkg.partText(tablePath);
     if (tableXml === undefined) continue;
-    const options = parseTable(tableXml);
+    const options = parseTable(tableXml, definedNames);
     // A table name is validated as an Excel identifier and bounded in length, and a file is free to
     // carry neither; the refusal is native (`SyntaxError`/`RangeError`), so an unguarded call put a
     // failure outside the `XlsxError` taxonomy on a path that faces untrusted input.

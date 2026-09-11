@@ -2,7 +2,7 @@
 
 import {messageOf} from '../../thrown.ts';
 import type {Untyped} from '../../untyped.ts';
-import {partOf, patchedPackage, roundtrip} from './package-facts.ts';
+import {partNamesOf, partOf, patchedPackage, roundtrip} from './package-facts.ts';
 import {
   encodeAddress,
   readFixture,
@@ -187,6 +187,71 @@ export const formulas = {
     return {read, written: storedFormulaTexts(writeXlsx(workbook), Object.keys(read))};
   },
 
+  // Read a fixture and report the formulas its first sheet carries outside its cells → { read, written,
+  // writtenExtension }: the text the model reads, the text the package written back from that model
+  // stores, and every `<xm:f>` the written sheet's extension carries, in document order. A key is
+  // `cf:<sqref>:<n>` for a conditional format's nth formula, `cf:<sqref>:cfvo<n>` for its nth `formula`
+  // anchor, `dv:<sqref>:<n>` for a validation's nth operand, and `table:<name>:<column>:calculated` or
+  // `…:totals` for a table column's formulas.
+  ruleFormulaSpellings(rel: string) {
+    return ruleFormulaSpellingsOf(readFixture(rel));
+  },
+
+  // The same report for a workbook authored here: on sheet S1 of S1 and S2, an expression calling
+  // XLOOKUP over A1:A3, a colour scale over E1:E3 and a gradient data bar over F1:F3 anchored at MINIFS
+  // and MAXIFS, custom validations calling XLOOKUP on D1 and, reaching S2, on D3 (extended), and a table
+  // T at G1 whose column `b` is calculated from XLOOKUP and LET and totalled by SUBTOTAL plus XLOOKUP.
+  // `read` is the model after a round trip.
+  authoredRuleFormulaSpellings() {
+    const workbook = new Workbook();
+    const sheet = workbook.addWorksheet('S1');
+    workbook.addWorksheet('S2');
+    const bounds = [
+      {type: 'formula', value: 'MINIFS($A$1:$A$3,$A$1:$A$3,">0")'},
+      {type: 'formula', value: 'MAXIFS($A$1:$A$3,$A$1:$A$3,">0")'},
+    ] as const;
+    sheet.addConditionalFormatting({
+      ref: 'A1:A3',
+      rules: [{type: 'expression', formulae: ['XLOOKUP(A1,$B$1:$B$3,$B$1:$B$3)=1']}],
+    });
+    sheet.addConditionalFormatting({
+      ref: 'E1:E3',
+      rules: [
+        {type: 'colorScale', cfvo: [...bounds], colors: [{argb: 'FFFF0000'}, {argb: 'FF0000FF'}]},
+      ],
+    });
+    sheet.addConditionalFormatting({
+      ref: 'F1:F3',
+      rules: [{type: 'dataBar', gradient: true, cfvo: [...bounds]}],
+    });
+    sheet.addDataValidation('D1', {
+      type: 'custom',
+      formulae: ['ISNUMBER(XLOOKUP(D1,$A$1:$A$3,$A$1:$A$3))'],
+    });
+    sheet.addDataValidation(
+      'D3',
+      {type: 'custom', formulae: ['ISNUMBER(XLOOKUP(D3,S2!$A$1:$A$3,S2!$A$1:$A$3))']},
+      {extended: true},
+    );
+    sheet.addTable({
+      name: 'T',
+      ref: 'G1',
+      rowCount: 3,
+      totalsRow: true,
+      columns: [
+        {name: 'a'},
+        {
+          name: 'b',
+          calculatedColumnFormula: 'XLOOKUP(T[[#This Row],[a]],$A$1:$A$3,$B$1:$B$3)+LET(x,1,x)',
+          totalsRowFunction: 'custom',
+          totalsRowFormula: 'SUBTOTAL(109,T[b])+XLOOKUP(1,$A$1:$A$3,$B$1:$B$3)',
+        },
+      ],
+    });
+    const {written, writtenExtension} = ruleFormulaSpellingsOf(workbook);
+    return {read: ruleFormulaSpellingsOf(roundtrip(workbook)).read, written, writtenExtension};
+  },
+
   // Round-trip formula cells whose cached results are truthy and falsy (2, 0, false, '') and report
   // each recovered result → { truthy, zero, boolFalse, emptyString } of { hasResult, result }. A falsy
   // result (0, false, empty string) must survive, not be dropped as if the formula had no cached value.
@@ -347,6 +412,86 @@ function storedFormulaTexts(buffer: Uint8Array, keys: readonly string[]) {
     return xmlText(/<f[^>]*>([\s\S]*?)<\/f>/.exec(body ?? '')?.[1] ?? '');
   };
   return Object.fromEntries(keys.map((key) => [key, stored(key)] as const));
+}
+
+// The `ruleFormulaSpellings` report for a workbook: its first sheet's formulas outside cells as the
+// model holds them, and as the package the workbook writes stores them.
+function ruleFormulaSpellingsOf(workbook: WorkbookInstance) {
+  const sheet = workbook.worksheets[0];
+  const read: (readonly [string, string])[] = [];
+  for (const {ref, rules} of sheet?.conditionalFormattings ?? []) {
+    const formulae = rules.flatMap((rule) => rule.formulae ?? []);
+    formulae.forEach((formula, n) => read.push([`cf:${ref}:${n}`, String(formula)]));
+    const anchors = rules
+      .flatMap((rule) => rule.cfvo ?? [])
+      .filter((cfvo) => cfvo.type === 'formula');
+    anchors.forEach((cfvo, n) => read.push([`cf:${ref}:cfvo${n}`, String(cfvo.value)]));
+  }
+  for (const {sqref, rule} of sheet?.dataValidations ?? []) {
+    (rule.formulae ?? []).forEach((formula, n) => read.push([`dv:${sqref}:${n}`, String(formula)]));
+  }
+  for (const table of sheet?.tables ?? []) {
+    for (const column of table.columns) {
+      const key = `table:${table.name}:${column.name}`;
+      if (column.calculatedColumnFormula !== undefined) {
+        read.push([`${key}:calculated`, column.calculatedColumnFormula]);
+      }
+      if (column.totalsRowFormula !== undefined)
+        read.push([`${key}:totals`, column.totalsRowFormula]);
+    }
+  }
+
+  const buffer = writeXlsx(workbook);
+  const sheetXml = partOf(buffer, 'xl/worksheets/sheet1.xml');
+  const written: (readonly [string, string])[] = [];
+  const numbered = (key: string, texts: Iterable<RegExpMatchArray>) =>
+    [...texts].forEach((match, n) => written.push([`${key}${n}`, xmlText(match[1] ?? '')]));
+  for (const block of sheetXml.matchAll(
+    /<conditionalFormatting sqref="([^"]*)">([\s\S]*?)<\/conditionalFormatting>/g,
+  )) {
+    const ref = xmlText(block[1] ?? '');
+    numbered(`cf:${ref}:`, (block[2] ?? '').matchAll(/<formula>([\s\S]*?)<\/formula>/g));
+    numbered(`cf:${ref}:cfvo`, (block[2] ?? '').matchAll(/<cfvo type="formula" val="([^"]*)"\/>/g));
+  }
+  for (const element of sheetXml.matchAll(
+    /<dataValidation\b[^>]*\bsqref="([^"]*)"[^>]*>([\s\S]*?)<\/dataValidation>/g,
+  )) {
+    numbered(
+      `dv:${xmlText(element[1] ?? '')}:`,
+      (element[2] ?? '').matchAll(/<formula[12]>([\s\S]*?)<\/formula[12]>/g),
+    );
+  }
+  for (const element of sheetXml.matchAll(
+    /<x14:dataValidation\b[^>]*>([\s\S]*?)<\/x14:dataValidation>/g,
+  )) {
+    const sqref = xmlText(/<xm:sqref>([\s\S]*?)<\/xm:sqref>/.exec(element[1] ?? '')?.[1] ?? '');
+    numbered(
+      `dv:${sqref}:`,
+      (element[1] ?? '').matchAll(/<x14:formula[12]><xm:f>([\s\S]*?)<\/xm:f><\/x14:formula[12]>/g),
+    );
+  }
+  for (const part of partNamesOf(buffer).filter((name) =>
+    /^xl\/tables\/table\d+\.xml$/.test(name),
+  )) {
+    const tableXml = partOf(buffer, part);
+    const name = xmlText(/\bdisplayName="([^"]*)"/.exec(tableXml)?.[1] ?? '');
+    for (const column of tableXml.matchAll(
+      /<tableColumn\b([^>]*?)(?:\/>|>([\s\S]*?)<\/tableColumn>)/g,
+    )) {
+      const key = `table:${name}:${xmlText(/\bname="([^"]*)"/.exec(column[1] ?? '')?.[1] ?? '')}`;
+      const body = column[2] ?? '';
+      const calculated = /<calculatedColumnFormula>([\s\S]*?)<\/calculatedColumnFormula>/.exec(
+        body,
+      );
+      if (calculated !== null) written.push([`${key}:calculated`, xmlText(calculated[1] ?? '')]);
+      const totals = /<totalsRowFormula>([\s\S]*?)<\/totalsRowFormula>/.exec(body);
+      if (totals !== null) written.push([`${key}:totals`, xmlText(totals[1] ?? '')]);
+    }
+  }
+  const writtenExtension = [...sheetXml.matchAll(/<xm:f>([\s\S]*?)<\/xm:f>/g)].map((match) =>
+    xmlText(match[1] ?? ''),
+  );
+  return {read: Object.fromEntries(read), written: Object.fromEntries(written), writtenExtension};
 }
 
 // Element text or an attribute value as written, with the five predefined entities decoded; `&amp;`

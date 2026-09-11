@@ -65,7 +65,7 @@ test('a nameless column drops the table rather than shifting its columns and tot
     `<tableColumn id="3"${name} totalsRowFunction="custom"><totalsRowFormula>SUM(T[c])</totalsRowFormula></tableColumn>`;
   const columns = '<tableColumn id="1" name="a"/><tableColumn id="2" name="b"/>';
 
-  const whole = parseTable(tablePart('A1:C3', columns + custom(' name="c"')));
+  const whole = parseTable(tablePart('A1:C3', columns + custom(' name="c"')), new Set());
   assert.deepEqual(
     whole?.columns.map((column) => [column.name, column.totalsRowFormula]),
     [
@@ -75,18 +75,25 @@ test('a nameless column drops the table rather than shifting its columns and tot
     ],
     'control: with the name present the formula sits on its own column',
   );
-  assert.equal(parseTable(tablePart('A1:C3', columns + custom(''))), undefined);
+  assert.equal(parseTable(tablePart('A1:C3', columns + custom('')), new Set()), undefined);
 });
 
 test('a table whose column count differs from its ref width is dropped whole', () => {
   const two = '<tableColumn id="1" name="a"/><tableColumn id="2" name="b"/>';
-  assert.ok(parseTable(tablePart('A1:B3', two)), 'control: two columns across a two-wide ref');
+  assert.ok(
+    parseTable(tablePart('A1:B3', two), new Set()),
+    'control: two columns across a two-wide ref',
+  );
   assert.equal(
-    parseTable(tablePart('A1:C3', two)),
+    parseTable(tablePart('A1:C3', two), new Set()),
     undefined,
     'fewer columns than the ref is wide',
   );
-  assert.equal(parseTable(tablePart('A1:A3', two)), undefined, 'more columns than the ref is wide');
+  assert.equal(
+    parseTable(tablePart('A1:A3', two), new Set()),
+    undefined,
+    'more columns than the ref is wide',
+  );
 });
 
 // `boolPresent` read `"yes"` as present-and-true, so the writer turned it into `"1"`.
@@ -95,7 +102,7 @@ test('an unrecognised boolean token on a table or its style info is dropped, not
   const style =
     '<tableStyleInfo name="TableStyleLight1" showRowStripes="yes" showFirstColumn="0"/>';
   const part = tablePart('A1:B3', two, style).replace('totalsRowCount="1"', 'totalsRowShown="yes"');
-  const options = parseTable(part);
+  const options = parseTable(part, new Set());
   assert.deepEqual(options?.style, {name: 'TableStyleLight1', showFirstColumn: false});
   assert.equal(options?.totalsRowShown, undefined);
 });
@@ -163,7 +170,7 @@ test('an unrecognised totalsRowFunction is dropped rather than trusted in verbat
     'name="T" displayName="T" ref="A1:A3" totalsRowCount="1">' +
     '<tableColumns count="1"><tableColumn id="1" name="A" totalsRowFunction="avg"/></tableColumns>' +
     '</table>';
-  const table = parseTable(xml);
+  const table = parseTable(xml, new Set());
   assert.ok(table !== undefined);
   assert.equal(table.columns[0]?.totalsRowFunction, undefined);
 });
@@ -415,7 +422,7 @@ test('a table part spelling its booleans "false" reads them off, as "0" does', (
     `showLastColumn="${value}" showRowStripes="${value}" showColumnStripes="${value}"/>` +
     '</table>';
   for (const value of ['0', 'false']) {
-    const table = parseTable(part(value));
+    const table = parseTable(part(value), new Set());
     assert.ok(table !== undefined);
     assert.equal(table.totalsRowShown, false, `totalsRowShown="${value}"`);
     assert.deepEqual(

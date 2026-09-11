@@ -186,6 +186,14 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Fixed
 
+- **A conditional format, data validation or table column formula calling a function added after 2007
+  did nothing in Excel.** `XLOOKUP`, `MAXIFS`, `LET` and the rest were written bare into a rule's
+  formula and `formula` anchors, a validation's operands and a table's calculated and totals formulas,
+  so Excel never applied the format, rejected every entry the validation checked, and gave a row added
+  to the table `@XLOOKUP` in place of the calculation. They take the `_xlfn.`, `_xlpm.` and `_xleta.`
+  prefixes a cell formula does now, and a read sheds them, so a formula read from a file no longer
+  says `_xlfn.XLOOKUP` there either.
+
 - **An `.xlsb` formula calling `IFERROR`, `SUMIFS`, `COUNTIFS`, `AVERAGEIF(S)`, `EOMONTH`,
   `NETWORKDAYS` or any other Analysis ToolPak or CUBE function lost its formula on read.** A binary
   workbook cites these by function-table indices past `RTD`, where the [MS-XLS] table ends, and the

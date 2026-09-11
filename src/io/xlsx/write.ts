@@ -619,9 +619,14 @@ function emitPackageParts(context: {
     files.add(mediaPart(part.number, part.extension), part.data);
   }
   emitSheetParts(files, perSheet, sheetXml, (id) => workbook.getPerson(id));
-  for (const {table, number} of allTables) {
-    files.add(tablePart(number), strToU8(tableXml(table, number)));
-  }
+  // Sheet by sheet, which is the order `allTables` lists them in, because a table's formulas resolve a
+  // bare name against the names its own sheet can see.
+  perSheet.forEach(({tables}, index) => {
+    const formulaNames = formulaNamesInScope(workbook.definedNames, sheets[index]?.name);
+    for (const {table, number} of tables) {
+      files.add(tablePart(number), strToU8(tableXml(table, number, formulaNames)));
+    }
+  });
   emitPivotParts(files, allPivots);
   emitPreservedParts(files, preserved.parts);
 

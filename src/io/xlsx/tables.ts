@@ -8,6 +8,7 @@
 // only when `totalsRowCount` is positive), so reconstructing one from the other is lossless.
 
 import {encodeAddress, tryDecodeRange} from '../../core/address.ts';
+import {mangleFormula, unmangleFunctions} from '../../core/formula.ts';
 import {
   isTotalsRowFunction,
   type Table,
@@ -23,7 +24,12 @@ import {boolTristate, localName} from '../../xml/xml-scan.ts';
 import {boolAttr, checkedToken, escapeAttr, escapeText, XML_DECLARATION} from '../../xml/xml.ts';
 import {NS} from './relationships.ts';
 
-export function tableXml(table: Table, id: number): string {
+/**
+ * The table part. A column's calculated and totals formulas are stored with the function prefixes a
+ * cell formula takes, as Excel stores them; `formulaNames` is `formulaNamesInScope` for the table's
+ * sheet.
+ */
+export function tableXml(table: Table, id: number, formulaNames: ReadonlySet<string>): string {
   // One name, in both attributes: `displayName` is the one Excel resolves a structured reference against,
   // and `name` has no meaning of its own the model could hold.
   const name = escapeAttr(table.name);
@@ -38,7 +44,9 @@ export function tableXml(table: Table, id: number): string {
     : boolAttr('totalsRowShown', table.totalsRowShown);
   const autoFilter =
     table.autoFilterRef !== undefined ? `<autoFilter ref="${table.autoFilterRef}"/>` : '';
-  const columns = table.columns.map((column, i) => tableColumnXml(column, i + 1)).join('');
+  const columns = table.columns
+    .map((column, i) => tableColumnXml(column, i + 1, formulaNames))
+    .join('');
   return (
     XML_DECLARATION +
     `<table xmlns="${NS.main}" id="${id}" name="${name}" displayName="${name}" ` +
@@ -75,7 +83,11 @@ type TableColumnDraft = {
   calculatedColumnFormula?: string;
 };
 
-function tableColumnXml(column: TableColumn, id: number): string {
+function tableColumnXml(
+  column: TableColumn,
+  id: number,
+  formulaNames: ReadonlySet<string>,
+): string {
   let attrs = `id="${id}" name="${escapeAttr(column.name)}"`;
   if (column.totalsRowLabel !== undefined) {
     attrs += ` totalsRowLabel="${escapeAttr(column.totalsRowLabel)}"`;
@@ -88,10 +100,12 @@ function tableColumnXml(column: TableColumn, id: number): string {
   // built-in function.
   let children = '';
   if (column.calculatedColumnFormula !== undefined) {
-    children += `<calculatedColumnFormula>${escapeText(column.calculatedColumnFormula)}</calculatedColumnFormula>`;
+    const stored = mangleFormula(column.calculatedColumnFormula, formulaNames);
+    children += `<calculatedColumnFormula>${escapeText(stored)}</calculatedColumnFormula>`;
   }
   if (column.totalsRowFormula !== undefined) {
-    children += `<totalsRowFormula>${escapeText(column.totalsRowFormula)}</totalsRowFormula>`;
+    const stored = mangleFormula(column.totalsRowFormula, formulaNames);
+    children += `<totalsRowFormula>${escapeText(stored)}</totalsRowFormula>`;
   }
   return children === ''
     ? `<tableColumn ${attrs}/>`
@@ -103,8 +117,14 @@ function tableColumnXml(column: TableColumn, id: number): string {
  * usable table (no name, no ref, or no columns: Excel treats such a part as corrupt, so we drop it
  * rather than fabricate a degenerate table). Duplicate column names are not resolved here, since the
  * {@link Table} constructor disambiguates them, so authoring and loading share one implementation.
+ *
+ * A column's formulas shed their function prefixes as a cell formula's do, against `definedNames`,
+ * the workbook's names as `definedNameKeys` spells them.
  */
-export function parseTable(xml: string): TableOptions | undefined {
+export function parseTable(
+  xml: string,
+  definedNames: ReadonlySet<string>,
+): TableOptions | undefined {
   let name: string | undefined;
   let ref: string | undefined;
   let headerRowCount = 1; // OOXML default: a table carries a header row unless it says otherwise.
@@ -190,8 +210,9 @@ export function parseTable(xml: string): TableOptions | undefined {
       // Excel writes a totals formula only for `totalsRowFunction="custom"`, so one on any other column
       // is meaningless, but preserving whatever the part carried keeps the round-trip faithful rather
       // than second-guessing.
-      if (local === 'totalsRowFormula') currentColumn.totalsRowFormula = text;
-      else currentColumn.calculatedColumnFormula = text;
+      const formulaText = unmangleFunctions(text, definedNames);
+      if (local === 'totalsRowFormula') currentColumn.totalsRowFormula = formulaText;
+      else currentColumn.calculatedColumnFormula = formulaText;
     },
   });
 

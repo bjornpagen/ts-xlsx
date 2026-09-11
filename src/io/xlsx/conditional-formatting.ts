@@ -27,7 +27,7 @@ import {
   isCfTimePeriod,
   type CfTimePeriod,
 } from '../../core/conditional-formatting.ts';
-import {stripFormulaEquals} from '../../core/formula.ts';
+import {mangleFormula, stripFormulaEquals, unmangleFunctions} from '../../core/formula.ts';
 import {decodeSqrefRects} from '../../core/merge.ts';
 import type {Color} from '../../core/style.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
@@ -106,15 +106,19 @@ const SCALE_TYPES = new Set<string>(SCALE_KINDS);
  * Serialise every conditional formatting on a sheet into its `<conditionalFormatting>` blocks, in
  * insertion order. Returns '' when the sheet has none. A rule missing a `priority` is assigned the
  * next free one, so the output always satisfies Excel's requirement that every cfRule carry one.
+ *
+ * A rule's formulas, its operands and a `formula` anchor alike, are stored with the function prefixes
+ * a cell formula takes, as Excel stores them; `formulaNames` is `formulaNamesInScope` for the sheet.
  */
 export function conditionalFormattingsXml(
   formattings: readonly ConditionalFormatting[],
   styles: StyleRegistry,
   extLinks: DataBarExtLinks,
+  formulaNames: ReadonlySet<string>,
 ): string {
   if (formattings.length === 0) return '';
   const priority = {next: 1};
-  return formattings.map((cf) => blockXml(cf, styles, priority, extLinks)).join('');
+  return formattings.map((cf) => blockXml(cf, styles, priority, extLinks, formulaNames)).join('');
 }
 
 /**
@@ -127,12 +131,13 @@ export function conditionalFormattingsXml(
 export function conditionalFormattingsExtXml(
   formattings: readonly ConditionalFormatting[],
   extLinks: DataBarExtLinks,
+  formulaNames: ReadonlySet<string>,
 ): string {
   const items: string[] = [];
   for (const cf of formattings) {
     for (const rule of cf.rules) {
       const guid = extLinks.get(rule);
-      if (guid !== undefined) items.push(x14DataBarXml(cf.ref, rule, guid));
+      if (guid !== undefined) items.push(x14DataBarXml(cf.ref, rule, guid, formulaNames));
     }
   }
   if (items.length === 0) return '';
@@ -145,8 +150,13 @@ export function conditionalFormattingsExtXml(
 // One `<x14:conditionalFormatting>`: an `<x14:cfRule type="dataBar" id>` mirroring the classic anchors
 // as `<x14:cfvo>` and adding the facets the classic element cannot carry (gradient, negative-fill and
 // axis colours), with the target range in an `<xm:sqref>` child: the shape Excel writes.
-function x14DataBarXml(ref: string, rule: ConditionalFormattingRule, guid: string): string {
-  const anchors = dataBarAnchors(rule).map(x14Cfvo).join('');
+function x14DataBarXml(
+  ref: string,
+  rule: ConditionalFormattingRule,
+  guid: string,
+  formulaNames: ReadonlySet<string>,
+): string {
+  const anchors = dataBarAnchors(rule).map(cfvoWriter('x14', formulaNames)).join('');
   const gradient = boolAttr('gradient', rule.gradient);
   const negative =
     rule.negativeFillColor !== undefined
@@ -185,24 +195,30 @@ function dataBarAnchors(rule: ConditionalFormattingRule): readonly CfValueObject
  * form -- an attribute value and element text are not escaped alike -- and two separate writers is
  * where that stops being true.
  *
- * Curried rather than taking the form as a second parameter, because every caller is a `.map`, and
- * `.map(cfvoXml)` would quietly hand the array index in as the form.
+ * Curried rather than taking the anchor as a further parameter, because every caller is a `.map`, and
+ * a writer taking the form after the anchor would be handed the array index in its place.
  */
-function cfvoWriter(form: 'classic' | 'x14'): (cfvo: CfValueObject) => string {
+function cfvoWriter(
+  form: 'classic' | 'x14',
+  formulaNames: ReadonlySet<string>,
+): (cfvo: CfValueObject) => string {
   return (cfvo) => {
     const type = checkedToken(cfvo.type, isCfValueObjectType, 'conditional format value type');
     const tag = form === 'classic' ? 'cfvo' : 'x14:cfvo';
     if (cfvo.value === undefined) return `<${tag} type="${type}"/>`;
-    // A numeric anchor goes through the number check: `String(NaN)` wrote `val="NaN"`.
-    const value = typeof cfvo.value === 'number' ? numberText(cfvo.value) : cfvo.value;
+    // A numeric anchor goes through the number check: `String(NaN)` wrote `val="NaN"`. A `formula`
+    // anchor is formula text, and takes the function prefixes Excel stores it with in either form.
+    const value =
+      typeof cfvo.value === 'number'
+        ? numberText(cfvo.value)
+        : type === 'formula'
+          ? mangleFormula(cfvo.value, formulaNames)
+          : cfvo.value;
     return form === 'classic'
       ? `<${tag} type="${type}"${textAttr('val', value)}/>`
       : `<${tag} type="${type}"><xm:f>${escapeText(value)}</xm:f></${tag}>`;
   };
 }
-
-const cfvoXml = cfvoWriter('classic');
-const x14Cfvo = cfvoWriter('x14');
 
 // The `<extLst>` a classic data-bar cfRule carries to name its x14 extension by shared id.
 function cfRuleExtLinkXml(guid: string): string {
@@ -214,8 +230,11 @@ function blockXml(
   styles: StyleRegistry,
   priority: {next: number},
   extLinks: DataBarExtLinks,
+  formulaNames: ReadonlySet<string>,
 ): string {
-  const rules = cf.rules.map((rule) => ruleXml(rule, styles, priority, extLinks)).join('');
+  const rules = cf.rules
+    .map((rule) => ruleXml(rule, styles, priority, extLinks, formulaNames))
+    .join('');
   // `CT_ConditionalFormatting` requires at least one `<cfRule>`, so a block with none is omitted
   // rather than emitted empty. A caller can author one, and the reader produces one when every rule
   // in a foreign block named a type the enumeration does not allow.
@@ -228,6 +247,7 @@ function ruleXml(
   styles: StyleRegistry,
   priority: {next: number},
   extLinks: DataBarExtLinks,
+  formulaNames: ReadonlySet<string>,
 ): string {
   const p = rule.priority ?? priority.next;
   // Checked before it feeds the counter: an authored `NaN` spread through `Math.max` into every
@@ -259,7 +279,9 @@ function ruleXml(
   if (rule.rank !== undefined) attrs.push(intAttr('rank', rule.rank, 0).trim());
   if (rule.stdDev !== undefined) attrs.push(intAttr('stdDev', rule.stdDev).trim());
 
-  let body = SCALE_TYPES.has(rule.type) ? scaleXml(rule) : formulaeXml(rule.formulae);
+  let body = SCALE_TYPES.has(rule.type)
+    ? scaleXml(rule, formulaNames)
+    : formulaeXml(rule.formulae, formulaNames);
   // A data bar with x14-only facets links to its extension by the id assigned in dataBarExtLinks; the
   // extension itself rides in the worksheet <extLst>. The link is the cfRule's last child, after the
   // dataBar. A rule absent from the map carries no extension.
@@ -284,15 +306,23 @@ function resolveDxfId(rule: ConditionalFormattingRule, styles: StyleRegistry): n
   return undefined;
 }
 
-function formulaeXml(formulae: readonly (string | number)[] | undefined): string {
+function formulaeXml(
+  formulae: readonly (string | number)[] | undefined,
+  formulaNames: ReadonlySet<string>,
+): string {
   if (formulae === undefined) return '';
-  return formulae.map((f) => `<formula>${escapeText(stripFormulaEquals(f))}</formula>`).join('');
+  return formulae
+    .map(
+      (f) => `<formula>${escapeText(mangleFormula(stripFormulaEquals(f), formulaNames))}</formula>`,
+    )
+    .join('');
 }
 
-function scaleXml(rule: ConditionalFormattingRule): string {
-  if (rule.type === 'dataBar') return dataBarXml(rule);
-  if (rule.type === 'colorScale') return colorScaleXml(rule);
-  return iconSetXml(rule);
+function scaleXml(rule: ConditionalFormattingRule, formulaNames: ReadonlySet<string>): string {
+  const cfvoXml = cfvoWriter('classic', formulaNames);
+  if (rule.type === 'dataBar') return dataBarXml(rule, cfvoXml);
+  if (rule.type === 'colorScale') return colorScaleXml(rule, cfvoXml);
+  return iconSetXml(rule, cfvoXml);
 }
 
 // A data bar states its low and high anchors and its bar colour. The minimal call (no cfvo, no colour)
@@ -300,7 +330,10 @@ function scaleXml(rule: ConditionalFormattingRule): string {
 // empty element. The gradient flag and the negative-fill/axis colours have no home in this classic
 // element; they ride in the x14 extension (see {@link conditionalFormattingsExtXml}), linked from the
 // cfRule that wraps this by a shared id.
-function dataBarXml(rule: ConditionalFormattingRule): string {
+function dataBarXml(
+  rule: ConditionalFormattingRule,
+  cfvoXml: (cfvo: CfValueObject) => string,
+): string {
   const color = rule.color ?? DEFAULT_DATABAR_COLOR;
   const anchors = dataBarAnchors(rule).map(cfvoXml).join('');
   return `<dataBar>${anchors}<color ${colorAttrs(color)}/></dataBar>`;
@@ -308,13 +341,19 @@ function dataBarXml(rule: ConditionalFormattingRule): string {
 
 // A colour scale pairs each anchor with a colour; a missing colour list falls back to none, still a
 // well-formed (if plain) element.
-function colorScaleXml(rule: ConditionalFormattingRule): string {
+function colorScaleXml(
+  rule: ConditionalFormattingRule,
+  cfvoXml: (cfvo: CfValueObject) => string,
+): string {
   const anchors = (rule.cfvo ?? []).map(cfvoXml).join('');
   const colors = (rule.colors ?? []).map((c) => `<color ${colorAttrs(c)}/>`).join('');
   return `<colorScale>${anchors}${colors}</colorScale>`;
 }
 
-function iconSetXml(rule: ConditionalFormattingRule): string {
+function iconSetXml(
+  rule: ConditionalFormattingRule,
+  cfvoXml: (cfvo: CfValueObject) => string,
+): string {
   const name =
     rule.iconSet === undefined
       ? ''
@@ -369,8 +408,13 @@ interface DataBarExt {
  * gradient flag and the negative-fill and axis colours) matched by the shared id the two ends link
  * on. An extension rule with no classic counterpart (a rule that lives only in x14) is ignored, so it
  * is never half-read into a broken classic rule.
+ *
+ * A rule's formulas shed their function prefixes as a cell formula's do, against `definedNames`, the
+ * workbook's names as `definedNameKeys` spells them.
  */
-export function conditionalFormattingPass(): CollectingPass<ConditionalFormatting[]> {
+export function conditionalFormattingPass(
+  definedNames: ReadonlySet<string>,
+): CollectingPass<ConditionalFormatting[]> {
   const blocks: ConditionalFormatting[] = [];
   let block: ConditionalFormatting | undefined;
   let draft: RuleDraft | undefined;
@@ -430,7 +474,7 @@ export function conditionalFormattingPass(): CollectingPass<ConditionalFormattin
         scale = ln;
         if (ln === 'iconSet') draft.iconSet = enumToken(attrs.iconSet, isIconSetType);
       } else if (draft !== undefined && ln === 'cfvo') {
-        draft.cfvo.push(parseCfvo(attrs));
+        draft.cfvo.push(parseCfvo(attrs, definedNames));
       } else if (draft !== undefined && ln === 'color') {
         const color = parseColor(attrs);
         if (scale === 'dataBar') draft.color = color;
@@ -458,7 +502,9 @@ export function conditionalFormattingPass(): CollectingPass<ConditionalFormattin
       }
       const formula = formulaCapture.close(ln);
       if (formula !== undefined) {
-        if (draft !== undefined) draft.formulae.push(coerceNumericLiteral(formula));
+        if (draft !== undefined) {
+          draft.formulae.push(coerceNumericLiteral(unmangleFunctions(formula, definedNames)));
+        }
       } else if (ln === 'dataBar' || ln === 'colorScale' || ln === 'iconSet') {
         scale = undefined;
       } else if (ln === 'cfRule' && draft !== undefined) {
@@ -579,7 +625,10 @@ function finalizeRule(draft: RuleDraft): ConditionalFormattingRule | undefined {
   return rule;
 }
 
-function parseCfvo(attrs: Record<string, string>): CfValueObject {
+function parseCfvo(
+  attrs: Record<string, string>,
+  definedNames: ReadonlySet<string>,
+): CfValueObject {
   // An anchor whose type is absent reads as `num`, the schema's default; an anchor whose type is
   // unrecognised takes the same fallback rather than being dropped, because an anchor missing from a
   // scale would leave the rule with fewer than the anchors its type requires.
@@ -588,7 +637,10 @@ function parseCfvo(attrs: Record<string, string>): CfValueObject {
   const cfvo: CfValueObject = {type};
   if (attrs.val !== undefined) {
     // A `formula` anchor's value is an expression and stays a string; the rest are numeric.
-    cfvo.value = type === 'formula' ? attrs.val : coerceNumericLiteral(attrs.val);
+    cfvo.value =
+      type === 'formula'
+        ? unmangleFunctions(attrs.val, definedNames)
+        : coerceNumericLiteral(attrs.val);
   }
   return cfvo;
 }
