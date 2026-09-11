@@ -10,11 +10,14 @@
 import type {Assert, Case, CorpusApi} from '../case.ts';
 
 const EMPTY = {
-  sheets: [{name: 'S', tables: [{name: 'T1', ref: 'A1', headers: ['Alpha', 'Beta'], rows: []}]}],
+  sheets: [{name: 'S', tables: [{name: 'Empty', ref: 'A1', headers: ['Alpha', 'Beta'], rows: []}]}],
 };
 const ONE_ROW = {
   sheets: [
-    {name: 'S', tables: [{name: 'T2', ref: 'A1', headers: ['Alpha', 'Beta'], rows: [['x', 'y']]}]},
+    {
+      name: 'S',
+      tables: [{name: 'OneRow', ref: 'A1', headers: ['Alpha', 'Beta'], rows: [['x', 'y']]}],
+    },
   ],
 };
 

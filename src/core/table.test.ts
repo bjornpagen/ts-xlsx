@@ -140,6 +140,15 @@ test('a table name that is not an Excel identifier is refused, natively', () => 
   }
 });
 
+test('a table name that reads as a reference is refused, natively', () => {
+  // Each of these made Excel 16.0 offer to repair a package carrying the table; the three beside them
+  // opened clean.
+  for (const name of ['T1', 'c1', 'R', 'RC', 'R1C1', 'R1X', 'TRUE']) {
+    assert.throws(() => table({name}), {name: 'SyntaxError', message: /reads as a cell reference/});
+  }
+  for (const name of ['CC', 'XFE1', 'R1.5']) assert.equal(table({name}).name, name);
+});
+
 test('a table whose derived corner leaves the grid is refused at construction', () => {
   // The anchor was validated and the far corner, derived from it, was not. `XFC1` plus three columns
   // reached column XFE, and five million data rows produced a `<table ref>` naming rows that cannot

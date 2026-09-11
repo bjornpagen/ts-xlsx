@@ -150,7 +150,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 213, when the MS-OVBA compressor began storing a chunk raw only at the 4096 bytes
   // the format fixes, padding a short one. `Workbook` reaches the VBA editors, so this entry pays for it,
   // two tenths over.
-  './core': 216,
+  //
+  // Raised again, from 216, when `core/address.ts` began stating which names Excel reads as a
+  // reference, the rule that quotes a sheet named `R1C1` and refuses a table named `T1`. Every entry
+  // carrying the model loads that module; seven tenths over.
+  './core': 217,
   // Raised from 554 by the same future-function registry as `.`, which put this entry nine tenths over.
   //
   // Raised again, from 555, by the same conditional-format boundaries as `.`, eight tenths over.
@@ -186,7 +190,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 302, by the same pivot role refusals as `/core`, seven tenths over.
   //
   // Raised again, from 303, by the same MS-OVBA raw-chunk padding as `/core`, two tenths over.
-  './xlsb': 306,
+  //
+  // Raised again, from 306, by the same reference-name rule as `/core`, eight tenths over.
+  './xlsb': 307,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
@@ -212,7 +218,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 224, when the writer began placing row N on line N and refusing a quote, CR or
   // LF as a delimiter and a row delimiter it cannot keep apart from the data. Two tenths over.
-  './csv': 227,
+  //
+  // Raised again, from 227, by the same reference-name rule as `/core`, a kilobyte over.
+  './csv': 229,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //

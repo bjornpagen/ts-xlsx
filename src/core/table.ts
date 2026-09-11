@@ -17,6 +17,7 @@ import {
   type GridRect,
   MAX_COLUMN,
   MAX_ROW,
+  nameReadsAsReference,
   numberToColumn,
 } from './address.ts';
 import {type ClonePlan, cloneWith} from './clone.ts';
@@ -270,6 +271,15 @@ function validateTableName(name: string): void {
     throw new SyntaxError(
       `table name ${quoted(name)} is not a valid Excel identifier: it must start with a letter, ` +
         'underscore, or backslash and contain only letters, digits, periods, and underscores',
+    );
+  }
+  // A structured reference names its table, so a table called `T1`, `RC` or `TRUE` is one a formula
+  // reads as a cell, a relative R1C1 reference or a boolean. Excel offers to repair a package that
+  // carries one rather than open it.
+  if (nameReadsAsReference(name)) {
+    throw new SyntaxError(
+      `table name ${quoted(name)} reads as a cell reference, an R1C1 reference or a boolean, ` +
+        'which Excel does not accept as a name',
     );
   }
 }

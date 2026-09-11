@@ -438,7 +438,7 @@ test('a table part spelling its booleans "false" reads them off, as "0" does', (
 test('an empty-body table refs the full header row and writes a table part', () => {
   const wb = new Workbook();
   wb.addWorksheet('S').addTable({
-    name: 'T1',
+    name: 'Empty',
     ref: 'A1',
     columns: [{name: 'Alpha'}, {name: 'Beta'}],
     rowCount: 0,

@@ -1067,6 +1067,7 @@ export const core = {
       },
       {name: 'table name that is not an identifier', part: TABLE, patch: renameTable('1 bad')},
       {name: 'table name over the length limit', part: TABLE, patch: renameTable('T'.repeat(300))},
+      {name: 'table name that reads as a cell', part: TABLE, patch: renameTable('T1')},
       {
         name: 'defined name with no name at all',
         part: SHEET,

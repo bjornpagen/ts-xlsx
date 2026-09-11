@@ -95,9 +95,11 @@ const MAX_TABLE_NAME_LENGTH: 255
 Excel's table-name grammar: start with a letter, underscore, or backslash; every later character a
 letter, digit, period, or underscore. Unicode letters and digits are allowed.
 
-Excel additionally forbids a name that *is* a cell reference (`A1`, `R1C1`), which this pattern
-deliberately does not: the regression corpus treats cell-reference-shaped names like `T1` as valid
-table names, so enforcing that rule would reject a fixture the contract accepts.
+The pattern is the grammar only. Excel also refuses a name that reads as a reference: an A1 cell on
+the grid (`T1`), an R1C1 reference (`R`, `C`, `RC`, `R1C1`, `R1X`), or `TRUE`/`FALSE`, in any case.
+No regular expression states that honestly, because "on the grid" is a bound on the column letters
+and the row number, so `Worksheet.addTable` checks it separately and a name passing this pattern
+can still be refused.
 
 ```ts
 const TABLE_NAME_PATTERN: RegExp

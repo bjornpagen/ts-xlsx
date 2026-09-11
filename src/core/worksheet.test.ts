@@ -322,14 +322,14 @@ test('a model round-trip carries column, row, and page metadata', () => {
 
 test('a model round-trip carries tables and sheet-level protection', () => {
   const src = new Worksheet('Src', 1);
-  src.addTable({name: 'T1', ref: 'A1', columns: [{name: 'Col'}], rowCount: 2});
+  src.addTable({name: 'Totals', ref: 'A1', columns: [{name: 'Col'}], rowCount: 2});
   src.protect();
 
   const dst = new Worksheet('Dst', 2);
   dst.model = src.model;
 
   assert.equal(dst.tables.length, 1);
-  assert.equal(dst.tables[0]?.name, 'T1');
+  assert.equal(dst.tables[0]?.name, 'Totals');
   assert.equal(dst.tables[0]?.range, 'A1:A3');
   assert.notEqual(dst.protection, undefined);
 });

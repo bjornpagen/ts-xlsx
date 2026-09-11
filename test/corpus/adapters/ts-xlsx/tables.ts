@@ -107,7 +107,7 @@ export const tables = {
     const wb = new Workbook();
     for (let i = 1; i <= 5; i++) {
       const s = wb.addWorksheet(`Sheet${i}`);
-      s.addTable({name: `Tbl${i}`, ref: 'A1', columns: [{name: 'Col'}], rowCount: 1});
+      s.addTable({name: `Table_${i}`, ref: 'A1', columns: [{name: 'Col'}], rowCount: 1});
       s.addDataValidation('C1', {type: 'list', allowBlank: true, formulae: ['"a,b,c"']});
     }
     let writeOk = true;
@@ -510,6 +510,23 @@ export const tables = {
   // table could be declared over columns past XFD or rows past 1048576: `range` then threw when
   // anything read it back, and a `rowCount` large enough (which a reader derives from a file's own
   // stored range, not only an author) put a `<table ref>` naming impossible rows into the package.
+  // Author a one-column table under each name and report what construction made of it → a map of
+  // name → { refused, error }. The error is the refusal's message, or null for a name accepted.
+  tableNameRefusals(names: string[]) {
+    return Object.fromEntries(
+      names.map((name) => {
+        try {
+          new Workbook()
+            .addWorksheet('S')
+            .addTable({name, ref: 'A1', columns: [{name: 'h'}], rowCount: 1});
+          return [name, {refused: false, error: null}];
+        } catch (error) {
+          return [name, {refused: true, error: messageOf(error)}];
+        }
+      }),
+    );
+  },
+
   tableOutsideTheGrid() {
     const refused = (build: () => void) => {
       try {

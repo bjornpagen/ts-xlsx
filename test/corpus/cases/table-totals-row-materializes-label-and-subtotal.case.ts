@@ -63,7 +63,7 @@ const OFFSET_TABLE = {
       name: 'S',
       tables: [
         {
-          name: 'T2',
+          name: 'Anchored',
           ref: 'C3',
           totalsRow: true,
           columnDefs: [
@@ -191,7 +191,7 @@ export default {
         );
         assert.strictEqual(
           facts!.formulas.D5,
-          'SUBTOTAL(109,T2[Amount])',
+          'SUBTOTAL(109,Anchored[Amount])',
           `D5 should hold the sum SUBTOTAL formula, got ${facts!.formulas.D5}`,
         );
       },

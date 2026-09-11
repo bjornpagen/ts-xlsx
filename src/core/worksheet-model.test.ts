@@ -34,7 +34,7 @@ function populatedSheet(): Worksheet {
     ref: 'G1:G3',
     rules: [{type: 'cellIs', operator: 'greaterThan', formulae: [5], priority: 1}],
   });
-  sheet.addTable({name: 'T1', ref: 'A10', columns: [{name: 'Col'}], rowCount: 2});
+  sheet.addTable({name: 'Totals', ref: 'A10', columns: [{name: 'Col'}], rowCount: 2});
   sheet.autoFilter = 'A1:B2';
   sheet.protect('secret');
   return sheet;

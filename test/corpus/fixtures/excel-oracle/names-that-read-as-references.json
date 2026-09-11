@@ -1,0 +1,29 @@
+{
+  "invariant": "names-that-read-as-references",
+  "description": "Which names does Excel read as a reference where it expects a name? Asked two ways over overlapping lists. (1) Table names: a one-table workbook written by this library under each name, opened interactively; a name Excel does not accept makes it offer to repair the package. (2) Sheet names: a worksheet renamed to each name over COM, then a formula ='<name>'!B2 assigned on another sheet and read back through Range.Formula, which returns Excel's own quoting. Every name tried both ways was quoted exactly when it was refused as a table name.",
+  "probe": ".claude/skills/excel-gui-automation/scripts/open-verdict.ps1 per table workbook; a one-off COM script for the sheet-name quoting",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-11",
+  "openClass": "interactive-open (open-verdict.ps1, repair prompt dismissed with No)",
+  "tableNames": {
+    "repairPrompt": ["C", "r", "c1", "A1", "A01", "T1", "XFD1048576", "R1C1", "RC", "R1X", "R1C1X", "TRUE", "FALSE"],
+    "clean": ["Table1", "CC", "XFE1", "A0", "R0", "R1.5", "TRUE1", "XFD1048577", "R1048577", "RCX", "MyDisplay"]
+  },
+  "sheetNamesQuotedInAFormula": {
+    "quoted": ["Q1", "R1C1", "RC", "R", "C", "Rc", "rC1", "TRUE", "FALSE", "True", "fAlse", "R2", "C3", "RC1", "R1C", "A1", "Z1", "C1", "A01", "R01", "RR1", "CR1", "Rx1", "R1048576", "C16384", "C16385", "XFD1048576", "R1A", "R1X", "C1X", "R1C0", "R1R1", "C1C1", "R1C1A", "R1C1_", "R1C1.x", "R1C1R1C1", "R2C3D4", "R1C2C3"],
+    "bare": ["Sales.1", "_x", "x_1", "RR", "CC", "XFE1", "ABC", "NAME", "RCX", "TRUEX", "TRUE1", "A1B", "RX", "CX", "R_1", "C_", "RC_", "R1.5", "R0", "R1048577", "R99999999", "A1048577", "XFD1048577", "AAAA1", "A0", "RC0", "R0C1", "XFE", "AB1C", "R1.A", "T", "F", "N", "A", "Q1X", "X.Y", "A.1", "R.1", "RC.1", "A1.", "B2.3"]
+  },
+  "spans": {
+    "=SUM('Q1:Q4'!B2)": "=SUM('Q1:Q4'!B2)",
+    "=SUM(Q1:Q4!B2)": "=SUM(Q1:'Q4'!B2)",
+    "=SUM(Main!A1:Main!B2)": "=SUM(Main!A1:Main!B2)"
+  },
+  "tableDisplayName": {
+    "note": "name MyTable with displayName 'My Display Name' draws the repair prompt; displayName MyDisplay opens clean",
+    "repairPrompt": ["My Display Name"],
+    "clean": ["MyDisplay"]
+  }
+}

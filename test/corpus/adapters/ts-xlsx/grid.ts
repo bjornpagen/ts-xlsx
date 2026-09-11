@@ -1044,7 +1044,7 @@ export const grid = {
     const w2 = new Workbook();
     const dupTable = w2
       .addWorksheet('S')
-      .addTable({name: 'T2', ref: 'A1', columns: [{name: 'Dup'}, {name: 'Dup'}], rowCount: 1});
+      .addTable({name: 'Dups', ref: 'A1', columns: [{name: 'Dup'}, {name: 'Dup'}], rowCount: 1});
     writeXlsx(w2);
     const dupColumnNames = dupTable.columns.map((c) => c.name);
     const dupColumnNamesUnique =

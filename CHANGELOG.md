@@ -104,6 +104,13 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   `AuthoringError` when the pivot is added. A value field that is also a row or column field is still
   accepted.
 
+- **BREAKING: a table name that reads as a reference is refused.** `addTable` accepted `T1`, `Tbl1`,
+  `R`, `C`, `RC`, `R1C1`, `R1X` and `TRUE`, and Excel opens a package carrying any of them with its
+  repair prompt. A name that is an A1 cell on the grid, an R1C1 reference, an R1C1 row or column
+  number followed by a letter or underscore, or `TRUE`/`FALSE`, in any case, now throws `SyntaxError`.
+  A file carrying such a table reads without it. `TABLE_NAME_PATTERN` still states only the character
+  grammar.
+
 ### Fixed
 
 - **A Strict workbook could not be written back out.** `writeXlsx` threw `InternalError: two package

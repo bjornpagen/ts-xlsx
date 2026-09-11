@@ -20,7 +20,10 @@ import type {Untyped} from '../untyped.ts';
 
 const HEADER_TABLE = {
   sheets: [
-    {name: 'S', tables: [{name: 'T1', ref: 'A1', headers: ['Alpha', 'Beta'], rows: [['x', 'y']]}]},
+    {
+      name: 'S',
+      tables: [{name: 'Header', ref: 'A1', headers: ['Alpha', 'Beta'], rows: [['x', 'y']]}],
+    },
   ],
 };
 
@@ -28,7 +31,10 @@ const HEADER_TABLE = {
 // still fails this.
 const OFFSET_TABLE = {
   sheets: [
-    {name: 'S', tables: [{name: 'T2', ref: 'C3', headers: ['Gamma', 'Delta'], rows: [['x', 'y']]}]},
+    {
+      name: 'S',
+      tables: [{name: 'Anchored', ref: 'C3', headers: ['Gamma', 'Delta'], rows: [['x', 'y']]}],
+    },
   ],
 };
 
@@ -37,7 +43,13 @@ const HEADERLESS_TABLE = {
     {
       name: 'S',
       tables: [
-        {name: 'T3', ref: 'A1', headers: ['Alpha', 'Beta'], rows: [['x', 'y']], headerRow: false},
+        {
+          name: 'Headerless',
+          ref: 'A1',
+          headers: ['Alpha', 'Beta'],
+          rows: [['x', 'y']],
+          headerRow: false,
+        },
       ],
     },
   ],

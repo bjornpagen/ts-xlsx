@@ -1,10 +1,10 @@
 // Cluster: security
 //
 // Real-world scenario: a `.xlsx` this library did not write names a sheet twice, names one nothing
-// at all, puts a `/` in one, runs one past 31 characters, or calls a table `1 bad`. Excel repairs
-// every one of those on load. The reader used to hand each straight to the model's authoring guards
-// and let the refusal out: an `AuthoringError`, which the taxonomy defines as "the calling code is
-// wrong, never the input file", or -- worse for the two table names -- a native `SyntaxError` or
+// at all, puts a `/` in one, runs one past 31 characters, or calls a table `1 bad` or `T1`. Excel
+// repairs every one of those on load. The reader used to hand each straight to the model's authoring
+// guards and let the refusal out: an `AuthoringError`, which the taxonomy defines as "the calling code
+// is wrong, never the input file", or -- worse for the table names -- a native `SyntaxError` or
 // `RangeError`, which `catch (e) { if (e instanceof XlsxError) … }` does not see at all, so the
 // caller cannot tell "your file is broken" from "my own code threw".
 //
@@ -94,6 +94,7 @@ export default {
         for (const mutation of [
           'table name that is not an identifier',
           'table name over the length limit',
+          'table name that reads as a cell',
         ]) {
           const row = byMutation.get(mutation);
           assert.equal(row?.tables, 0, `${mutation}: the table is dropped`);
