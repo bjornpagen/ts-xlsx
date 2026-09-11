@@ -8,6 +8,11 @@
 // module is the single place that knows the mangling, shared by the xlsx writer and reader like
 // address.ts and date.ts own their domains.
 //
+// A built-in function passed as a value, the `SUM` in `BYROW(A1:A3,SUM)`, takes a third prefix,
+// `_xleta.`, and that one depends on the workbook around the formula: a defined name spelled like the
+// function captures the bare name, so where such a name is in scope the bare name means the name. Both
+// directions are therefore told which names the workbook defines.
+//
 // Moving the references a formula makes, for a shared-formula clone or a splice, is
 // `core/formula-references.ts`. Both passes skip the text a reference cannot sit in through
 // `core/formula-scan.ts`; `mangleParams` runs its own forward walk, because LET/LAMBDA parameter scope
@@ -17,9 +22,11 @@
 import {assertWritableNumber} from '../errors.ts';
 import {nameReadsAsReference} from './address.ts';
 import {scanFormula, skipOpaque} from './formula-scan.ts';
+import {FUNCTION_VALUE_NAMES} from './function-values.ts';
 import {FUTURE_FUNCTION_PREFIXES} from './future-functions.ts';
 
 const XLPM = '_xlpm.';
+const XLETA = '_xleta.';
 
 /**
  * Quote a sheet name for use in a reference exactly when Excel would: a name that is not a plain
@@ -61,6 +68,7 @@ const SCOPING_FUNCTIONS: ReadonlySet<string> = new Set(['LET', 'LAMBDA']);
 // (SUM(FILTER(…))) both match.
 const FUNCTION_CALL = /(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_.]*)(\s*\()/g;
 const PREFIX = /_xlfn\.(?:_xlws\.)?|_xlpm\./g;
+const FUNCTION_VALUE_PREFIX = /_xleta\.([A-Za-z_][A-Za-z0-9_.]*)/g;
 
 /**
  * Prefix every future function called by its plain name with the prefix Excel stores it under
@@ -80,13 +88,24 @@ export function mangleFunctions(formula: string): string {
 }
 
 /**
- * Strip the `_xlfn.` function prefix (with the `_xlws.` a worksheet-only function adds after it) and
- * the `_xlpm.` LET-parameter prefix back to the plain names, so the model holds the readable form
- * regardless of how a file stored it. Opaque regions (string literals, sheet names, structured
- * references) are left untouched.
+ * Strip the `_xlfn.` function prefix (with the `_xlws.` a worksheet-only function adds after it), the
+ * `_xlpm.` LET-parameter prefix and the `_xleta.` prefix of a function passed as a value back to the
+ * plain names, so the model holds the readable form regardless of how a file stored it. Opaque regions
+ * (string literals, sheet names, structured references) are left untouched.
+ *
+ * `definedNames` is every name the workbook defines, whatever its scope, as {@link definedNameKeys}
+ * spells them. A function passed as a value keeps its prefix when one of them is spelled like it,
+ * since the bare name could then read as that name. Excel's own formula text does the same: with a
+ * `LEN` defined only on another sheet, `Range.Formula` still reports `MAP(A1:A3,_xleta.LEN)`.
  */
-export function unmangleFunctions(formula: string): string {
-  return scanFormula(formula, (code) => code.replace(PREFIX, ''));
+export function unmangleFunctions(formula: string, definedNames: ReadonlySet<string>): string {
+  return scanFormula(formula, (code) =>
+    code
+      .replace(PREFIX, '')
+      .replace(FUNCTION_VALUE_PREFIX, (whole, name: string) =>
+        definedNames.has(name.toUpperCase()) ? whole : name,
+      ),
+  );
 }
 
 const NAME_START = /[A-Za-z_]/;
@@ -252,12 +271,100 @@ export function mangleParams(formula: string): string {
 }
 
 /**
- * Mangle a model formula into its on-disk form: LET/LAMBDA parameter names first (`_xlpm.`), then the
- * modern-function prefix (`_xlfn.`). Ordering matters: parameter mangling reads the plain LET/LAMBDA
- * names before the function pass qualifies them. The inverse for both prefixes is unmangleFunctions.
+ * Prefix every built-in function a formula passes as a value with `_xleta.`, uppercased as Excel writes
+ * it, so Excel reads the function rather than a defined name spelled like it. A value is any use that
+ * is not a call: the `SUM` in `BYROW(A1:A3,SUM)`, in `LET(f,SUM,f(A1:A3))`, in `SUM+1`.
+ *
+ * `namesInScope` is {@link formulaNamesInScope} for where the formula sits, and a function name among
+ * them stays bare, because there it means the defined name. Run after {@link mangleParams}, so that a
+ * LET or LAMBDA parameter spelled like a function already carries `_xlpm.`.
+ *
+ * A name is not a value where it names a sheet (`SUM!A1`, `SUM:Other!A1`) or a table (`Rate[Amount]`),
+ * where a sheet or workbook qualifies it (`S1!SUM`), or inside an error literal: the `N` of `#N/A` is a
+ * function too.
  */
-export function mangleFormula(formula: string): string {
-  return mangleFunctions(mangleParams(formula));
+export function mangleFunctionValues(formula: string, namesInScope: ReadonlySet<string>): string {
+  let out = '';
+  let i = 0;
+  while (i < formula.length) {
+    const past = skipOpaque(formula, i);
+    if (past > i) {
+      out += formula.slice(i, past);
+      i = past;
+      continue;
+    }
+    const end = readName(formula, i);
+    if (end === i) {
+      out += formula.charAt(i);
+      i += 1;
+      continue;
+    }
+    const name = formula.slice(i, end);
+    out += isFunctionValue(formula, i, end, namesInScope) ? `${XLETA}${name.toUpperCase()}` : name;
+    i = end;
+  }
+  return out;
+}
+
+// What may sit just before a name that makes it something other than a bare name: a sheet or workbook
+// qualifier's `!` or `]`, and the `#` of an error literal. A name or number character cannot, since the
+// walk reads a name whole, but the digits of a number can (`1E3`), and a `.` ends one.
+const QUALIFIES_NAME = /[A-Za-z0-9_.!#\]]/;
+// What may sit just after a name that makes it a sheet (`SUM!A1`), one end of a sheet span
+// (`SUM:Other!A1`) or a table (`Rate[Amount]`).
+const NAMES_A_CONTAINER = /[!:[]/;
+
+function isFunctionValue(
+  formula: string,
+  start: number,
+  end: number,
+  namesInScope: ReadonlySet<string>,
+): boolean {
+  const name = formula.slice(start, end).toUpperCase();
+  if (!FUNCTION_VALUE_NAMES.has(name) || namesInScope.has(name)) return false;
+  if (QUALIFIES_NAME.test(formula.charAt(start - 1))) return false;
+  if (NAMES_A_CONTAINER.test(formula.charAt(end))) return false;
+  // Called, whatever space the author left before the paren, which is what the `_xlfn.` pass reads as a
+  // call too.
+  let next = end;
+  while (WHITESPACE.test(formula.charAt(next))) next += 1;
+  return formula.charAt(next) !== '(';
+}
+
+/**
+ * How a formula compares names: uppercased, as Excel's names are case-insensitive. The reader's form of
+ * the set {@link unmangleFunctions} takes, built from every name the workbook defines.
+ */
+export function definedNameKeys(names: readonly {readonly name: string}[]): ReadonlySet<string> {
+  return new Set(names.map(({name}) => name.toUpperCase()));
+}
+
+/**
+ * The names a bare name in a formula resolves to, as {@link definedNameKeys} spells them: every
+ * workbook-level name, and the names scoped to `sheet`. For a cell formula `sheet` is the cell's own
+ * sheet; for a defined name's formula it is the sheet that name is scoped to, and `undefined` for a
+ * workbook-level name. A sheet is matched case-insensitively, as it is everywhere else.
+ */
+export function formulaNamesInScope(
+  names: readonly {readonly name: string; readonly scope?: string | undefined}[],
+  sheet: string | undefined,
+): ReadonlySet<string> {
+  const wanted = sheet?.toLowerCase();
+  return definedNameKeys(
+    names.filter(({scope}) => scope === undefined || scope.toLowerCase() === wanted),
+  );
+}
+
+/**
+ * Mangle a model formula into its on-disk form: LET/LAMBDA parameter names first (`_xlpm.`), then the
+ * functions it passes as values (`_xleta.`), then the modern-function prefix (`_xlfn.`). Ordering
+ * matters: parameter mangling reads the plain LET/LAMBDA names before the function pass qualifies them,
+ * and a parameter spelled like a function has to carry `_xlpm.` before the value pass looks for
+ * functions. `namesInScope` is {@link formulaNamesInScope} for where the formula sits. The inverse for
+ * every prefix is unmangleFunctions.
+ */
+export function mangleFormula(formula: string, namesInScope: ReadonlySet<string>): string {
+  return mangleFunctions(mangleFunctionValues(mangleParams(formula), namesInScope));
 }
 
 /**

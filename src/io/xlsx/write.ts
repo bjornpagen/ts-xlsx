@@ -10,6 +10,7 @@
 import {strToU8, zip, zipSync} from 'fflate';
 
 import type {Person} from '../../core/comment-thread.ts';
+import {formulaNamesInScope} from '../../core/formula.ts';
 import {pictureProperties} from '../../core/image.ts';
 import type {Workbook} from '../../core/workbook.ts';
 import {refuseImagesBesideKeptDrawing, type Worksheet} from '../../core/worksheet.ts';
@@ -516,6 +517,7 @@ function serialiseSheets(context: {
       hyperlinks: sheetPlan.hyperlinks,
       sharedStrings,
       dateEpoch: workbook.dateEpoch,
+      formulaNames: formulaNamesInScope(workbook.definedNames, sheet.name),
       // Exactly one sheet is marked selected; the model resolves which, so no package can ship with
       // none selected (no view initialised on open) or with several (an accidental group selection,
       // where an edit to one sheet lands on all of them).

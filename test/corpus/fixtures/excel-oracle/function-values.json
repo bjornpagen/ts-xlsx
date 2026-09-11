@@ -1,0 +1,77 @@
+{
+  "invariant": "function-values",
+  "description": "How a built-in function a formula passes as a value is stored, and what decides it. Formulas were given to Excel through Range.Formula2 in fresh workbooks, one workbook per question so that a name one formula introduced could not capture the next, then saved and the stored <f> text read out of the package. Excel prefixes the name with _xleta. and uppercases it in every position it was given one; it leaves the name bare where it names a sheet, and where a defined name spelled like the function is visible from the formula (a workbook-level name, or one scoped to the formula's own sheet). A name scoped to another sheet does not capture it, but Range.Formula still reports the prefix while any name of that spelling exists.",
+  "probe": "one-off COM scripts (Workbooks.Add, Names.Add, Range.Formula2, SaveAs as .xlsx and .xlsb); tools/excel-oracle/run.ts --xlsx on this library's package and on a control",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-12",
+  "openClass": "headless COM (DisplayAlerts off) for the saves; run.ts opens read-only and reports no repair for both packages below",
+  "stored": {
+    "=BYROW(A1:A3,sum)": "_xlfn.BYROW(A1:A3,_xleta.SUM)",
+    "=SUM": "_xleta.SUM",
+    "=IF(TRUE,SUM,1)": "IF(TRUE,_xleta.SUM,1)",
+    "=IFERROR(SUM+1,0)": "IFERROR(_xleta.SUM+1,0)",
+    "=IFERROR(-SUM,0)": "IFERROR(-_xleta.SUM,0)",
+    "=BYROW(A1:A3,(SUM))": "_xlfn.BYROW(A1:A3,(_xleta.SUM))",
+    "=LET(f,SUM,f(A1:A3))": "_xlfn.LET(_xlpm.f,_xleta.SUM,_xlpm.f(A1:A3))",
+    "=CHOOSE(1,SUM,MAX)(A1:A3)": "CHOOSE(1,_xleta.SUM,_xleta.MAX)(A1:A3)",
+    "=HSTACK(SUM,MAX)": "_xlfn.HSTACK(_xleta.SUM,_xleta.MAX)",
+    "=BYROW(A1:A3, SUM )": "_xlfn.BYROW(A1:A3, _xleta.SUM )",
+    "=BYROW(A1:A3,T.TEST)": "_xlfn.BYROW(A1:A3,_xleta.T.TEST)",
+    "=BYROW(A1:A3,FILTER)": "_xlfn.BYROW(A1:A3,_xleta.FILTER)",
+    "=IFERROR(@SUM,0)": "IFERROR(_xlfn.SINGLE(_xleta.SUM),0)",
+    "=LET(SUM,A1:A3,SUM)": "_xlfn.LET(_xlpm.SUM,A1:A3,_xlpm.SUM)",
+    "=LAMBDA(SUM,SUM)(1)": "_xlfn.LAMBDA(_xlpm.SUM,_xlpm.SUM)(1)",
+    "=BYROW(A1:A3,LOG10)": "_xlfn.BYROW(A1:A3,LOG10)",
+    "=BYROW(A1:A3,TRUE)": "_xlfn.BYROW(A1:A3,TRUE)",
+    "=BYROW(A1:A3,LAMBDA)": "_xlfn.BYROW(A1:A3,LAMBDA)",
+    "=BYROW(A1:A3,NETWORKDAYS.INTL)": "_xlfn.BYROW(A1:A3,NETWORKDAYS.INTL)",
+    "=BYROW(A1:A3,S1!SUM)": "_xlfn.BYROW(A1:A3,'S1'!SUM)",
+    "=SUM!A1+SUM(SUM!A1:A3), on a sheet named SUM": "SUM!A1+SUM(SUM!A1:A3)",
+    "=SUM (A1:A3)": "refused by Range.Formula2 (0x800A03EC)"
+  },
+  "scope": {
+    "workbook-level LEN, =BYROW(A1:A3,LEN) on any sheet": "_xlfn.BYROW(A1:A3,LEN)",
+    "LEN scoped to S2, =MAP(A1:A3,LEN) on S2": "_xlfn.MAP(A1:A3,LEN)",
+    "LEN scoped to S2, =MAP(A1:A3,LEN) on S1": "_xlfn.MAP(A1:A3,_xleta.LEN), and Range.Formula reports =MAP(A1:A3,_xleta.LEN)",
+    "no name, =BYROW(A1:A3,SUM) in the workbook-level name Totals": "_xlfn.BYROW('S1'!$A$1:$A$3,_xleta.SUM)",
+    "S2 scoped name typed as =MAP(A1:A3,_xleta.LEN) on S2": "kept as _xlfn.MAP(A1:A3,_xleta.LEN), computing the function"
+  },
+  "classification": {
+    "method": "one cell =MAP(1,<name>) per name, in a fresh workbook with no defined names, for the [MS-XLS] function table, the future-function registry, the Analysis ToolPak functions and every member of Application.WorksheetFunction (with _ read as .)",
+    "prefixed": 528,
+    "bare": [
+      "LOG10", "TRUE", "FALSE",
+      "the XLM macro functions of the [MS-XLS] table (GOTO, HALT, GET.CELL, ... 116 names)",
+      "LAMBDA", "LET", "PYTHON_STR", "PYTHON_TYPE", "PYTHON_TYPENAME", "QUERYSTRING",
+      "NETWORKDAYS.INTL", "WORKDAY.INTL", "ISO.CEILING", "ECMA.CEILING"
+    ],
+    "xlsb": "the binary save registers each prefixed name and parameter as a BrtName (_xleta.SUM, _xlpm.x) without the function flag, with target #NAME?"
+  },
+  "fixture": {
+    "file": "function-passed-as-a-value/excel-saved.xlsx and .xlsb",
+    "names": {"S2!LEN": "=LAMBDA(x,x*7)", "Totals": "=SUM(BYROW(S1!$A$1:$A$3,SUM))"},
+    "cells": {
+      "S1!E1": {"typed": "=SUM(BYROW(A1:A3,SUM))", "formula": "=SUM(BYROW(A1:A3,SUM))", "value": "6"},
+      "S1!E2": {"typed": "=CONCAT(BYROW(A1:A3,CONCAT))", "formula": "=CONCAT(BYROW(A1:A3,CONCAT))", "value": "123"},
+      "S1!E3": {"typed": "=SUM(MAP(A1:A3,LEN))", "formula": "=SUM(MAP(A1:A3,_xleta.LEN))", "value": "3"},
+      "S1!E4": {"typed": "=LET(f,MAX,f(A1:A3))", "formula": "=LET(f,MAX,f(A1:A3))", "value": "3"},
+      "S1!E5": {"typed": "=ISERROR(SUM+1)", "formula": "=ISERROR(SUM+1)", "value": "TRUE"},
+      "S1!E6": {"typed": "=Totals", "formula": "=Totals", "value": "6"},
+      "S2!E1": {"typed": "=SUM(MAP(A1:A3,LEN))", "formula": "=SUM(MAP(A1:A3,LEN))", "value": "42"},
+      "S2!E2": {"typed": "=SUM(MAP(A1:A3,_xleta.LEN))", "formula": "=SUM(MAP(A1:A3,_xleta.LEN))", "value": "3"}
+    }
+  },
+  "writtenByThisLibrary": {
+    "what": "the fixture's names and typed formulas authored through the model, written with fullCalcOnLoad",
+    "repaired": false,
+    "values": {"S1!E1": "6", "S1!E2": "123", "S1!E3": "3", "S1!E4": "3", "S1!E5": "TRUE", "S1!E6": "6", "S2!E1": "42", "S2!E2": "3"}
+  },
+  "controlWithoutThePrefix": {
+    "what": "the same package with every _xleta. removed from its parts",
+    "repaired": false,
+    "values": {"S1!E1": "#VALUE!", "S1!E2": "#VALUE!", "S1!E3": "#VALUE!", "S1!E4": "#NAME?", "S1!E5": "TRUE", "S1!E6": "#VALUE!", "S2!E1": "42", "S2!E2": "42"}
+  }
+}

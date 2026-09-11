@@ -113,7 +113,7 @@ interface DeferredFormula {
  * its token stream decodes to through `scope`.
  */
 export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext): void {
-  const {sheet, xfStyles, scope} = context;
+  const {sheet, xfStyles, scope, definedNames} = context;
   // The open row, one-based as the model counts them. -1 means none is open, which a cell record
   // arriving before any row header (a malformed sheet) is dropped against rather than guessed at.
   let row = -1;
@@ -187,7 +187,7 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
     member.cell.value =
       group === undefined || !own
         ? (member.result ?? null)
-        : formulaValue(decodeFormula(group.rgce, group.rgcb, scope), member.result);
+        : formulaValue(decodeFormula(group.rgce, group.rgcb, scope), member.result, definedNames);
   }
 }
 
@@ -208,6 +208,9 @@ export interface WorksheetReadContext {
   readonly scope: FormulaScope;
   /** The workbook's date system, from `BrtWbProp`: what a serial under a date format counts from. */
   readonly dateEpoch: DateEpoch;
+  /** Every name the workbook defines, as `definedNameKeys` spells them: whether a function a formula
+   * passes as a value sheds its `_xleta.` depends on them, as it does in the XML reader. */
+  readonly definedNames: ReadonlySet<string>;
 }
 
 /** What reading one cell record needs: the sheet around it, and the row it is currently inside. */
@@ -230,7 +233,8 @@ function readCellRecord(
   reader: RecordReader,
   context: CellRecordContext,
 ): DeferredFormula | undefined {
-  const {sheet, sharedStrings, xfStyles, scope, dateEpoch, row, styleResolution} = context;
+  const {sheet, sharedStrings, xfStyles, scope, dateEpoch, definedNames, row, styleResolution} =
+    context;
   // A cell record arriving before any row header is dropped rather than guessed at.
   if (row <= 0) return undefined;
   const {column, styleIndex} = reader.cell();
@@ -254,7 +258,7 @@ function readCellRecord(
   const rgcb = reader.bytes(reader.u32());
   const anchor = formulaAnchor(rgce, rgcb);
   if (anchor === undefined) {
-    cell.value = formulaValue(decodeFormula(rgce, rgcb, scope), result);
+    cell.value = formulaValue(decodeFormula(rgce, rgcb, scope), result, definedNames);
     return undefined;
   }
   return {
@@ -274,10 +278,14 @@ function groupKey(row: number, column: number): string {
 // Pair a decoded formula with its cached result, in the shape the XML reader produces for the same
 // cell. A formula the decoder could not read leaves the value alone: the cached result is still true,
 // and is what this reader surfaced before formulas were decoded at all.
-function formulaValue(formula: string | undefined, result: FormulaResult | undefined): CellValue {
+function formulaValue(
+  formula: string | undefined,
+  result: FormulaResult | undefined,
+  definedNames: ReadonlySet<string>,
+): CellValue {
   if (formula === undefined) return result ?? null;
-  // Strip the `_xlfn.`/`_xlpm.` on-disk mangling, as the XML reader does, so the model never holds it.
-  const stored = unmangleFunctions(formula);
+  // Strip the on-disk mangling, as the XML reader does, so the model never holds it.
+  const stored = unmangleFunctions(formula, definedNames);
   return result === undefined ? {formula: stored} : {formula: stored, result};
 }
 

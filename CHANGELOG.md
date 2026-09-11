@@ -47,6 +47,16 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Changed
 
+- **BREAKING: a function passed as a value is read and written as Excel spells it.** A formula that
+  hands a built-in function to a LAMBDA helper by name, like `=BYROW(A1:A3,SUM)` or
+  `=LET(f,MAX,f(A1:A3))`, was written with a bare `SUM`, which Excel reads as a defined name and shows
+  as `#VALUE!` or `#NAME?`. It is written as `_xleta.SUM` now, the way Excel stores it, except where a
+  defined name spelled like the function is visible from the formula, where the bare name means that
+  name. A read sheds the prefix in the same way, so a formula read from a file says `BYROW(A1:A3,SUM)`
+  where it used to say `BYROW(A1:A3,_xleta.SUM)`; the prefix stays only when the workbook defines a
+  name of that spelling, which is also when Excel's own formula text keeps it. `readXlsb` no longer
+  reports the `_xleta.` and `_xlpm.` names a binary workbook keeps for its formulas as defined names.
+
 - **BREAKING: a row or column splice moves the references in formula text, as Excel does.**
   `spliceRows`, `spliceColumns`, `insertRow` and the other structural edits used to leave formulas
   as written, so `=SUM(A1:A10)` above an inserted row kept summing `A1:A10`. The references to the

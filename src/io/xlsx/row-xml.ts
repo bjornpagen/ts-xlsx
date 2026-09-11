@@ -160,6 +160,9 @@ export interface RowRenderContext {
   readonly collapsedSummaries: ReadonlySet<number>;
   /** The workbook's date system, which is what a `Date` cell's serial counts from. */
   readonly dateEpoch: DateEpoch;
+  /** The defined names a bare name in this sheet's formulas resolves to, as `formulaNamesInScope`
+   * gives them: a function passed as a value is written bare where one of them captures its name. */
+  readonly formulaNames: ReadonlySet<string>;
 }
 
 /**
@@ -194,13 +197,7 @@ export function renderRow(
       const style = ctx.styles.styleId(
         composeCellStyle(cell, rowFill, ctx.columnDefaults.get(cell.col)),
       );
-      return cellXml(
-        cell,
-        style,
-        ctx.sharedRoles.get(cell.address),
-        ctx.sharedStrings,
-        ctx.dateEpoch,
-      );
+      return cellXml(cell, style, ctx.sharedRoles.get(cell.address), ctx);
     })
     .join('');
   let minCol = Infinity;
@@ -364,14 +361,14 @@ function cellXml(
   cell: Cell,
   style: number,
   shared: SharedFormulaRole | undefined,
-  sharedStrings: SharedStringTable | null,
-  epoch: DateEpoch,
+  ctx: RowRenderContext,
 ): string {
+  const {sharedStrings, dateEpoch: epoch} = ctx;
   const ref = cell.address;
   const value = cell.value;
   const s = style !== 0 ? ` s="${style}"` : '';
 
-  const formula = cellFormulaXml(ref, s, value, shared, epoch);
+  const formula = cellFormulaXml(ref, s, value, shared, ctx);
   if (formula !== undefined) return formula;
 
   const body = valueBody(value, epoch);
@@ -415,14 +412,15 @@ function cellFormulaXml(
   s: string,
   value: Cell['value'],
   shared: SharedFormulaRole | undefined,
-  epoch: DateEpoch,
+  ctx: RowRenderContext,
 ): string | undefined {
+  const {dateEpoch: epoch, formulaNames} = ctx;
   // A shared-formula master seeds the group with its formula text under `t="shared" ref si`; a clone
   // carries no text of its own, only a back-reference to the master's `si`. Its cached result still
   // travels with the cell.
   if (shared !== undefined) {
     if (shared.ref !== undefined && isFormulaValue(value)) {
-      const f = `<f t="shared" ref="${shared.ref}" si="${shared.si}">${escapeText(mangleFormula(value.formula))}</f>`;
+      const f = `<f t="shared" ref="${shared.ref}" si="${shared.si}">${escapeText(mangleFormula(value.formula, formulaNames))}</f>`;
       return formulaBodyXml(ref, s, f, value.result, epoch);
     }
     const result = isSharedFormulaValue(value) ? value.result : undefined;
@@ -446,7 +444,7 @@ function cellFormulaXml(
     return formulaBodyXml(
       ref,
       s,
-      `<f>${escapeText(mangleFormula(value.formula))}</f>`,
+      `<f>${escapeText(mangleFormula(value.formula, formulaNames))}</f>`,
       value.result,
       epoch,
     );

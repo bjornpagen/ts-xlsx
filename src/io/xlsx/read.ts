@@ -126,7 +126,7 @@ export function readXlsx(data: Uint8Array, options: ReadPackageOptions = {}): Wo
   // Everything the part readers below share for the whole of this read, built once and handed down.
   // The workbook-level readers run before the sheet loop and the sheet-level ones inside it, and all
   // of them resolve parts against the same package and intern media into the same map.
-  const context: SheetReadContext = {
+  const context = {
     pkg,
     workbook,
     contentTypeOf,
@@ -135,7 +135,7 @@ export function readXlsx(data: Uint8Array, options: ReadPackageOptions = {}): Wo
     // A picture used on more than one sheet is one media part; caching by media path across the
     // whole loop keeps it a single workbook image so a re-write does not duplicate the bytes.
     imageIdByMediaPath: new Map<string, number>(),
-  };
+  } satisfies Omit<SheetReadContext, 'definedNames'>;
   // The four sub-tables the stylesheet carries verbatim, all captured by the same read of the part
   // that resolved the xfs above rather than by four more scans of it.
   //
@@ -190,6 +190,9 @@ export function readXlsx(data: Uint8Array, options: ReadPackageOptions = {}): Wo
   // resolves its authors and @mentions through it, so it is restored before the sheet loop that reads
   // those conversations, not alongside the other workbook-level parts below.
   readWorkbookPersons(context, workbookRels);
+  // The names are known from the workbook part alone, which is what lets a sheet's formulas be read
+  // against them although the names themselves are registered only after the sheets.
+  const sheetContext: SheetReadContext = {...context, definedNames: definedNames.spellings()};
 
   const sheetOrder: string[] = [];
   // The name is repaired rather than trusted. `addWorksheet` refuses an empty, over-long, duplicate
@@ -201,7 +204,7 @@ export function readXlsx(data: Uint8Array, options: ReadPackageOptions = {}): Wo
     const target = workbookRels.byId(relId)?.target;
     const sheet = workbook.addWorksheet(name, state === undefined ? undefined : {state});
     sheetOrder.push(sheet.name);
-    readSheet(sheet, target === undefined ? undefined : workbookRels.pathOf(target), context);
+    readSheet(sheet, target === undefined ? undefined : workbookRels.pathOf(target), sheetContext);
   }
 
   readWorkbookPreservedReferences(context, workbookRels, {
@@ -229,6 +232,8 @@ export function readXlsx(data: Uint8Array, options: ReadPackageOptions = {}): Wo
 interface SheetReadContext extends PackageReadContext {
   readonly sharedStrings: readonly SharedString[];
   readonly xfStyles: readonly XfStyle[];
+  /** Every name the workbook defines, as `definedNameKeys` spells them, for the sheet's formulas. */
+  readonly definedNames: ReadonlySet<string>;
 }
 
 /**
@@ -251,7 +256,7 @@ interface SheetReadContext extends PackageReadContext {
  * the order rather than vanishing from the workbook.
  */
 function readSheet(sheet: Worksheet, path: string | undefined, context: SheetReadContext): void {
-  const {pkg, workbook, sharedStrings, xfStyles} = context;
+  const {pkg, workbook, sharedStrings, xfStyles, definedNames} = context;
   const {partText} = pkg;
   const sheetXml = path === undefined ? undefined : partText(path);
 
@@ -265,7 +270,7 @@ function readSheet(sheet: Worksheet, path: string | undefined, context: SheetRea
   const references = worksheetReferencePass();
   if (sheetXml !== undefined) {
     parseXmlPasses(sheetXml, [
-      worksheetPass(sheet, sharedStrings, xfStyles, workbook.dateEpoch),
+      worksheetPass(sheet, sharedStrings, xfStyles, workbook.dateEpoch, definedNames),
       hyperlinks,
       validations,
       extendedValidations,

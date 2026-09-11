@@ -91,13 +91,20 @@ export class CellAccumulator {
   // The workbook's date system: not a fact about any cell, but an input to every cell's decode, so it
   // is held for the sheet rather than passed through `finalize`/`decode`/`cachedResult` three times.
   readonly #dateEpoch: DateEpoch;
+  // The workbook's defined names, held for the sheet on the same terms: whether a function a formula
+  // passes as a value sheds its `_xleta.` depends on them.
+  readonly #definedNames: ReadonlySet<string>;
 
-  constructor(options: {readonly dateEpoch: DateEpoch}) {
+  constructor(options: {
+    readonly dateEpoch: DateEpoch;
+    readonly definedNames: ReadonlySet<string>;
+  }) {
     // Both worksheet readers read an inline string's runs. A pooled string's runs are read for both
     // by the shared-string reader, so flattening here only made the streamed value depend on whether
     // the producer inlined the string or pooled it.
     this.#runs = new RunAccumulator({container: 'is', readRuns: true});
     this.#dateEpoch = options.dateEpoch;
+    this.#definedNames = options.definedNames;
   }
 
   /** This cell's `<c r>` address (`"B3"`), or '' when it carried none. */
@@ -335,7 +342,7 @@ export class CellAccumulator {
         );
         return {
           sharedFormula: encodeAddress(master.col, master.row),
-          formula: unmangleFunctions(translated),
+          formula: unmangleFunctions(translated, this.#definedNames),
           // A clone's cached result honours the cell's date format the same way a plain formula's does.
           ...this.#cachedResult(style),
         };
@@ -369,6 +376,12 @@ export class CellAccumulator {
       inlineText: this.#runs.plainText,
       richTextRuns: this.#runs.runs,
     };
-    return decodeCellContent(raw, sharedStrings, style?.numFmt, this.#dateEpoch);
+    return decodeCellContent(
+      raw,
+      sharedStrings,
+      style?.numFmt,
+      this.#dateEpoch,
+      this.#definedNames,
+    );
   }
 }

@@ -13,7 +13,7 @@
 // which four matched no element each.
 
 import {parseDateText} from '../../core/date.ts';
-import {unmangleFunctions} from '../../core/formula.ts';
+import {definedNameKeys, unmangleFunctions} from '../../core/formula.ts';
 import {
   WORKBOOK_PROTECTION_CREDENTIAL_ATTRS,
   type WorkbookProtection,
@@ -157,6 +157,13 @@ export interface DefinedNamesPass extends SaxPass {
    * and repaired the names it had to; resolving during the scan would have forced a second one.
    */
   result(sheetOrder: readonly string[]): DefinedName[];
+
+  /**
+   * Every name the part defines, whatever its scope, as `definedNameKeys` spells them. Known once the
+   * scan ends, before any sheet is read, and needed then: whether a function a formula passes as a value
+   * sheds its `_xleta.` depends on them.
+   */
+  spellings(): ReadonlySet<string>;
 }
 
 export function definedNamesPass(): DefinedNamesPass {
@@ -189,9 +196,9 @@ export function definedNamesPass(): DefinedNamesPass {
       onClose(name) {
         const text = refersTo.close(localName(name));
         if (text === undefined || pending === undefined) return;
-        // Strip the `_xlfn.`/`_xlpm.` prefixes back to the readable name, the same normalisation the
-        // reader applies to a cell formula, so the model never holds the on-disk mangling.
-        drafts.push({...pending, refersTo: unmangleFunctions(text)});
+        // Kept as stored until `result`: a name's formula can pass a function as a value, and whether
+        // that sheds its prefix depends on names the part may declare after this one.
+        drafts.push({...pending, refersTo: text});
         pending = undefined;
       },
     },
@@ -200,12 +207,19 @@ export function definedNamesPass(): DefinedNamesPass {
     // into an open plus a close, it commits through the same path every other name does.
     closeEmptyElements: new Set(['definedName']),
     result(sheetOrder) {
-      return drafts.map(({localSheetId, ...draft}) => {
+      const names = definedNameKeys(drafts);
+      return drafts.map(({localSheetId, refersTo: stored, ...draft}) => {
+        // Stripped back to the readable form, the same normalisation a cell formula gets, so the model
+        // never holds the on-disk mangling.
+        const named = {...draft, refersTo: unmangleFunctions(stored, names)};
         // A name whose localSheetId is out of range (a foreign file referencing a sheet we did not
         // load) is left global rather than dropped.
         const scope = sheetOrder[localSheetId];
-        return scope === undefined ? draft : {...draft, scope};
+        return scope === undefined ? named : {...named, scope};
       });
+    },
+    spellings() {
+      return definedNameKeys(drafts);
     },
   };
 }

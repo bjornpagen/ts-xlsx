@@ -47,15 +47,18 @@ export interface RawCell {
  * numeric cell under a date number format becomes a {@link Date}; everything else decodes by its
  * `t` type. `numFmt` is the cell's resolved number-format code, used only for date detection, and
  * `epoch` the workbook's date system, which is what a serial under such a format counts from.
+ * `definedNames` is the workbook's defined names as `definedNameKeys` spells them, which decide whether
+ * a function passed as a value sheds its `_xleta.`.
  */
 export function decodeCellContent(
   raw: RawCell,
   sharedStrings: readonly SharedString[],
   numFmt: string | undefined,
   epoch: DateEpoch,
+  definedNames: ReadonlySet<string>,
 ): CellValue {
   if (raw.hasFormula) {
-    const stored = unmangleFunctions(raw.formula);
+    const stored = unmangleFunctions(raw.formula, definedNames);
     const result = raw.hasValue
       ? decodeFormulaResult(raw.type, raw.valueText, numFmt, epoch)
       : undefined;

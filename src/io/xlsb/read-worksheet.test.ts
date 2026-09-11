@@ -42,6 +42,7 @@ test('a formula whose decoded text would outgrow any real formula keeps its cach
       names: ['x'.repeat(1 << 20)],
     },
     dateEpoch: 1900,
+    definedNames: new Set(),
   });
   assert.equal(sheet.getCell('A1').value, 7);
 });
@@ -64,6 +65,7 @@ test('full-width column runs are charged to one per-sheet budget, however many a
       xfStyles: [],
       scope: {sheetNames: ['S'], externSheets: [], selfSupBook: undefined, names: []},
       dateEpoch: 1900,
+      definedNames: new Set(),
     });
     assert.equal(touched, 4 * MAX_COLUMN, `${count} full-width runs touched ${touched} columns`);
     assert.equal(getColumn(MAX_COLUMN).hidden, true, 'and the runs the budget affords still apply');

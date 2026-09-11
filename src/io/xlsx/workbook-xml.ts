@@ -2,7 +2,7 @@
 // defined names, calc/protection settings, pivot-cache and slicer registrations), and the `docProps`
 // core/app property parts. The root and workbook `.rels` parts are the writer's relationship ledgers.
 
-import {mangleFormula, quoteSheetName} from '../../core/formula.ts';
+import {formulaNamesInScope, mangleFormula, quoteSheetName} from '../../core/formula.ts';
 import {WORKBOOK_PROTECTION_CREDENTIAL_ATTRS} from '../../core/workbook-protection.ts';
 import type {Workbook, WorkbookProperties} from '../../core/workbook.ts';
 import {isVisibility, type Worksheet} from '../../core/worksheet.ts';
@@ -413,10 +413,11 @@ function calcPrXml(workbook: Workbook): string {
 // The `<definedNames>` block follows `<sheets>` in the schema. A sheet-scoped name carries a
 // `localSheetId`, the 0-based position of its sheet among the `<sheet>` entries, NOT the sheet's
 // own id, so the index is resolved against the worksheet order here. The refersTo formula is the
-// element's text content, run through the same `_xlfn.` function mangling the writer applies to a
-// cell formula so a name defined as a modern function (a LAMBDA, an XLOOKUP-based name) is stored
-// under the prefix Excel requires; a plain reference has no function call and passes through
-// untouched. Only names that are actually set emit anything.
+// element's text content, run through the same function mangling the writer applies to a cell formula
+// so a name defined as a modern function (a LAMBDA, an XLOOKUP-based name) is stored under the prefix
+// Excel requires; a plain reference has no function call and passes through untouched. A function the
+// formula passes as a value resolves against the names visible from the name's own scope. Only names
+// that are actually set emit anything.
 // The 0-based position of a scoped name's sheet among the `<sheet>` entries.
 //
 // Matched case-insensitively, because that is how a sheet name is identified everywhere else: sheet
@@ -449,7 +450,7 @@ function definedNamesXml(workbook: Workbook): string {
     const hiddenAttr = name.hidden ? ' hidden="1"' : '';
     return (
       `<definedName name="${escapeAttr(name.name)}"${scopeAttr}${commentAttr}${hiddenAttr}>` +
-      `${escapeText(mangleFormula(name.refersTo))}</definedName>`
+      `${escapeText(mangleFormula(name.refersTo, formulaNamesInScope(workbook.definedNames, name.scope)))}</definedName>`
     );
   });
   // Every sheet-level autofilter contributes the hidden, sheet-scoped `_FilterDatabase` built-in that

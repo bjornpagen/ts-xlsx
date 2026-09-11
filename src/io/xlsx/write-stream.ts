@@ -60,11 +60,17 @@ import type {Cell} from '../../core/cell.ts';
 import type {ConditionalFormatting} from '../../core/conditional-formatting.ts';
 import type {DataValidation} from '../../core/data-validation.ts';
 import type {DateEpoch} from '../../core/date.ts';
+import {formulaNamesInScope} from '../../core/formula.ts';
 import type {AnchorPoint} from '../../core/image.ts';
 import {INTERNAL} from '../../core/internal.ts';
 import type {SheetProtectionOptions} from '../../core/protection.ts';
 import {type CellValue, isSharedFormulaValue} from '../../core/value.ts';
-import {type AddImageOptions, type AddWorksheetOptions, Workbook} from '../../core/workbook.ts';
+import {
+  type AddImageOptions,
+  type AddWorksheetOptions,
+  type DefinedName,
+  Workbook,
+} from '../../core/workbook.ts';
 import type {ColumnProperties, Worksheet} from '../../core/worksheet.ts';
 import {AuthoringError, quoted} from '../../errors.ts';
 import {FIXED_ENTRY_MTIME} from '../opc/zip-mtime.ts';
@@ -210,6 +216,9 @@ export class WorksheetStreamWriter {
   readonly #notes: CommentCell[] = [];
 
   readonly #dateEpoch: DateEpoch;
+  // The workbook's live list, read when a row flushes: a bare name in a formula resolves against the
+  // names defined by then.
+  readonly #definedNames: readonly DefinedName[];
 
   // Private, and reached from `WorkbookStreamWriter.addWorksheet` through the static channel below.
   // A caller never builds one of these -- they receive it from `addWorksheet` -- and the parameters
@@ -220,11 +229,13 @@ export class WorksheetStreamWriter {
     eager: boolean,
     styles: StyleRegistry,
     dateEpoch: DateEpoch,
+    definedNames: readonly DefinedName[],
   ) {
     this.#sheet = sheet;
     this.#eager = eager;
     this.#styles = styles;
     this.#dateEpoch = dateEpoch;
+    this.#definedNames = definedNames;
   }
 
   /**
@@ -233,8 +244,8 @@ export class WorksheetStreamWriter {
    * `core/internal.ts`.
    */
   static readonly [INTERNAL]: WorksheetStreamWriterFactory = {
-    create(sheet, eager, styles, dateEpoch) {
-      return new WorksheetStreamWriter(sheet, eager, styles, dateEpoch);
+    create(sheet, eager, styles, dateEpoch, definedNames) {
+      return new WorksheetStreamWriter(sheet, eager, styles, dateEpoch, definedNames);
     },
   };
 
@@ -326,6 +337,7 @@ export class WorksheetStreamWriter {
         sharedRoles: new Map(),
         collapsedSummaries: new Set(),
         dateEpoch: this.#dateEpoch,
+        formulaNames: formulaNamesInScope(this.#definedNames, this.#sheet.name),
       },
     );
     if (xml !== '') {
@@ -466,6 +478,7 @@ export interface WorksheetStreamWriterFactory {
     eager: boolean,
     styles: StyleRegistry,
     dateEpoch: DateEpoch,
+    definedNames: readonly DefinedName[],
   ): WorksheetStreamWriter;
 }
 
@@ -569,6 +582,7 @@ export class WorkbookStreamWriter {
       this.#eager,
       this.#styles,
       this.#workbook.dateEpoch,
+      this.#workbook.definedNames,
     );
     this.#sheets.push(sheet);
     return sheet;

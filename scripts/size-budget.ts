@@ -77,7 +77,11 @@ const DIST = join(ROOT, 'dist');
 // schema graph, and the tag scanner that rewrites them in place, 6.5 to 7.0 KB over. The container
 // keeps only the relationship-type rule, since `/xlsb` would otherwise pay 11.5 KB for XML
 // machinery a binary workbook, which has no Strict form, never uses.
-const TOTAL_BUDGET_BYTES = 625 * 1024;
+//
+// Raised again, from 625, when a function a formula passes as a value began taking the `_xleta.`
+// prefix Excel stores it under: `core/function-values.ts`, the 528 names Excel prefixes, and the pass
+// in `core/formula.ts` that weighs each against the defined names in scope. 5.5 KB over.
+const TOTAL_BUDGET_BYTES = 632 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -178,7 +182,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // of the schema graph, and the tag scanner that rewrites them in place, 6.5 to 7.0 KB over. The
   // container keeps only the relationship-type rule, since `/xlsb` would otherwise pay 11.5 KB for
   // XML machinery a binary workbook, which has no Strict form, never uses.
-  '.': 614,
+  //
+  // Raised again, from 614, when a function a formula passes as a value began taking the `_xleta.`
+  // prefix: the list of the functions Excel prefixes and the pass that decides it, 5.0 KB over.
+  '.': 620,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -253,7 +260,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // of the schema graph, and the tag scanner that rewrites them in place, 6.5 to 7.0 KB over. The
   // container keeps only the relationship-type rule, since `/xlsb` would otherwise pay 11.5 KB for
   // XML machinery a binary workbook, which has no Strict form, never uses.
-  './xlsx': 596,
+  //
+  // Raised again, from 596, by the same function-value prefix as `.`, 4.7 KB over.
+  './xlsx': 602,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -295,7 +304,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 325, when the writer began replaying a workbook's splices over the charts
   // and pivot caches it preserves, which takes a rewriter of those parts and a scanner for every
   // element of a name, 0.8 to 4.0 KB over.
-  './xlsb': 327,
+  //
+  // Raised again, from 327, by the same function-value prefix as `.`, 5.3 KB over. This entry only
+  // reads the prefix, which needs the defined names and not the list, but `core/formula.ts` keeps both
+  // directions of the mangling in one module and the list comes with it.
+  './xlsb': 333,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
@@ -372,7 +385,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 440, when the writer began replaying a workbook's splices over the charts
   // and pivot caches it preserves, which takes a rewriter of those parts and a scanner for every
   // element of a name, 0.8 to 4.0 KB over.
-  './node': 445,
+  //
+  // Raised again, from 445, by the same function-value prefix as `.`, 4.7 KB over.
+  './node': 451,
   // Raised from 50 when the MS-OVBA encoder stopped rescanning its whole back-window for every
   // output byte. The hash chain that replaced the rescan is the cost, and it buys a time bound on a
   // path an untrusted `.xlsm` reaches through `removeVbaModule`; the CFB and `dir` guards landed

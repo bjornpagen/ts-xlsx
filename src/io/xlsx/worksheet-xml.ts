@@ -86,6 +86,8 @@ export interface WorksheetXmlInputs {
   readonly hyperlinks: readonly HyperlinkPlan[];
   readonly sharedStrings: SharedStringTable | null;
   readonly dateEpoch: DateEpoch;
+  /** The defined names a bare name in this sheet's formulas resolves to; see `formulaNamesInScope`. */
+  readonly formulaNames: ReadonlySet<string>;
   /** Whether this is the workbook's one selected sheet. */
   readonly active: boolean;
   /** The rows the streaming writer already serialised and evicted, absent on the buffered path. */
@@ -93,8 +95,18 @@ export interface WorksheetXmlInputs {
 }
 
 export function worksheetXml(inputs: WorksheetXmlInputs): string {
-  const {sheet, tables, styles, references, hyperlinks, sharedStrings, dateEpoch, active, flushed} =
-    inputs;
+  const {
+    sheet,
+    tables,
+    styles,
+    references,
+    hyperlinks,
+    sharedStrings,
+    dateEpoch,
+    formulaNames,
+    active,
+    flushed,
+  } = inputs;
   // A merge overlapping a table is Excel-invalid geometry; reject it before serialising
   // rather than emit a package a consumer repairs on open.
   validateMerges(sheet);
@@ -124,6 +136,7 @@ export function worksheetXml(inputs: WorksheetXmlInputs): string {
     sharedRoles,
     collapsedSummaries,
     dateEpoch,
+    formulaNames,
   };
 
   const liveRows: {number: number; xml: string}[] = [];

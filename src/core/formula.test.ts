@@ -2,12 +2,18 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
 import {
+  definedNameKeys,
+  formulaNamesInScope,
   mangleFormula,
   mangleFunctions,
+  mangleFunctionValues,
   mangleParams,
   quoteSheetName,
   unmangleFunctions,
 } from './formula.ts';
+
+// A workbook that defines no names, where every function passed as a value takes its prefix.
+const NO_NAMES: ReadonlySet<string> = new Set();
 
 // Counted as a bracket, an escaped `[` left the structured reference open to the end of the formula,
 // so a modern function after it went unprefixed and Excel could not evaluate it.
@@ -96,8 +102,11 @@ test('the worksheet-only functions take _xlws. after _xlfn., and unmangling stri
   assert.equal(mangleFunctions('FILTER(A1:A3,A1:A3>0)'), '_xlfn._xlws.FILTER(A1:A3,A1:A3>0)');
   assert.equal(mangleFunctions('SORT(A1:A3)'), '_xlfn._xlws.SORT(A1:A3)');
   assert.equal(mangleFunctions('PY(0,0)'), '_xlfn._xlws.PY(0,0)');
-  assert.equal(unmangleFunctions('_xlfn._xlws.FILTER(A1:A3,A1:A3>0)'), 'FILTER(A1:A3,A1:A3>0)');
-  assert.equal(unmangleFunctions('SUM(_xlfn._xlws.SORT(A1:A3))'), 'SUM(SORT(A1:A3))');
+  assert.equal(
+    unmangleFunctions('_xlfn._xlws.FILTER(A1:A3,A1:A3>0)', NO_NAMES),
+    'FILTER(A1:A3,A1:A3>0)',
+  );
+  assert.equal(unmangleFunctions('SUM(_xlfn._xlws.SORT(A1:A3))', NO_NAMES), 'SUM(SORT(A1:A3))');
   assert.equal(
     mangleFunctions('_xlfn._xlws.SORT(A1:A3)'),
     '_xlfn._xlws.SORT(A1:A3)',
@@ -179,9 +188,12 @@ test('a decimal literal adjacent to a dotted call is not mistaken for a function
 });
 
 test('unmangle strips _xlfn. and _xlpm. back to the plain names', () => {
-  assert.equal(unmangleFunctions('_xlfn.XLOOKUP(1,B:B,C:C)'), 'XLOOKUP(1,B:B,C:C)');
-  assert.equal(unmangleFunctions('_xlfn.LET(_xlpm.a,B2:B9,_xlpm.a)'), 'LET(a,B2:B9,a)');
-  assert.equal(unmangleFunctions('_xlfn.NORM.DIST(A1,0,1,TRUE)'), 'NORM.DIST(A1,0,1,TRUE)');
+  assert.equal(unmangleFunctions('_xlfn.XLOOKUP(1,B:B,C:C)', NO_NAMES), 'XLOOKUP(1,B:B,C:C)');
+  assert.equal(unmangleFunctions('_xlfn.LET(_xlpm.a,B2:B9,_xlpm.a)', NO_NAMES), 'LET(a,B2:B9,a)');
+  assert.equal(
+    unmangleFunctions('_xlfn.NORM.DIST(A1,0,1,TRUE)', NO_NAMES),
+    'NORM.DIST(A1,0,1,TRUE)',
+  );
 });
 
 test('mangle then unmangle round-trips a plain formula', () => {
@@ -193,7 +205,7 @@ test('mangle then unmangle round-trips a plain formula', () => {
     'NORM.DIST(A1,0,1,TRUE)',
     'T.DIST.2T(2,10)',
   ]) {
-    assert.equal(unmangleFunctions(mangleFunctions(f)), f);
+    assert.equal(unmangleFunctions(mangleFunctions(f), NO_NAMES), f);
   }
 });
 
@@ -234,7 +246,10 @@ test('a parameter name inside a structured reference is never prefixed', () => {
 // read back as a defined name.
 test('a parameter reference matches its declaration whatever its case, in the declared spelling', () => {
   assert.equal(mangleParams('LET(x,1,X+1)'), 'LET(_xlpm.x,1,_xlpm.x+1)');
-  assert.equal(mangleFormula('LAMBDA(Val,val*2)(3)'), '_xlfn.LAMBDA(_xlpm.Val,_xlpm.Val*2)(3)');
+  assert.equal(
+    mangleFormula('LAMBDA(Val,val*2)(3)', NO_NAMES),
+    '_xlfn.LAMBDA(_xlpm.Val,_xlpm.Val*2)(3)',
+  );
   assert.equal(
     mangleParams('let(total,SUM(A1:A3),TOTAL*2)'),
     'let(_xlpm.total,SUM(A1:A3),_xlpm.total*2)',
@@ -274,16 +289,19 @@ test('a formula with no LET/LAMBDA passes through parameter mangling unchanged',
 });
 
 test('mangleFormula applies both prefixes in the correct order', () => {
-  assert.equal(mangleFormula('LET(x,1,x+1)'), '_xlfn.LET(_xlpm.x,1,_xlpm.x+1)');
+  assert.equal(mangleFormula('LET(x,1,x+1)', NO_NAMES), '_xlfn.LET(_xlpm.x,1,_xlpm.x+1)');
   assert.equal(
-    mangleFormula('LET(a,B2:B9,b,BYROW(a,LAMBDA(r,SUM(r))),COUNTA(UNIQUE(FILTER(a,b=1))))'),
+    mangleFormula(
+      'LET(a,B2:B9,b,BYROW(a,LAMBDA(r,SUM(r))),COUNTA(UNIQUE(FILTER(a,b=1))))',
+      NO_NAMES,
+    ),
     '_xlfn.LET(_xlpm.a,B2:B9,_xlpm.b,_xlfn.BYROW(_xlpm.a,_xlfn.LAMBDA(_xlpm.r,SUM(_xlpm.r))),COUNTA(_xlfn.UNIQUE(_xlfn._xlws.FILTER(_xlpm.a,_xlpm.b=1))))',
   );
 });
 
 test('mangleFormula then unmangle round-trips a LET/LAMBDA formula', () => {
   for (const f of ['LET(x,1,x+1)', 'LAMBDA(a,b,a+b)', 'LET(f,LAMBDA(v,v+1),f(5))', 'SUM(A1:A9)']) {
-    assert.equal(unmangleFunctions(mangleFormula(f)), f);
+    assert.equal(unmangleFunctions(mangleFormula(f, NO_NAMES), NO_NAMES), f);
   }
 });
 
@@ -314,4 +332,98 @@ test('quoteSheetName quotes a 3-D span as a whole or not at all', () => {
   assert.equal(quoteSheetName('Data', 'More'), 'Data:More');
   assert.equal(quoteSheetName('Odd Name', 'More'), "'Odd Name:More'");
   assert.equal(quoteSheetName('Data', 'Odd Name'), "'Data:Odd Name'");
+});
+
+// Excel 16.0 (build 20326) stores a built-in function a formula passes as a value under `_xleta.`,
+// uppercased, in every position it was given one. Written bare, the name is a reference to a defined
+// name spelled like the function, and Excel shows `#NAME?` when the workbook defines none.
+test('a function passed as a value is written under _xleta., uppercased, wherever it sits', () => {
+  assert.equal(mangleFormula('BYROW(A1:A3,sum)', NO_NAMES), '_xlfn.BYROW(A1:A3,_xleta.SUM)');
+  assert.equal(
+    mangleFormula('LET(f,MAX,f(A1:A3))', NO_NAMES),
+    '_xlfn.LET(_xlpm.f,_xleta.MAX,_xlpm.f(A1:A3))',
+  );
+  assert.equal(mangleFormula('ISERROR(-SUM+1)', NO_NAMES), 'ISERROR(-_xleta.SUM+1)');
+  assert.equal(
+    mangleFormula('HSTACK(SUM,(MAX))', NO_NAMES),
+    '_xlfn.HSTACK(_xleta.SUM,(_xleta.MAX))',
+  );
+  assert.equal(mangleFormula('BYROW(A1:A3, ABS )', NO_NAMES), '_xlfn.BYROW(A1:A3, _xleta.ABS )');
+  assert.equal(mangleFormula('MAP(A1:A3,T.TEST)', NO_NAMES), '_xlfn.MAP(A1:A3,_xleta.T.TEST)');
+  // A future function passed as a value is not being called, so it takes no `_xlfn.` beside it.
+  assert.equal(
+    mangleFormula('BYROW(A1:A3,CONCAT)+BYROW(A1:A3,FILTER)', NO_NAMES),
+    '_xlfn.BYROW(A1:A3,_xleta.CONCAT)+_xlfn.BYROW(A1:A3,_xleta.FILTER)',
+  );
+});
+
+test('a function name called, naming a container, qualified or inside a literal is not a value', () => {
+  for (const formula of [
+    'SUM(A1:A3)',
+    'SUM (A1:A3)',
+    'SUM!A1+SUM:Other!A1',
+    "S1!SUM+'My Sheet'!MAX+[1]!MIN",
+    'ISNA(#N/A)',
+    'Rate[Amount]+T[[#Data],[SUM]]',
+    '"SUM"&T1',
+    'LOG10+TRUE',
+    'LAMBDA+GET.CELL',
+    '_xlpm.SUM+_xleta.MAX',
+  ]) {
+    assert.equal(mangleFunctionValues(formula, NO_NAMES), formula, formula);
+  }
+});
+
+test('a LET or LAMBDA parameter spelled like a function is a parameter, not a function value', () => {
+  // As Excel saved `=LET(SUM,A1:A3,SUM)` and `=LAMBDA(SUM,SUM)(1)`.
+  assert.equal(
+    mangleFormula('LET(SUM,A1:A3,SUM)', NO_NAMES),
+    '_xlfn.LET(_xlpm.SUM,A1:A3,_xlpm.SUM)',
+  );
+  assert.equal(
+    mangleFormula('LAMBDA(SUM,SUM)(1)', NO_NAMES),
+    '_xlfn.LAMBDA(_xlpm.SUM,_xlpm.SUM)(1)',
+  );
+});
+
+// With `LEN` defined on S2, Excel wrote `MAP(A1:A3,LEN)` bare on S2, where the name is visible and
+// meant, and as `_xleta.LEN` on S1, where it is not.
+test('a defined name visible from the formula keeps a function name bare, since there it means the name', () => {
+  const names = [{name: 'len', scope: 'S2'}, {name: 'Max'}];
+  const formula = 'MAP(A1:A3,LEN)+MAP(A1:A3,MAX)';
+  assert.equal(
+    mangleFormula(formula, formulaNamesInScope(names, 's2')),
+    '_xlfn.MAP(A1:A3,LEN)+_xlfn.MAP(A1:A3,MAX)',
+  );
+  assert.equal(
+    mangleFormula(formula, formulaNamesInScope(names, 'S1')),
+    '_xlfn.MAP(A1:A3,_xleta.LEN)+_xlfn.MAP(A1:A3,MAX)',
+  );
+  // A workbook-level name's own formula sees the workbook-level names alone.
+  assert.equal(
+    mangleFormula(formula, formulaNamesInScope(names, undefined)),
+    '_xlfn.MAP(A1:A3,_xleta.LEN)+_xlfn.MAP(A1:A3,MAX)',
+  );
+});
+
+test('reading sheds _xleta. unless the workbook defines a name spelled like the function', () => {
+  assert.equal(unmangleFunctions('_xlfn.BYROW(A1:A3,_xleta.SUM)', NO_NAMES), 'BYROW(A1:A3,SUM)');
+  assert.equal(
+    unmangleFunctions('_xlfn.MAP(A1:A3,_xleta.LEN)', definedNameKeys([{name: 'Len'}])),
+    'MAP(A1:A3,_xleta.LEN)',
+  );
+  assert.equal(unmangleFunctions('"_xleta.SUM"&_xleta.T.TEST', NO_NAMES), '"_xleta.SUM"&T.TEST');
+});
+
+test('a function passed as a value survives the write and the read whatever names the workbook defines', () => {
+  for (const names of [NO_NAMES, definedNameKeys([{name: 'SUM'}, {name: 'MAX'}])]) {
+    for (const formula of ['BYROW(A1:A3,SUM)', 'LET(f,MAX,f(A1:A3))', 'ISERROR(SUM+1)']) {
+      assert.equal(unmangleFunctions(mangleFormula(formula, names), names), formula, formula);
+    }
+  }
+  const captured = definedNameKeys([{name: 'SUM'}]);
+  assert.equal(
+    unmangleFunctions(mangleFormula('MAP(A1:A3,_xleta.SUM)', captured), captured),
+    'MAP(A1:A3,_xleta.SUM)',
+  );
 });

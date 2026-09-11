@@ -161,16 +161,20 @@ class AutoFilterAccumulator {
  *
  * Offered as a pass because the worksheet is the largest part in a package and other readers want
  * the same events, so they all share one parse of it rather than scanning it once each.
+ *
+ * `definedNames` is every name the workbook defines, as `definedNameKeys` spells them: the workbook
+ * part is read before any sheet, so they are known before the first formula is.
  */
 export function worksheetPass(
   sheet: Worksheet,
   sharedStrings: readonly SharedString[],
   xfStyles: ReadonlyArray<XfStyle>,
   dateEpoch: DateEpoch,
+  definedNames: ReadonlySet<string>,
 ): SaxPass {
   // The one `<c>` currently being read: its address/type/style, formula, value, inline text, rich
   // runs, and the sheet-spanning shared-formula master map. Each `<c>` resets it and commits it.
-  const cell = new CellAccumulator({dateEpoch});
+  const cell = new CellAccumulator({dateEpoch, definedNames});
   const autoFilter = new AutoFilterAccumulator();
   const pageBreaks = new PageBreakAccumulator();
   const styleResolution = new CellStyleResolver();

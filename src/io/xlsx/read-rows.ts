@@ -40,7 +40,12 @@ import {XlsxParseError} from './errors.ts';
 import {SHARED_STRINGS_PART, STYLES_PART} from './part-names.ts';
 import {parseSharedStrings} from './read-shared-strings.ts';
 import {parseStyleTable} from './read-styles.ts';
-import {type SheetEntry, workbookPropertiesPass, workbookSheetsPass} from './read-workbook-xml.ts';
+import {
+  definedNamesPass,
+  type SheetEntry,
+  workbookPropertiesPass,
+  workbookSheetsPass,
+} from './read-workbook-xml.ts';
 import {RowPositionTracker} from './row-position.ts';
 
 export interface ReadSheetRowsOptions extends ReadPackageOptions {
@@ -152,14 +157,7 @@ export function* readSheetRows(
   const sheetXml = pkg.sheetXml(chosen.relId);
   // The sheet is named but its part is missing (a truncated or foreign package), so it has no rows.
   if (sheetXml === undefined) return;
-  yield* scanSheet(
-    sheetXml,
-    pkg.sharedStrings,
-    pkg.xfStyles,
-    pkg.dateEpoch,
-    new Set(),
-    new WorksheetMerges(),
-  );
+  yield* scanSheet(sheetXml, pkg, new Set(), new WorksheetMerges());
 }
 
 /**
@@ -184,7 +182,7 @@ export function* readWorkbookStream(
     // A named sheet whose part is missing (truncated/foreign package) still surfaces, with no rows,
     // no hidden columns, and no merges, rather than vanishing from the workbook's sheet list.
     const xml = pkg.sheetXml(sheet.relId) ?? '';
-    yield new StreamedSheetReader(sheet.name, xml, pkg.sharedStrings, pkg.xfStyles, pkg.dateEpoch);
+    yield new StreamedSheetReader(sheet.name, xml, pkg);
   }
 }
 
@@ -192,14 +190,21 @@ export function* readWorkbookStream(
 // order), the shared-string and style tables, and a resolver from a sheet's rel id to its XML. The
 // package is inflated once; sheet XML is fetched lazily so a sheet the caller never visits is never
 // stringified.
-interface OpenPackage {
+interface OpenPackage extends SheetTables {
   readonly sheets: ReadonlyArray<{name: string; relId: string}>;
+  sheetXml(relId: string): string | undefined;
+}
+
+// What every sheet's cells decode against, the same for each sheet of the package.
+interface SheetTables {
   readonly sharedStrings: readonly SharedString[];
   readonly xfStyles: ReadonlyArray<XfStyle>;
   /** The workbook's declared date system, read from `<workbookPr date1904>` like the buffered
    * reader's: a streamed cell whose serial counted from another day is a different date. */
   readonly dateEpoch: DateEpoch;
-  sheetXml(relId: string): string | undefined;
+  /** Every name the workbook defines, as `definedNameKeys` spells them: whether a function a formula
+   * passes as a value sheds its `_xleta.` depends on them, as it does in the buffered reader. */
+  readonly definedNames: ReadonlySet<string>;
 }
 
 function openPackage(data: Uint8Array, maxUncompressedBytes: number | undefined): OpenPackage {
@@ -223,7 +228,8 @@ function openPackage(data: Uint8Array, maxUncompressedBytes: number | undefined)
   // do there.
   const properties = new Workbook();
   const sheetsPass = workbookSheetsPass();
-  parseXmlPasses(workbookXml, [sheetsPass, workbookPropertiesPass(properties)]);
+  const namesPass = definedNamesPass();
+  parseXmlPasses(workbookXml, [sheetsPass, workbookPropertiesPass(properties), namesPass]);
   // Repaired by the same function `readXlsx` runs, so a streamed sheet carries the name the buffered
   // model gives it, and selecting a sheet by that name works in both. Raw, a file with two sheets named
   // `S` streamed two of them, `readSheetRows({sheet: 'S (2)'})` refused a name `readXlsx` reports, and a
@@ -240,6 +246,7 @@ function openPackage(data: Uint8Array, maxUncompressedBytes: number | undefined)
     sharedStrings,
     xfStyles,
     dateEpoch: properties.dateEpoch,
+    definedNames: namesPass.spellings(),
     sheetXml(relId: string): string | undefined {
       const target = rels.byId(relId)?.target;
       return target === undefined ? undefined : text(rels.pathOf(target));
@@ -271,39 +278,22 @@ function pickSheet(
 class StreamedSheetReader implements StreamedSheet {
   readonly name: string;
   readonly #xml: string;
-  readonly #sharedStrings: readonly SharedString[];
-  readonly #xfStyles: ReadonlyArray<XfStyle>;
-  readonly #dateEpoch: DateEpoch;
+  readonly #tables: SheetTables;
   #hiddenColumns = new Set<number>();
   #merges = new WorksheetMerges();
   #scanned = false;
 
-  constructor(
-    name: string,
-    xml: string,
-    sharedStrings: readonly SharedString[],
-    xfStyles: ReadonlyArray<XfStyle>,
-    dateEpoch: DateEpoch,
-  ) {
+  constructor(name: string, xml: string, tables: SheetTables) {
     this.name = name;
     this.#xml = xml;
-    this.#sharedStrings = sharedStrings;
-    this.#xfStyles = xfStyles;
-    this.#dateEpoch = dateEpoch;
+    this.#tables = tables;
   }
 
   *rows(): Generator<StreamedRow, void, undefined> {
     this.#hiddenColumns = new Set();
     this.#merges = new WorksheetMerges();
     this.#scanned = false;
-    yield* scanSheet(
-      this.#xml,
-      this.#sharedStrings,
-      this.#xfStyles,
-      this.#dateEpoch,
-      this.#hiddenColumns,
-      this.#merges,
-    );
+    yield* scanSheet(this.#xml, this.#tables, this.#hiddenColumns, this.#merges);
     this.#scanned = true;
   }
 
@@ -343,12 +333,11 @@ class StreamedSheetReader implements StreamedSheet {
 // what bounds retained memory to one row.
 function* scanSheet(
   xml: string,
-  sharedStrings: readonly SharedString[],
-  xfStyles: ReadonlyArray<XfStyle>,
-  dateEpoch: DateEpoch,
+  tables: SheetTables,
   hiddenColumns: Set<number>,
   merges: WorksheetMerges,
 ): Generator<StreamedRow, void, undefined> {
+  const {sharedStrings, xfStyles, dateEpoch, definedNames} = tables;
   let rowNumber = 0;
   let rowHidden = false;
   let cells: StreamedCell[] = [];
@@ -360,7 +349,7 @@ function* scanSheet(
   // cell's plain decoded value (via decode) rather than through the shared-formula / data-table
   // resolution the buffered finalize adds, which a data read does not want. A rich string keeps its
   // runs here as it does there, whether the producer inlined it or pooled it.
-  const cell = new CellAccumulator({dateEpoch});
+  const cell = new CellAccumulator({dateEpoch, definedNames});
 
   const finalizeCell = (): void => {
     // Whether a cell was placed at all, a row past the grid included, is the accumulator's decision.

@@ -15,7 +15,7 @@
 // and conditional formatting.
 
 import type {DateEpoch} from '../../core/date.ts';
-import {unmangleFunctions} from '../../core/formula.ts';
+import {definedNameKeys, unmangleFunctions} from '../../core/formula.ts';
 import {INTERNAL} from '../../core/internal.ts';
 import {type DefinedName, Workbook} from '../../core/workbook.ts';
 import type {WorksheetState} from '../../core/worksheet.ts';
@@ -115,6 +115,9 @@ export function readXlsbPackage(
     selfSupBook: declaration.selfSupBook,
     names: declaration.names.map((name) => name.name),
   };
+  // Whether a function a formula passes as a value sheds its `_xleta.` depends on the names the
+  // workbook defines, so they are known before any formula is decoded, from the records alone.
+  const namesInWorkbook = definedNameKeys(declaration.names.filter(isWorkbookName));
 
   for (const declared of sheets) {
     const sheet = workbook.addWorksheet(declared.name, {state: declared.state});
@@ -127,10 +130,11 @@ export function readXlsbPackage(
         xfStyles: cellXfs,
         scope,
         dateEpoch: declaration.dateEpoch,
+        definedNames: namesInWorkbook,
       });
   }
   // A name the model refuses, such as an empty one, is a name the file does not really carry.
-  for (const defined of definedNames(declaration, scope)) {
+  for (const defined of definedNames(declaration, scope, namesInWorkbook)) {
     admitting(() => {
       workbook.defineName(defined);
     });
@@ -292,17 +296,16 @@ const NAME_IS_FUNCTION = 0x00000002;
 
 // The workbook's defined names, as the model holds them.
 //
-// Two kinds of `BrtName` are dropped, both because the XML form does not persist them either, so
-// carrying them through would make the two readings of one workbook disagree. A *function* name is
-// Excel's registration of a callable (every post-2007 function gets one, `_xlfn.TEXTJOIN` and
-// friends); its target is the placeholder `#NAME?`, not a range. And `_xlnm._FilterDatabase` is the
-// built-in Excel derives from a sheet's autofilter, which the model reconstructs from the autofilter
-// itself. A name whose target uses a token this reader cannot decode is dropped too, rather than
-// surfaced with a target that is a guess.
-function definedNames(declaration: WorkbookDeclaration, scope: FormulaScope): DefinedName[] {
+// Only the names {@link isWorkbookName} admits are kept. A name whose target uses a token this reader
+// cannot decode is dropped too, rather than surfaced with a target that is a guess.
+function definedNames(
+  declaration: WorkbookDeclaration,
+  scope: FormulaScope,
+  namesInWorkbook: ReadonlySet<string>,
+): DefinedName[] {
   const names: DefinedName[] = [];
   for (const declared of declaration.names) {
-    if (declared.isFunction || declared.name === FILTER_DATABASE_NAME) continue;
+    if (!isWorkbookName(declared)) continue;
     const refersTo = decodeFormula(declared.rgce, declared.rgcb, scope);
     if (refersTo === undefined) continue;
     const sheet =
@@ -311,12 +314,32 @@ function definedNames(declaration: WorkbookDeclaration, scope: FormulaScope): De
       name: declared.name,
       ...(sheet === undefined ? {} : {scope: sheet}),
       // Stripped back to the readable form, the same normalisation the XML reader applies.
-      refersTo: unmangleFunctions(refersTo),
+      refersTo: unmangleFunctions(refersTo, namesInWorkbook),
     });
   }
   return names;
 }
 
+// Whether a `BrtName` is one of the workbook's defined names, rather than a record Excel keeps for its
+// own formulas. Three kinds are not, and the XML form persists none of them, so carrying them through
+// would make the two readings of one workbook disagree:
+//
+// - a *function* name, Excel's registration of a callable (every post-2007 function gets one,
+//   `_xlfn.TEXTJOIN` and friends), whose target is the placeholder `#NAME?`;
+// - the name a `PtgName` cites for a LET or LAMBDA parameter (`_xlpm.x`) or a function passed as a
+//   value (`_xleta.SUM`), which Excel 16.0 (build 20326) registers without the function flag and with
+//   the same `#NAME?` target;
+// - `_xlnm._FilterDatabase`, the built-in Excel derives from a sheet's autofilter, which the model
+//   reconstructs from the autofilter itself.
+function isWorkbookName(declared: NameDeclaration): boolean {
+  return (
+    !declared.isFunction &&
+    !FORMULA_PLACEHOLDER_NAME.test(declared.name) &&
+    declared.name !== FILTER_DATABASE_NAME
+  );
+}
+
+const FORMULA_PLACEHOLDER_NAME = /^_xl(?:fn|pm|eta)\./;
 const FILTER_DATABASE_NAME = '_xlnm._FilterDatabase';
 
 // `hsState` ([MS-XLSB] 2.4.303), indexed by its stored value.

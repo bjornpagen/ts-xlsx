@@ -3,7 +3,14 @@
 import {messageOf} from '../../thrown.ts';
 import type {Untyped} from '../../untyped.ts';
 import {partOf, patchedPackage, roundtrip} from './package-facts.ts';
-import {readFixture, readXlsx, Workbook, type WorkbookInstance, writeXlsx} from './runtime.ts';
+import {
+  encodeAddress,
+  readFixture,
+  readXlsx,
+  Workbook,
+  type WorkbookInstance,
+  writeXlsx,
+} from './runtime.ts';
 import {buildFrom, isoOrNull} from './spec-model.ts';
 
 export const formulas = {
@@ -130,6 +137,56 @@ export const formulas = {
     return Object.fromEntries(read.map((key) => [key, readBack(key)]));
   },
 
+  // Author formulas and defined names on a workbook of sheets S1 and S2, each holding 1, 2 and 3 in
+  // A1:A3, and report the text each formula is stored as in the written package → a map of key → that
+  // text, '' for one the package does not carry. A key is `<sheet>!<cell>` for a cell formula,
+  // `name:<name>` for a workbook-level defined name, or `name:<sheet>!<name>` for a name scoped to a
+  // sheet.
+  storedFormulas(formulas: Record<string, string>) {
+    const workbook = new Workbook();
+    for (const name of ['S1', 'S2']) {
+      const sheet = workbook.addWorksheet(name);
+      for (const row of [1, 2, 3]) sheet.getCell(`A${row}`).value = row;
+    }
+    for (const [key, formula] of Object.entries(formulas)) {
+      const target = formulaKey(key);
+      if (target.kind === 'name') {
+        workbook.defineName({
+          name: target.name,
+          refersTo: formula,
+          ...(target.sheet === undefined ? {} : {scope: target.sheet}),
+        });
+      } else {
+        workbook.requireWorksheet(target.sheet).getCell(target.cell).value = {formula};
+      }
+    }
+    return storedFormulaTexts(writeXlsx(workbook), Object.keys(formulas));
+  },
+
+  // Read a fixture, an `.xlsx` or an `.xlsb`, and report every cell formula and defined name it holds,
+  // keyed as `storedFormulas` keys them → { read, written }: the formula text the model reads, and the
+  // text the package written back from that model stores.
+  fixtureFormulaSpellings(rel: string) {
+    const workbook = readFixture(rel);
+    const cells = workbook.worksheets.flatMap((sheet) =>
+      sheet.model.cells.flatMap((cell) => {
+        const value: Untyped = cell.value;
+        return typeof value?.formula === 'string'
+          ? [[`${sheet.name}!${encodeAddress(cell.col, cell.row)}`, value.formula] as const]
+          : [];
+      }),
+    );
+    const names = workbook.definedNames.map(
+      (name) =>
+        [
+          name.scope === undefined ? `name:${name.name}` : `name:${name.scope}!${name.name}`,
+          name.refersTo,
+        ] as const,
+    );
+    const read = Object.fromEntries([...cells, ...names]);
+    return {read, written: storedFormulaTexts(writeXlsx(workbook), Object.keys(read))};
+  },
+
   // Round-trip formula cells whose cached results are truthy and falsy (2, 0, false, '') and report
   // each recovered result → { truthy, zero, boolFalse, emptyString } of { hasResult, result }. A falsy
   // result (0, false, empty string) must survive, not be dropped as if the formula had no cached value.
@@ -244,3 +301,61 @@ export const formulas = {
     };
   },
 };
+
+type FormulaTarget =
+  | {readonly kind: 'cell'; readonly sheet: string; readonly cell: string}
+  | {readonly kind: 'name'; readonly name: string; readonly sheet: string | undefined};
+
+// A `storedFormulas` key, taken apart.
+function formulaKey(key: string): FormulaTarget {
+  if (key.startsWith('name:')) {
+    const bang = key.lastIndexOf('!');
+    return bang === -1
+      ? {kind: 'name', name: key.slice(5), sheet: undefined}
+      : {kind: 'name', name: key.slice(bang + 1), sheet: key.slice(5, bang)};
+  }
+  const [sheet = '', cell = ''] = key.split('!');
+  return {kind: 'cell', sheet, cell};
+}
+
+// The formula text a written package stores for each key, read off the parts rather than through the
+// reader, since the reader is what normalises the spelling away. The writer names the nth sheet's part
+// `sheet<n>.xml`, in the order `xl/workbook.xml` lists the sheets.
+function storedFormulaTexts(buffer: Uint8Array, keys: readonly string[]) {
+  const workbookXml = partOf(buffer, 'xl/workbook.xml');
+  const sheetNames = [...workbookXml.matchAll(/<sheet\b[^>]*\bname="([^"]*)"/g)].map((match) =>
+    xmlText(match[1] ?? ''),
+  );
+  const stored = (key: string): string => {
+    const target = formulaKey(key);
+    if (target.kind === 'name') {
+      const scope = target.sheet === undefined ? -1 : sheetNames.indexOf(target.sheet);
+      for (const match of workbookXml.matchAll(
+        /<definedName\b([^>]*)>([\s\S]*?)<\/definedName>/g,
+      )) {
+        const attrs = match[1] ?? '';
+        const name = xmlText(/\bname="([^"]*)"/.exec(attrs)?.[1] ?? '');
+        const localSheetId = Number(/\blocalSheetId="(\d+)"/.exec(attrs)?.[1] ?? -1);
+        if (name === target.name && localSheetId === scope) return xmlText(match[2] ?? '');
+      }
+      return '';
+    }
+    const index = sheetNames.indexOf(target.sheet);
+    if (index === -1) return '';
+    const sheetXml = partOf(buffer, `xl/worksheets/sheet${index + 1}.xml`);
+    const body = new RegExp(`<c r="${target.cell}"[^>]*>([\\s\\S]*?)</c>`).exec(sheetXml)?.[1];
+    return xmlText(/<f[^>]*>([\s\S]*?)<\/f>/.exec(body ?? '')?.[1] ?? '');
+  };
+  return Object.fromEntries(keys.map((key) => [key, stored(key)] as const));
+}
+
+// Element text or an attribute value as written, with the five predefined entities decoded; `&amp;`
+// last, so an escaped entity decodes to the entity rather than to its character.
+function xmlText(text: string): string {
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
