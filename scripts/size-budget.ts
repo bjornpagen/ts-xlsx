@@ -35,7 +35,10 @@ const DIST = join(ROOT, 'dist');
 // values and page breaks, validation attributes, drawing preservation, checked error codes, table
 // style names) had grown the shipped JavaScript to exactly this line, each step within its entry's
 // budget but the sum with no room left.
-const TOTAL_BUDGET_BYTES = 584 * 1024;
+//
+// Raised again, from 584, when the stylesheet reader's one-slot-per-`<fill>` draft put the sum a tenth
+// over.
+const TOTAL_BUDGET_BYTES = 585 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -107,7 +110,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised from 554 by the same future-function registry as `.`, which put this entry nine tenths over.
   //
   // Raised again, from 555, by the same conditional-format boundaries as `.`, eight tenths over.
-  './xlsx': 556,
+  //
+  // Raised again, from 556, when the stylesheet reader began committing exactly one fill slot per
+  // `<fill>` from a per-fill draft, so a malformed fill table no longer shifts every later `fillId`.
+  // Half a kilobyte over.
+  './xlsx': 557,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which

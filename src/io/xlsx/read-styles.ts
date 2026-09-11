@@ -65,6 +65,13 @@ type XfDraft = {-readonly [K in keyof XfStyle]?: XfStyle[K]};
 // Border on close. The five edges match Border's; a bare styleless edge is simply never set.
 type BorderDraft = {-readonly [K in keyof Border]?: Border[K]};
 
+// The <fill> being read. It should hold one body, a <patternFill> or a <gradientFill>; `bodyRead` turns
+// when the first closes, so a second body in a malformed fill is skipped rather than replacing it.
+type FillDraft = {body: Fill | undefined; bodyRead: boolean};
+
+// A <patternFill> being read: its pattern token and the colours its <fgColor>/<bgColor> children carry.
+type PatternDraft = {pattern: string; fgColor: Color | undefined; bgColor: Color | undefined};
+
 // A mutable gradient accumulator while a <gradientFill> streams in. `fill` builds up the frozen
 // GradientFill (its stops appended as <stop>/<color> pairs close); `stopPosition`/`stopColor` hold the
 // current <stop> until its close commits a {position, color} pair.
@@ -82,12 +89,13 @@ type BorderEdgeName = (typeof BORDER_EDGE_NAMES)[number];
 const BORDER_EDGES = new Set<string>(BORDER_EDGE_NAMES);
 const isBorderEdgeName = (name: string): name is BorderEdgeName => BORDER_EDGES.has(name);
 
-// Style-table elements that commit on their close: a bare <font/>/<border/>/<patternFill/>/
+// Style-table elements that commit on their close: a bare <font/>/<border/>/<fill/>/<patternFill/>/
 // <gradientFill/>/<xf/> or a self-closing border edge is expanded to open+close so each commits
 // exactly once in onClose, never in a duplicated (and easily-forgotten) self-closing branch.
 const STYLE_EMPTY_CLOSES: ReadonlySet<string> = new Set([
   'font',
   'border',
+  'fill',
   'patternFill',
   'gradientFill',
   'xf',
@@ -219,38 +227,39 @@ function parseFonts(events: Iterator<XmlEvent>): ReadonlyArray<Font | undefined>
   return fonts;
 }
 
+// `fillId` is an index into this table, so a slot is committed on each <fill>'s close and nowhere else:
+// exactly one per <fill>, whether its body parsed, was unrecognised, or was followed by a second body. A
+// body outside any <fill> belongs to no slot and is skipped, so it cannot shift the fills after it.
 function parseFills(events: Iterator<XmlEvent>): ReadonlyArray<Fill | undefined> {
   const fills: Array<Fill | undefined> = [];
-  let pattern = '';
-  let fgColor: Color | undefined;
-  let bgColor: Color | undefined;
-  // A gradient fill accumulates from <gradientFill> open to close; its stops fill in as <stop>/<color>
-  // pairs arrive. `fillSlotAt` marks where in `fills` the current <fill> began, so its close can keep a
-  // slot even when the fill body was neither a pattern nor a gradient: index alignment is load-bearing.
+  let fillDraft: FillDraft | null = null;
+  let patternDraft: PatternDraft | null = null;
   let gradientDraft: GradientDraft | null = null;
-  let fillSlotAt = -1;
   for (const event of until(events, 'fills')) {
     if (event.kind === 'open') {
       const attrs = event.attrs;
+      // A body is read only while its <fill> has not yet had one.
+      const bodyExpected = fillDraft !== null && !fillDraft.bodyRead;
       switch (localName(event.name)) {
         case 'fill':
-          // Mark where this <fill> starts so its close can guarantee exactly one slot. A fill body
-          // that is neither <patternFill> nor <gradientFill> (or a gradient we could not parse) must
-          // still consume an id, or every later fill index shifts and cells mis-resolve their fill.
-          fillSlotAt = fills.length;
+          fillDraft = {body: undefined, bodyRead: false};
           break;
         case 'patternFill':
-          pattern = attrs.patternType ?? 'none';
-          fgColor = undefined;
-          bgColor = undefined;
+          if (!bodyExpected) break;
+          patternDraft = {
+            pattern: attrs.patternType ?? 'none',
+            fgColor: undefined,
+            bgColor: undefined,
+          };
           break;
         case 'fgColor':
-          fgColor = parseColor(attrs);
+          if (patternDraft !== null) patternDraft.fgColor = parseColor(attrs);
           break;
         case 'bgColor':
-          bgColor = parseColor(attrs);
+          if (patternDraft !== null) patternDraft.bgColor = parseColor(attrs);
           break;
         case 'gradientFill':
+          if (!bodyExpected) break;
           gradientDraft = {
             fill: {
               type: 'gradient',
@@ -276,7 +285,12 @@ function parseFills(events: Iterator<XmlEvent>): ReadonlyArray<Fill | undefined>
     } else if (event.kind === 'close') {
       switch (localName(event.name)) {
         case 'patternFill':
-          fills.push(toFill(pattern, fgColor, bgColor));
+          if (fillDraft !== null && patternDraft !== null) {
+            const {pattern, fgColor, bgColor} = patternDraft;
+            fillDraft.body = toFill(pattern, fgColor, bgColor);
+            fillDraft.bodyRead = true;
+            patternDraft = null;
+          }
           break;
         case 'stop':
           if (gradientDraft !== null && gradientDraft.stopPosition !== null) {
@@ -290,15 +304,18 @@ function parseFills(events: Iterator<XmlEvent>): ReadonlyArray<Fill | undefined>
           }
           break;
         case 'gradientFill':
-          if (gradientDraft !== null) {
-            fills.push(gradientDraft.fill);
+          if (fillDraft !== null && gradientDraft !== null) {
+            fillDraft.body = gradientDraft.fill;
+            fillDraft.bodyRead = true;
             gradientDraft = null;
           }
           break;
         case 'fill':
-          // Backstop the slot: if this <fill>'s body pushed nothing (unparsed/unknown content), keep an
-          // empty slot so id alignment holds and later fills still resolve to the right cells.
-          if (fills.length === fillSlotAt) fills.push(undefined);
+          if (fillDraft !== null) fills.push(fillDraft.body);
+          // A body left open by a malformed <fill> must not carry over into the next one.
+          fillDraft = null;
+          patternDraft = null;
+          gradientDraft = null;
           break;
       }
     }

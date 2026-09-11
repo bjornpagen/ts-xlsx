@@ -244,6 +244,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   verbatim, unreadable, reversed and overlapping ones included; it now holds the canonical ranges
   `readXlsx` admits.
 
+- **A malformed fill table shifted every later cell onto the wrong fill.** The stylesheet reader added
+  a slot per `<patternFill>` or `<gradientFill>` body rather than per `<fill>`, so a `<fill>` holding
+  two bodies took two slots, a stray body directly under `<fills>` took one, and a self-closing
+  `<fill/>` took none. Each later `fillId` then resolved to a neighbouring fill. Exactly one slot is
+  now committed per `<fill>`, from its first body; a body outside any `<fill>` is ignored.
+
 
 ## [3.1.0] — 2026-09-04
 

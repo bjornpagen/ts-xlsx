@@ -6,6 +6,41 @@ import {parseStyleTable} from './read-styles.ts';
 // The style reader narrows every enumerated attribute through a guard: a valid token passes verbatim,
 // an unrecognised one is dropped rather than trusted into the model as a bogus union member.
 
+// `fillId` is an index, and a slot was pushed per fill *body* rather than per `<fill>`, so a malformed
+// fill table shifted every later cell onto the fill before its own.
+const RED = {type: 'pattern', pattern: 'solid', fgColor: {argb: 'FFFF0000'}};
+const GREEN = {type: 'pattern', pattern: 'solid', fgColor: {argb: 'FF00FF00'}};
+const solidBody = (argb: string) =>
+  `<patternFill patternType="solid"><fgColor rgb="${argb}"/></patternFill>`;
+const fillTable = (fills: string, xfs: string) =>
+  `<styleSheet><fills>${fills}</fills><cellXfs>${xfs}</cellXfs></styleSheet>`;
+
+test('a <fill> holding two bodies takes one slot, keeping its first body', () => {
+  const table = parseStyleTable(
+    fillTable(
+      `<fill>${solidBody('FFFF0000')}${solidBody('FF0000FF')}</fill><fill>${solidBody('FF00FF00')}</fill>`,
+      '<xf fillId="0"/><xf fillId="1"/>',
+    ),
+  );
+  assert.deepEqual(table.cellXfs[0]?.fill, RED, 'the first body wins');
+  assert.deepEqual(table.cellXfs[1]?.fill, GREEN, 'and fillId 1 is still the second <fill>');
+});
+
+test('a body directly under <fills> belongs to no fill and shifts no index', () => {
+  const table = parseStyleTable(
+    fillTable(`${solidBody('FFFF0000')}<fill>${solidBody('FF00FF00')}</fill>`, '<xf fillId="0"/>'),
+  );
+  assert.deepEqual(table.cellXfs[0]?.fill, GREEN);
+});
+
+test('a self-closing <fill/> still occupies its slot', () => {
+  const table = parseStyleTable(
+    fillTable(`<fill/><fill>${solidBody('FF00FF00')}</fill>`, '<xf fillId="0"/><xf fillId="1"/>'),
+  );
+  assert.equal(table.cellXfs[0]?.fill, undefined);
+  assert.deepEqual(table.cellXfs[1]?.fill, GREEN);
+});
+
 test('a valid border-edge style is kept; an unrecognised one is dropped', () => {
   const good = parseStyleTable(
     '<styleSheet>' +
