@@ -20,6 +20,7 @@ import {Cell, copyCellContent} from './cell.ts';
 import type {ConditionalFormattingOverlay} from './conditional-formatting-overlay.ts';
 import {replaceContents} from './containers.ts';
 import type {DataValidationOverlay} from './data-validation-overlay.ts';
+import {type SheetSplice, spliceFormula, translateFormula} from './formula-references.ts';
 import {type AxisSplice, isDeletedSpan, shiftIndex, shiftPoint, shiftRect} from './grid-shift.ts';
 import {type AnchoredImage, type AnchorPoint, type ImageAnchor, isOneCellAnchor} from './image.ts';
 import type {MergeRect} from './merge.ts';
@@ -29,6 +30,7 @@ import type {Table} from './table.ts';
 import {
   type CellValue,
   isDataTableFormulaValue,
+  isFormulaValue,
   isHyperlinkValue,
   isSharedFormulaValue,
 } from './value.ts';
@@ -56,6 +58,13 @@ interface GridStorage {
   readonly images: AnchoredImage[];
   readonly dataValidations: DataValidationOverlay;
   readonly conditionalFormattings: ConditionalFormattingOverlay;
+  /** The sheet's name, which an unqualified reference in one of its formulas means. */
+  readonly sheetName: () => string;
+  /**
+   * What moves the formulas outside this sheet that name it: every other sheet's, and the workbook's
+   * defined names. `undefined` for a sheet no workbook holds.
+   */
+  readonly formulaHost: () => ((edit: SheetSplice) => void) | undefined;
   readonly comments: WorksheetComments;
   readonly rowBreaks: PageBreak[];
   readonly columnBreaks: PageBreak[];
@@ -75,6 +84,8 @@ export class GridEdits {
   readonly #rowBreaks: PageBreak[];
   readonly #columnBreaks: PageBreak[];
   readonly #autoFilter: AutoFilterSlot;
+  readonly #sheetName: () => string;
+  readonly #formulaHost: () => ((edit: SheetSplice) => void) | undefined;
 
   constructor(storage: GridStorage) {
     this.#rows = storage.rows;
@@ -89,6 +100,8 @@ export class GridEdits {
     this.#rowBreaks = storage.rowBreaks;
     this.#columnBreaks = storage.columnBreaks;
     this.#autoFilter = storage.autoFilter;
+    this.#sheetName = storage.sheetName;
+    this.#formulaHost = storage.formulaHost;
   }
 
   // Apply a delete-then-insert to the row grid: surviving rows below the edit shift by
@@ -97,6 +110,7 @@ export class GridEdits {
   // formatting-only row, a covered merge or a dropdown stays aligned with the data it describes.
   spliceRows(start: number, count: number, inserted: Map<number, Cell>[]): void {
     const splice: AxisSplice = {axis: 'row', start, count, delta: inserted.length - count};
+    this.#moveFormulaReferences(splice);
     const shifted = new Map<number, Map<number, Cell>>();
     for (const [row, cols] of this.#rows) {
       if (row < start) shifted.set(row, cols);
@@ -125,6 +139,7 @@ export class GridEdits {
   // coordinates cell values carry and the range-bound overlays re-anchor the same way.
   spliceColumns(start: number, count: number, inserts: CellValue[][]): void {
     const splice: AxisSplice = {axis: 'col', start, count, delta: inserts.length - count};
+    this.#moveFormulaReferences(splice);
     // Built whole, then swapped in, the way `spliceRows` does it. Writing each row back inside the loop
     // meant a throw part-way left the sheet half-spliced: rows already visited shifted, the rest not,
     // with no way for the caller to act on the error. `Worksheet.spliceColumns` refuses an insert that
@@ -179,6 +194,100 @@ export class GridEdits {
     this.#shiftAnchored(splice, this.#columns);
   }
 
+  // The references formula text makes to this sheet, moved through a splice of it, in this sheet and
+  // wherever else the workbook holds a formula. Run before any cell moves, for two reasons: a formula an
+  // insert brings in was written against the grid after the splice and must not move again, and a
+  // shared formula's clone is recovered from its master at the offset between the two as they stand now.
+  #moveFormulaReferences(splice: AxisSplice): void {
+    const edit: SheetSplice = {sheet: this.#sheetName(), splice};
+    this.spliceFormulas(edit);
+    this.#formulaHost()?.(edit);
+  }
+
+  /**
+   * Move the references this sheet's formulas make to the sheet a splice changed, which may be this
+   * sheet or another: every cell formula, and every data validation's and conditional format's formula.
+   *
+   * A shared formula is described once, by its master, and each clone is that text translated to where
+   * the clone sits. A splice usually keeps that true, since the master, the clone and what they refer to
+   * all move together, but not always: an insert between the cells one clone refers to and the cells its
+   * master does grows one reference and not the other, and a delete can take the master and leave the
+   * clone. A clone the moved master no longer describes stops sharing and becomes a formula of its own,
+   * spelled as it was rewritten; the rest of the group keeps sharing.
+   */
+  spliceFormulas(edit: SheetSplice): void {
+    const home = this.#sheetName();
+    const {splice} = edit;
+    const rewrite = (formula: string): string => spliceFormula(formula, home, edit);
+    // A splice of another sheet moves no cell here, only what the formulas say.
+    const cellsMove = home.toLowerCase() === edit.sheet.toLowerCase();
+    const after = (cell: Cell): {col: number; row: number} => {
+      if (!cellsMove) return cell;
+      return splice.axis === 'row'
+        ? {col: cell.col, row: shiftIndex(cell.row, splice)}
+        : {col: shiftIndex(cell.col, splice), row: cell.row};
+    };
+    const taken = (cell: Cell): boolean => {
+      const line = splice.axis === 'row' ? cell.row : cell.col;
+      return cellsMove && isDeletedSpan(line, line, splice);
+    };
+
+    // Every master's text before and after, keyed by its address: a clone assigned without its own text
+    // is recovered from the text it was translated from, not the rewritten one.
+    const masters = new Map<string, {cell: Cell; formula: string; rewritten: string}>();
+    for (const cols of this.#rows.values()) {
+      for (const cell of cols.values()) {
+        const value = cell.value;
+        if (!isFormulaValue(value)) continue;
+        masters.set(encodeAddress(cell.col, cell.row), {
+          cell,
+          formula: value.formula,
+          rewritten: rewrite(value.formula),
+        });
+      }
+    }
+    for (const cols of this.#rows.values()) {
+      for (const cell of cols.values()) {
+        const value = cell.value;
+        if (!isSharedFormulaValue(value)) continue;
+        const master = masters.get(value.sharedFormula);
+        if (master === undefined) {
+          // An orphan the writer will report: its own text, if any, still moves.
+          if (value.formula === undefined) continue;
+          const rewritten = rewrite(value.formula);
+          if (rewritten !== value.formula) cell.value = {...value, formula: rewritten};
+          continue;
+        }
+        const source =
+          value.formula ??
+          translateFormula(master.formula, cell.col - master.cell.col, cell.row - master.cell.row);
+        const rewritten = rewrite(source);
+        const from = after(master.cell);
+        const to = after(cell);
+        const described =
+          !taken(master.cell) &&
+          translateFormula(master.rewritten, to.col - from.col, to.row - from.row) === rewritten;
+        if (described) {
+          if (value.formula !== undefined && rewritten !== value.formula) {
+            cell.value = {...value, formula: rewritten};
+          }
+          continue;
+        }
+        cell.value =
+          value.result === undefined
+            ? {formula: rewritten}
+            : {formula: rewritten, result: value.result};
+      }
+    }
+    for (const {cell, formula, rewritten} of masters.values()) {
+      const value = cell.value;
+      if (rewritten !== formula && isFormulaValue(value))
+        cell.value = {...value, formula: rewritten};
+    }
+    this.#dataValidations.mapFormulas(rewrite);
+    this.#conditionalFormattings.mapFormulas(rewrite);
+  }
+
   // Everything anchored to the grid besides the cells, moved through one splice. Both axes end here, so
   // a participant is added once and cannot be moved on one axis and forgotten on the other.
   #shiftAnchored<T>(splice: AxisSplice, lineProperties: Map<number, T>): void {
@@ -223,8 +332,8 @@ export class GridEdits {
   // Move the grid coordinates a cell's value carries: the positions stored inside a value rather than
   // beside it, which are a shared-formula clone's master address, a hyperlink's clickable `range`, and
   // a data table's filled `ref` and input cells. Each names cells by position, so left behind it names
-  // cells the splice moved away from, and the writer emits it as written. Formula text is the one
-  // thing still not rewritten; see the GridEdits paragraph in docs/architecture.md.
+  // cells the splice moved away from, and the writer emits it as written. Formula text is moved before
+  // any of this, by `spliceFormulas`.
   #reanchorValueReferences(splice: AxisSplice): void {
     for (const cols of this.#rows.values()) {
       for (const cell of cols.values()) {

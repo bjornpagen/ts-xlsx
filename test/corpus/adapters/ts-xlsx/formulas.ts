@@ -74,6 +74,62 @@ export const formulas = {
     return {readShareType, readRef, readResult, reloadOk, outHasDataTable};
   },
 
+  // Author formulas on a workbook of sheets S1, S2 and S3, make one row or column edit of S1, and read
+  // each formula back → a map of key → formula text after the edit, spelled with a leading `=` as
+  // Excel's `Range.Formula` spells it (empty for a cell holding none). A key is `<sheet>!<cell>` for a
+  // cell formula, `name:<name>` for a workbook-scoped defined name, or `dv:<sheet>!<cell>` for a list
+  // validation's source on that cell. `read` names where to look after the edit, which for a cell or a
+  // validation the edit moved is where it went.
+  formulasAfterSplice({
+    formulas,
+    edit,
+    read,
+  }: {
+    formulas: Record<string, string>;
+    edit: {op: 'insert' | 'delete'; axis: 'row' | 'column'; start: number; count: number};
+    read: string[];
+  }) {
+    const workbook = new Workbook();
+    for (const name of ['S1', 'S2', 'S3']) workbook.addWorksheet(name);
+    const bare = (formula: string) => formula.replace(/^=/, '');
+    const place = (key: string) => {
+      const [sheet = '', cell = ''] = key.replace(/^dv:/, '').split('!');
+      return {sheet: workbook.requireWorksheet(sheet), cell};
+    };
+    for (const [key, formula] of Object.entries(formulas)) {
+      if (key.startsWith('name:')) {
+        workbook.defineName({name: key.slice(5), refersTo: bare(formula)});
+      } else if (key.startsWith('dv:')) {
+        const {sheet, cell} = place(key);
+        sheet.addDataValidation(cell, {type: 'list', formulae: [bare(formula)]});
+      } else {
+        const {sheet, cell} = place(key);
+        sheet.getCell(cell).value = {formula: bare(formula)};
+      }
+    }
+    const spliced = workbook.requireWorksheet('S1');
+    const inserted = edit.op === 'insert' ? Array.from({length: edit.count}, () => []) : [];
+    const removed = edit.op === 'delete' ? edit.count : 0;
+    if (edit.axis === 'row') spliced.spliceRows(edit.start, removed, ...inserted);
+    else spliced.spliceColumns(edit.start, removed, ...inserted);
+
+    const readBack = (key: string): string => {
+      if (key.startsWith('name:')) {
+        const refersTo = workbook.definedNames.find((name) => name.name === key.slice(5))?.refersTo;
+        return refersTo === undefined ? '' : `=${refersTo}`;
+      }
+      const {sheet, cell} = place(key);
+      if (key.startsWith('dv:')) {
+        const source = sheet.dataValidations.find((entry) => entry.sqref === cell)?.rule
+          .formulae?.[0];
+        return typeof source === 'string' ? `=${source}` : '';
+      }
+      const value: Untyped = sheet.getCell(cell).value;
+      return typeof value?.formula === 'string' ? `=${value.formula}` : '';
+    };
+    return Object.fromEntries(read.map((key) => [key, readBack(key)]));
+  },
+
   // Round-trip formula cells whose cached results are truthy and falsy (2, 0, false, '') and report
   // each recovered result → { truthy, zero, boolFalse, emptyString } of { hasResult, result }. A falsy
   // result (0, false, empty string) must survive, not be dropped as if the formula had no cached value.

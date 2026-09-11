@@ -96,6 +96,25 @@ export class DataValidationOverlay {
     replaceContents(this.#rects, rects);
   }
 
+  /**
+   * Rewrite every rule's formula operands through `rewrite`, keeping a rule whose operands did not
+   * change as the same object. A numeric operand is not a formula and passes through.
+   */
+  mapFormulas(rewrite: (formula: string) => string): void {
+    for (const [index, entry] of this.#entries.entries()) {
+      const formulae = entry.rule.formulae;
+      if (formulae === undefined) continue;
+      const next = formulae.map((operand) =>
+        typeof operand === 'string' ? rewrite(operand) : operand,
+      );
+      if (next.every((operand, i) => operand === formulae[i])) continue;
+      const rule: DataValidation = {...entry.rule, formulae: next};
+      this.#entries[index] = {...entry, rule};
+      const indexed = this.#rects[index];
+      if (indexed !== undefined) this.#rects[index] = {rects: indexed.rects, rule};
+    }
+  }
+
   /** Drop every validation, leaving the overlay empty. */
   clear(): void {
     this.#entries.length = 0;

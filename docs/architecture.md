@@ -255,10 +255,17 @@ them, so the axis ternary is written once instead of once per overlay. A range t
 whole takes its entry with it rather than clamping onto the cut line, because dropping a rule is
 legible and silently re-aiming one is not.
 
-Formula text is the known limit. A splice moves the coordinates a value stores as data, but it does
-not rewrite the references inside a formula's text, so `=SUM(A1:A10)` above an inserted row still
-sums `A1:A10` where Excel would move it. That needs a reference-aware rewrite over the formula
-tokenizer, which is a feature of its own rather than a participant this list forgot.
+Formula text is the one participant that reaches past the sheet. A formula spells its coordinates
+rather than storing them, so `core/formula-references.ts` reads the text and moves each reference to
+the spliced sheet by Excel's rules, and a reference to that sheet can sit in any sheet's formulas and
+in a defined name. So the splice runs a formula pass before any cell moves: the sheet rewrites its own
+cells, validations and conditional formats, then hands the edit to the workbook through a host it was
+given at creation, which passes it to every other sheet and to the defined names. Before the move
+matters twice: what an insert brings in was written against the grid after the edit and must not move
+again, and a shared-formula clone is recovered from its master at the offset they have now. A clone the
+rewritten master no longer describes becomes a formula of its own, and the writer groups what is still
+shared. Table formulas, hyperlink locations, pivot sources and preserved parts (charts among them) are
+not rewritten.
 
 The row and column axes are deliberately not mirror images, and where they diverge is a decision
 rather than a gap someone forgot to close. A row takes either input shape, a positional array or an

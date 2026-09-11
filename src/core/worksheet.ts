@@ -16,6 +16,7 @@ import {ConditionalFormattingOverlay} from './conditional-formatting-overlay.ts'
 import type {ConditionalFormatting} from './conditional-formatting.ts';
 import {DataValidationOverlay} from './data-validation-overlay.ts';
 import type {DataValidation, DataValidationEntry} from './data-validation.ts';
+import type {SheetSplice} from './formula-references.ts';
 import {GridEdits} from './grid-edits.ts';
 import type {
   AnchoredImage,
@@ -323,6 +324,9 @@ export class Worksheet {
   readonly #conditionalFormattings = new ConditionalFormattingOverlay();
   // Sheet-level protection is a single overlay switch, absent until `protect` is called.
   #protection: SheetProtection | undefined;
+  // What moves the formulas outside this sheet when a splice moves its lines: set by the workbook that
+  // holds the sheet, absent on one no workbook does.
+  #formulaHost: ((edit: SheetSplice) => void) | undefined;
   // The sheet's autofilter (range plus any per-column criteria), absent until one is set. A single
   // sheet-level overlay, distinct from a table's own autofilter; stored canonically so the
   // `<autoFilter>` element and the derived `_FilterDatabase` defined name always agree.
@@ -362,6 +366,8 @@ export class Worksheet {
       comments: this.#comments,
       rowBreaks: this.rowBreaks,
       columnBreaks: this.columnBreaks,
+      sheetName: () => this.name,
+      formulaHost: () => this.#formulaHost,
       autoFilter: {
         get: () => this.#autoFilter,
         set: (next) => {
@@ -860,6 +866,11 @@ export class Worksheet {
    * silently becomes a no-op. Cells carry their full style to the shifted position, and merged ranges
    * shift with the rows they cover.
    *
+   * Formulas move with the rows as Excel moves them: a reference to this sheet, in any sheet's formula,
+   * a defined name, a data validation or a conditional format, follows the row it names, and one to a
+   * deleted row becomes `#REF!`. What the inserted rows carry is written against the sheet after the
+   * edit and is not moved.
+   *
    * @throws {RangeError} if `start` is not a positive integer or `count` is negative.
    * @throws {RangeError} if an inserted row would land past the last row of the grid. The sheet is
    *   left untouched, so this is a refused edit rather than half of one: a region pushed off the edge
@@ -1019,6 +1030,8 @@ export class Worksheet {
    * `inserts.length - count`, keeping their values and styles, and a merged range lying wholly to
    * the right of the edit re-anchors to its new columns. Each inserted column is an array of values
    * indexed by row (index 0 → row 1); an empty array inserts a blank column.
+   *
+   * Formulas move with the columns, by the rules {@link spliceRows} gives for rows.
    *
    * @throws {RangeError} if `start` is not a positive integer or `count` is negative.
    * @throws {RangeError} if an inserted column would land past the last column, or one of its values
@@ -1209,6 +1222,12 @@ export class Worksheet {
     addPreservedReference: (reference) => {
       this.#preservedReferences.push(reference);
     },
+    setFormulaHost: (host) => {
+      this.#formulaHost = host;
+    },
+    spliceFormulas: (edit) => {
+      this.#edits.spliceFormulas(edit);
+    },
     restoreProtection: (protection) => {
       this.#protection = protection;
     },
@@ -1357,6 +1376,16 @@ export interface WorksheetInternals {
    * restores that credential verbatim rather than re-hashing.
    */
   restoreProtection(protection: SheetProtection): void;
+
+  /**
+   * Hand the sheet what moves the formulas beyond it, every other sheet's and the workbook's defined
+   * names, when a splice of this sheet moves the lines they refer to. The workbook sets it on each sheet
+   * it creates.
+   */
+  setFormulaHost(host: (edit: SheetSplice) => void): void;
+
+  /** Move the references this sheet's formulas make to a spliced sheet, which here is another one. */
+  spliceFormulas(edit: SheetSplice): void;
 
   /**
    * Materialise the cell at an exact 1-based position, creating it on first access. Unlike

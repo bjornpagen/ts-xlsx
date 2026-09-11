@@ -1,0 +1,98 @@
+{
+  "invariant": "formula-references-through-a-splice",
+  "description": "How Excel moves the references formula text makes when rows or columns of a sheet are inserted or deleted. Each case is a fresh workbook of sheets S1, S2 and S3: formulas, defined names and a data validation authored over COM, the edit made over COM, and every formula read back through Range.Formula (a defined name through Names.Item().RefersTo, a validation through Validation.Formula1) before and after. An insert moves every reference at or after it, absolute or not; a delete turns what it takes into #REF!, keeping the sheet prefix; whole columns ignore a row splice; a 3-D span and an INDIRECT string do not move; a single reference pushed past the last row is #REF! while a range bottom already there stays.",
+  "probe": "a one-off COM script: Workbooks.Add, formulas via Range.Formula, Names.Add, Validation.Add, then Rows()/Columns() Insert or Delete",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-11",
+  "openClass": "headless COM (DisplayAlerts off), a workbook created in the session, never saved",
+  "cases": {
+    "insert-rows": {
+      "edit": "S1.Rows(\"5:6\").Insert()",
+      "note": "S1!D6 is empty before and after: D4 (=A4+A3) sits above the insert, so no cell lands on D6. dv:S1!F22 is the validation authored on F20 (=$A$5:$A$9), read where the insert moved it.",
+      "before": {
+        "S1!D1": "=SUM(A1:A10)",
+        "S1!D2": "=A5+$A$5+A$5+$A5",
+        "S1!D3": "=SUM(5:6)+SUM(A:A)+SUM(4:4)",
+        "S1!D6": "",
+        "S1!E1": "=SUM(A11:A12)",
+        "S2!A1": "='S1'!A5+SUM('S1'!A1:A10)+A5",
+        "S2!A2": "=SUM(S1:'S3'!A5)",
+        "S2!A3": "=INDIRECT(\"S1!A5\")",
+        "name:Five": "='S1'!$A$5",
+        "name:Span": "='S1'!$A$1:$A$10",
+        "dv:S1!F22": ""
+      },
+      "after": {
+        "S1!D1": "=SUM(A1:A12)",
+        "S1!D2": "=A7+$A$7+A$7+$A7",
+        "S1!D3": "=SUM(7:8)+SUM(A:A)+SUM(4:4)",
+        "S1!D6": "",
+        "S1!E1": "=SUM(A13:A14)",
+        "S2!A1": "='S1'!A7+SUM('S1'!A1:A12)+A5",
+        "S2!A2": "=SUM(S1:'S3'!A5)",
+        "S2!A3": "=INDIRECT(\"S1!A5\")",
+        "name:Five": "='S1'!$A$7",
+        "name:Span": "='S1'!$A$1:$A$12",
+        "dv:S1!F22": "=$A$7:$A$11"
+      }
+    },
+    "insert-at-top-and-below": {
+      "edit": "S1.Rows(\"5:5\").Insert()",
+      "before": {
+        "S1!D1": "=SUM(A5:A10)",
+        "S1!D2": "=SUM(A1:A4)"
+      },
+      "after": {
+        "S1!D1": "=SUM(A6:A11)",
+        "S1!D2": "=SUM(A1:A4)"
+      }
+    },
+    "delete-rows": {
+      "edit": "S1.Rows(\"5:6\").Delete()",
+      "before": {
+        "S1!D1": "=SUM(A3:A10)",
+        "S1!D2": "=A5+A7+A12",
+        "S1!D3": "=SUM(A5:A6)",
+        "S1!D4": "=SUM(A6:A12)",
+        "S1!E1": "=SUM(5:6)+SUM(4:7)",
+        "S2!A1": "='S1'!A5+SUM('S1'!A5:A6)+'S1'!A8",
+        "name:Five": "='S1'!$A$5"
+      },
+      "after": {
+        "S1!D1": "=SUM(A3:A8)",
+        "S1!D2": "=#REF!+A5+A10",
+        "S1!D3": "=SUM(#REF!)",
+        "S1!D4": "=SUM(A5:A10)",
+        "S1!E1": "=SUM(#REF!)+SUM(4:5)",
+        "S2!A1": "='S1'!#REF!+SUM('S1'!#REF!)+'S1'!A6",
+        "name:Five": "='S1'!#REF!"
+      }
+    },
+    "delete-columns": {
+      "edit": "S1.Columns(\"C:D\").Delete()",
+      "before": {
+        "S1!A10": "=SUM(B1:E1)+C1+F1+SUM(C:D)+SUM(C1:D1)"
+      },
+      "after": {
+        "S1!A10": "=SUM(B1:C1)+#REF!+D1+SUM(#REF!)+SUM(#REF!)"
+      }
+    },
+    "last-row": {
+      "edit": "S1.Rows(\"3:3\").Insert()",
+      "note": "S1!D3 held =SUM(A1:A1048576), which Excel stores as =SUM(A:A); the insert at row 3 moved the cell itself to D4, so D3 reads empty after.",
+      "before": {
+        "S1!D1": "=A1048576",
+        "S1!D2": "=SUM(A1048570:A1048576)",
+        "S1!D3": "=SUM(A:A)"
+      },
+      "after": {
+        "S1!D1": "=#REF!",
+        "S1!D2": "=SUM(A1048571:A1048576)",
+        "S1!D3": ""
+      }
+    }
+  }
+}

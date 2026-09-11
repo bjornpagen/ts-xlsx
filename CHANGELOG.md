@@ -39,6 +39,17 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Changed
 
+- **BREAKING: a row or column splice moves the references in formula text, as Excel does.**
+  `spliceRows`, `spliceColumns`, `insertRow` and the other structural edits used to leave formulas
+  as written, so `=SUM(A1:A10)` above an inserted row kept summing `A1:A10`. The references to the
+  edited sheet now move in that sheet's cell formulas, in every other sheet's, in defined names, and in
+  data validation and conditional formatting formulas. An insert moves absolute and relative references
+  alike and grows a range it lands in; a delete turns what it takes into `#REF!` and shrinks a range it
+  cuts into; whole columns ignore a row edit, and 3-D spans, external references, structured references
+  and strings are left alone. A shared-formula clone the edit sets apart from its master, or whose
+  master it deletes, becomes a plain formula. What an insert brings in is not rewritten. Table
+  formulas, hyperlink locations and pivot sources still do not move.
+
 - **`AuthoringError` messages for a value outside an OOXML enumeration, or a malformed ARGB colour,
   start lowercase**, as every other message does: `invalid page orientation "…"` rather than
   `Invalid page orientation "…"`. Code matching the message text case-sensitively needs updating;

@@ -124,6 +124,24 @@ test('inserting a column into a shared-formula sheet re-anchors the master so th
   assert.match(sheetXml(writeXlsx(wb)), /<f t="shared" ref="C1:C3" si="0">/);
 });
 
+test('a shared formula a splice splits writes the part still shared as a group, and reads back as it was left', () => {
+  const wb = new Workbook();
+  const sheet = wb.addWorksheet('S');
+  // B1 reads A10, B2 A11, B3 A12. A row inserted at 12 moves only B3's reference, so B2 is still B1
+  // translated and B3 is not.
+  sheet.getCell('B1').value = {formula: 'A10', result: 0};
+  sheet.getCell('B2').value = {sharedFormula: 'B1', result: 0};
+  sheet.getCell('B3').value = {sharedFormula: 'B1', result: 0};
+  sheet.spliceRows(12, 0, []);
+
+  const xml = sheetXml(writeXlsx(wb));
+  assert.match(xml, /<c r="B1"><f t="shared" ref="B1:B2" si="0">A10<\/f>/);
+  assert.match(xml, /<c r="B3"><f>A13<\/f>/);
+  const back = roundtrip(wb);
+  assert.equal(sharedOf(back, 'B2').formula, 'A11');
+  assert.deepEqual(back.getWorksheet('S')?.getCell('B3').value, {formula: 'A13', result: 0});
+});
+
 test('a styled shared-formula clone keeps its fill and font on read, not just its value', () => {
   const red: Fill = {type: 'pattern', pattern: 'solid', fgColor: {argb: 'FFFF0000'}};
   const wb = filledColumn();

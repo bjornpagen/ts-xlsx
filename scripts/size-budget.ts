@@ -58,7 +58,10 @@ const DIST = join(ROOT, 'dist');
 //
 // Raised again, from 592, when pictures began carrying alternative text, a title, a crop and a link
 // through the drawing codec, 4.6 KB over.
-const TOTAL_BUDGET_BYTES = 597 * 1024;
+//
+// Raised again, from 597, when a row or column splice began moving the references in formula text, on every sheet and in defined names. `core/formula-references.ts` is a reader of formula text
+// of its own, and `core/grid-edits.ts` the pass that hands every formula the splice. 11.1 KB over.
+const TOTAL_BUDGET_BYTES = 609 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -142,7 +145,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // entry sitting on its budget.
   //
   // Raised again, from 581, by the same picture properties as `/xlsx`, 4.3 KB over.
-  '.': 586,
+  //
+  // Raised again, from 586, by the same formula reference moves as `/core`, 10.9 KB over.
+  '.': 597,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -167,7 +172,13 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 217, when a splice began flagging a data table's deleted input cell rather than
   // leaving the reference to be read from whatever moved into its place, a tenth over.
-  './core': 218,
+  //
+  // Raised again, from 218, when a row or column splice began moving the references in formula text, on every sheet and in defined names.
+  // The model now reads formula text: `core/formula-references.ts`, and the opaque-region scanner it
+  // shares with the function mangling, which moved into `core/formula-scan.ts` beside it so this entry
+  // takes the scanner without the mangling or the future-function table. The shared-formula
+  // translation moved in with them from `core/formula.ts`. 14.5 KB over.
+  './core': 233,
   // Raised from 554 by the same future-function registry as `.`, which put this entry nine tenths over.
   //
   // Raised again, from 555, by the same conditional-format boundaries as `.`, eight tenths over.
@@ -191,7 +202,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 563, when the drawing codec began reading and writing a picture's alternative
   // text and title, its crop in either spelling `ST_Percentage` allows, and its link through a hyperlink
   // relationship, with the checks that keep each writable. 4.0 KB over.
-  './xlsx': 568,
+  //
+  // Raised again, from 568, by the same formula reference moves as `/core`, 10.6 KB over.
+  './xlsx': 579,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -222,7 +235,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 310, by the model half of the picture properties (`core/image.ts`), two tenths
   // over.
-  './xlsb': 311,
+  //
+  // Raised again, from 311, by the same formula reference moves as `/core`, 10.7 KB over.
+  './xlsb': 322,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
@@ -250,7 +265,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // LF as a delimiter and a row delimiter it cannot keep apart from the data. Two tenths over.
   //
   // Raised again, from 227, by the same reference-name rule as `/core`, a kilobyte over.
-  './csv': 229,
+  //
+  // Raised again, from 229, by the same formula reference moves as `/core`, 14.8 KB over.
+  './csv': 244,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //
@@ -280,7 +297,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 421, by the same picture properties as `/xlsx`, which this entry's writer carries,
   // 3.6 KB over.
-  './node': 425,
+  //
+  // Raised again, from 425, by the same formula reference moves as `/core`, 11.1 KB over.
+  './node': 437,
   // Raised from 50 when the MS-OVBA encoder stopped rescanning its whole back-window for every
   // output byte. The hash chain that replaced the rescan is the cost, and it buys a time bound on a
   // path an untrusted `.xlsm` reaches through `removeVbaModule`; the CFB and `dir` guards landed

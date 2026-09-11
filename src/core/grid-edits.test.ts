@@ -564,3 +564,119 @@ test('a table on the right edge keeps its anchor inside the grid', () => {
   sheet.spliceColumns(1, 0, ['inserted']);
   assert.doesNotThrow(() => sheet.tables[0]?.range);
 });
+
+// Formula text names cells by spelling them, so a splice has to move what it says as well as where it
+// sits. The rules themselves are locked in formula-references.test.ts; these lock that every place a
+// workbook holds a formula is handed the splice, and only once.
+
+const formulaOf = (sheet: Worksheet, ref: string): string | undefined => {
+  const value = sheet.getCell(ref).value;
+  return typeof value === 'object' && value !== null && 'formula' in value
+    ? value.formula
+    : undefined;
+};
+
+test('a splice moves the references in formulas on the spliced sheet, and keeps their results', () => {
+  const sheet = new Workbook().addWorksheet('S');
+  sheet.getCell('C1').value = {formula: 'SUM(A1:A10)', result: 55};
+  sheet.getCell('C2').value = {formula: 'A5*$B$7'};
+  sheet.spliceRows(3, 0, [], []);
+  assert.deepEqual(sheet.getCell('C1').value, {formula: 'SUM(A1:A12)', result: 55});
+  assert.equal(formulaOf(sheet, 'C2'), 'A7*$B$9');
+
+  sheet.spliceColumns(1, 1);
+  assert.equal(formulaOf(sheet, 'B1'), 'SUM(#REF!)', 'the delete took every cell the sum named');
+  assert.equal(formulaOf(sheet, 'B2'), '#REF!*$A$9');
+});
+
+test('what a splice inserts was written against the grid after it, and is not moved again', () => {
+  const sheet = new Workbook().addWorksheet('S');
+  sheet.getCell('A1').value = {formula: 'B5'};
+  sheet.spliceRows(2, 0, [{formula: 'B5'}]);
+  assert.equal(formulaOf(sheet, 'A1'), 'B6');
+  assert.equal(formulaOf(sheet, 'A2'), 'B5');
+});
+
+test("a splice moves another sheet's references to the spliced sheet, and none of its own", () => {
+  const workbook = new Workbook();
+  const data = workbook.addWorksheet('Data');
+  const report = workbook.addWorksheet('Report');
+  report.getCell('A1').value = {formula: "SUM(Data!B2:B9)+'Data'!C4+B4"};
+  data.spliceRows(3, 1);
+  assert.equal(formulaOf(report, 'A1'), "SUM(Data!B2:B8)+'Data'!C3+B4");
+});
+
+test('a splice moves the defined names that refer to the spliced sheet', () => {
+  const workbook = new Workbook();
+  const data = workbook.addWorksheet('Data');
+  workbook.addWorksheet('Other');
+  workbook.defineName({name: 'Rates', refersTo: 'Data!$B$2:$B$9', comment: 'kept'});
+  workbook.defineName({name: 'Local', refersTo: '$B$5', scope: 'Data'});
+  workbook.defineName({name: 'Elsewhere', refersTo: '$B$5', scope: 'Other'});
+  data.spliceRows(1, 0, []);
+  assert.deepEqual(
+    workbook.definedNames.map(({name, refersTo, comment}) => ({name, refersTo, comment})),
+    [
+      {name: 'Rates', refersTo: 'Data!$B$3:$B$10', comment: 'kept'},
+      {name: 'Local', refersTo: '$B$6', comment: undefined},
+      {name: 'Elsewhere', refersTo: '$B$5', comment: undefined},
+    ],
+  );
+});
+
+test('a splice moves the formulas of data validations and conditional formats', () => {
+  const sheet = new Workbook().addWorksheet('S');
+  sheet.addDataValidation('D1', {type: 'list', formulae: ['$A$5:$A$9']});
+  sheet.addDataValidation('D2', {type: 'whole', operator: 'between', formulae: [1, '$B$5']});
+  sheet.addConditionalFormatting({
+    ref: 'D1:D3',
+    rules: [
+      {type: 'expression', formulae: ['$A5>0']},
+      {type: 'colorScale', cfvo: [{type: 'formula', value: '$A$5'}, {type: 'max'}]},
+    ],
+  });
+  sheet.spliceRows(2, 0, [], []);
+  assert.deepEqual(
+    sheet.dataValidations.map((entry) => entry.rule.formulae),
+    [['$A$7:$A$11'], [1, '$B$7']],
+  );
+  const [expression, scale] = sheet.conditionalFormattings[0]?.rules ?? [];
+  assert.deepEqual(expression?.formulae, ['$A7>0']);
+  assert.deepEqual(scale?.cfvo, [{type: 'formula', value: '$A$7'}, {type: 'max'}]);
+});
+
+test('a shared formula every cell of which moves alike keeps sharing', () => {
+  const sheet = new Workbook().addWorksheet('S');
+  sheet.getCell('B1').value = {formula: 'A1*2'};
+  sheet.getCell('B2').value = {sharedFormula: 'B1'};
+  sheet.getCell('B3').value = {sharedFormula: 'B1', formula: 'A3*2'};
+  sheet.spliceRows(1, 0, []);
+  assert.deepEqual(sheet.getCell('B2').value, {formula: 'A2*2'});
+  assert.deepEqual(sheet.getCell('B3').value, {sharedFormula: 'B2'});
+  assert.deepEqual(sheet.getCell('B4').value, {sharedFormula: 'B2', formula: 'A4*2'});
+});
+
+test('a shared formula clone the splice sets apart from its master becomes a formula of its own', () => {
+  const sheet = new Workbook().addWorksheet('S');
+  // B1 reads A10 and its clone B2 reads A11: a row inserted at 11 moves the clone's reference and not
+  // the master's, so the master translated to B2 no longer says what B2 does.
+  sheet.getCell('B1').value = {formula: 'A10', result: 1};
+  sheet.getCell('B2').value = {sharedFormula: 'B1', result: 2};
+  sheet.spliceRows(11, 0, []);
+  assert.deepEqual(sheet.getCell('B1').value, {formula: 'A10', result: 1});
+  assert.deepEqual(sheet.getCell('B2').value, {formula: 'A12', result: 2});
+});
+
+test('a shared formula clone whose master the splice deletes keeps its formula', () => {
+  const sheet = new Workbook().addWorksheet('S');
+  sheet.getCell('B1').value = {formula: 'A1+A5'};
+  sheet.getCell('B2').value = {sharedFormula: 'B1'};
+  sheet.getCell('B3').value = {sharedFormula: 'B1'};
+  sheet.spliceRows(1, 1);
+  assert.deepEqual(
+    sheet.getCell('B1').value,
+    {formula: 'A1+A5'},
+    'the clone that read A2+A6, a row up',
+  );
+  assert.deepEqual(sheet.getCell('B2').value, {formula: 'A2+A6'});
+});

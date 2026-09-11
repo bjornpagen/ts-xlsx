@@ -16,7 +16,8 @@
 
 import {encodeAddress, MAX_COLUMN, tryDecodeCellRef} from '../../core/address.ts';
 import type {DateEpoch} from '../../core/date.ts';
-import {translateFormula, unmangleFunctions} from '../../core/formula.ts';
+import {translateFormula} from '../../core/formula-references.ts';
+import {unmangleFunctions} from '../../core/formula.ts';
 import type {
   CellValue,
   DataTableFormulaValue,

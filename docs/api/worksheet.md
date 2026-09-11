@@ -868,6 +868,11 @@ like [`addRow`](./worksheet.md#worksheetaddrow). A `count` larger than the rows 
 silently becomes a no-op. Cells carry their full style to the shifted position, and merged ranges
 shift with the rows they cover.
 
+Formulas move with the rows as Excel moves them: a reference to this sheet, in any sheet's formula,
+a defined name, a data validation or a conditional format, follows the row it names, and one to a
+deleted row becomes `#REF!`. What the inserted rows carry is written against the sheet after the
+edit and is not moved.
+
 **Throws:** `RangeError` if `start` is not a positive integer or `count` is negative.
 **Throws:** `RangeError` if an inserted row would land past the last row of the grid. The sheet is
 left untouched, so this is a refused edit rather than half of one: a region pushed off the edge
@@ -964,6 +969,8 @@ place: the column analog of [`spliceRows`](./worksheet.md#worksheetsplicerows). 
 `inserts.length - count`, keeping their values and styles, and a merged range lying wholly to
 the right of the edit re-anchors to its new columns. Each inserted column is an array of values
 indexed by row (index 0 → row 1); an empty array inserts a blank column.
+
+Formulas move with the columns, by the rules [`spliceRows`](./worksheet.md#worksheetsplicerows) gives for rows.
 
 **Throws:** `RangeError` if `start` is not a positive integer or `count` is negative.
 **Throws:** `RangeError` if an inserted column would land past the last column, or one of its values

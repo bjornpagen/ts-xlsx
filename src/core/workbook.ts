@@ -26,6 +26,7 @@ import {
 } from '../vba/index.ts';
 import {commentThreadGuid, type Person} from './comment-thread.ts';
 import type {DateEpoch} from './date.ts';
+import {type SheetSplice, spliceFormula} from './formula-references.ts';
 import {pictureProperties, type WorkbookImage, type WorksheetImages} from './image.ts';
 import {INTERNAL} from './internal.ts';
 import {INVALID_SHEET_NAME_CHARS, MAX_SHEET_NAME_LENGTH} from './limits.ts';
@@ -825,8 +826,24 @@ export class Workbook {
   addWorksheet(name: string, options: AddWorksheetOptions = {}): Worksheet {
     this.#assertValidSheetName(name);
     const sheet = new Worksheet(name, this.#nextSheetId++, options.state ?? 'visible');
+    sheet[INTERNAL].setFormulaHost((edit) => {
+      this.#spliceFormulasBeyond(sheet, edit);
+    });
     this.#worksheets.push(sheet);
     return sheet;
+  }
+
+  // A splice of one sheet moves the references to it everywhere else a formula lives: every other sheet,
+  // and each defined name. A sheet-scoped name reads an unqualified reference against its own sheet, as
+  // a formula on that sheet does; a workbook-scoped one has no sheet of its own.
+  #spliceFormulasBeyond(spliced: Worksheet, edit: SheetSplice): void {
+    for (const sheet of this.#worksheets) {
+      if (sheet !== spliced) sheet[INTERNAL].spliceFormulas(edit);
+    }
+    for (const [index, definedName] of this.#definedNames.entries()) {
+      const refersTo = spliceFormula(definedName.refersTo, definedName.scope, edit);
+      if (refersTo !== definedName.refersTo) this.#definedNames[index] = {...definedName, refersTo};
+    }
   }
 
   /** Look up a worksheet by name (case-insensitive) or by numeric id. */

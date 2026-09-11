@@ -48,6 +48,38 @@ export class ConditionalFormattingOverlay {
     replaceContents(this.#entries, entries);
   }
 
+  /**
+   * Rewrite every rule's formulae, and the value of each scale anchor whose type is `formula`, through
+   * `rewrite`, keeping a rule set nothing in which changed as the same object.
+   */
+  mapFormulas(rewrite: (formula: string) => string): void {
+    for (const [index, entry] of this.#entries.entries()) {
+      let changed = false;
+      const rules = entry.rules.map((rule) => {
+        const formulae = rule.formulae?.map((operand) =>
+          typeof operand === 'string' ? rewrite(operand) : operand,
+        );
+        const cfvo = rule.cfvo?.map((anchor) =>
+          anchor.type === 'formula' && typeof anchor.value === 'string'
+            ? {...anchor, value: rewrite(anchor.value)}
+            : anchor,
+        );
+        const formulaeMoved =
+          formulae?.some((operand, i) => operand !== rule.formulae?.[i]) ?? false;
+        const cfvoMoved =
+          cfvo?.some((anchor, i) => anchor.value !== rule.cfvo?.[i]?.value) ?? false;
+        if (!formulaeMoved && !cfvoMoved) return rule;
+        changed = true;
+        return {
+          ...rule,
+          ...(formulae === undefined ? {} : {formulae}),
+          ...(cfvo === undefined ? {} : {cfvo}),
+        };
+      });
+      if (changed) this.#entries[index] = {...entry, rules};
+    }
+  }
+
   /** Drop every conditional formatting, leaving the overlay empty. */
   clear(): void {
     this.#entries.length = 0;

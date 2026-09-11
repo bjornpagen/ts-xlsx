@@ -6,7 +6,6 @@ import {
   mangleFunctions,
   mangleParams,
   quoteSheetName,
-  translateFormula,
   unmangleFunctions,
 } from './formula.ts';
 
@@ -286,129 +285,6 @@ test('mangleFormula then unmangle round-trips a LET/LAMBDA formula', () => {
   for (const f of ['LET(x,1,x+1)', 'LAMBDA(a,b,a+b)', 'LET(f,LAMBDA(v,v+1),f(5))', 'SUM(A1:A9)']) {
     assert.equal(unmangleFunctions(mangleFormula(f)), f);
   }
-});
-
-test('translateFormula shifts a relative reference by the row and column delta', () => {
-  assert.equal(translateFormula('A1*2', 0, 1), 'A2*2', 'one row down');
-  assert.equal(translateFormula('A1*2', 0, 2), 'A3*2', 'two rows down');
-  assert.equal(translateFormula('A1', 1, 0), 'B1', 'one column across');
-  assert.equal(translateFormula('B2+C3', 2, 3), 'D5+E6', 'both axes, several references');
-});
-
-test('translateFormula answers #REF! on either axis when the shift leaves the grid', () => {
-  // One question, two wrong answers before this: the column axis threw a bare `RangeError` out of
-  // `numberToColumn`'s bounds assert, and the row axis emitted `A0` or `A-4`, which is not a
-  // reference. The throw is the worse of the two, because this runs on the READ path with deltas
-  // taken from a file's own shared-formula geometry, so an odd file aborted the whole sheet read with
-  // an error outside the library's taxonomy. `#REF!` is what Excel writes for the same shift.
-  assert.equal(translateFormula('XFD1', 1, 0), '#REF!', 'one column past the last');
-  assert.equal(translateFormula('A1', -1, 0), '#REF!', 'one column before the first');
-  assert.equal(translateFormula('A1*2', 0, -1), '#REF!*2', 'row 0 is not a row');
-  assert.equal(translateFormula('A1*2', 0, -5), '#REF!*2', 'and neither is a negative one');
-  assert.equal(translateFormula('A1048576', 0, 5), '#REF!', 'past the last row');
-});
-
-test('translateFormula answers #REF! for a reference the grid never had a column for', () => {
-  // The guard above could not see these: `CELL_REFERENCE` matches three letters, so `ZZZ1` (column
-  // 18278) went into the strict decoder and threw before the shift was ever computed. A reference
-  // past XFD and a shift past XFD are the same answer, and one of them used to abort the read.
-  assert.equal(translateFormula('ZZZ1*2', 0, 1), '#REF!*2');
-  assert.equal(translateFormula('$ZZZ$1*2', 0, 1), '#REF!*2', 'an anchor does not exempt it');
-  assert.equal(translateFormula('SUM(A1,ZZZ1)', 1, 0), 'SUM(B1,#REF!)', 'one operand at a time');
-});
-
-test('translateFormula leaves the references that stay on the grid alone', () => {
-  assert.equal(translateFormula('XFC1', 1, 0), 'XFD1', 'the last column is reachable');
-  assert.equal(translateFormula('A1048571', 0, 5), 'A1048576', 'and so is the last row');
-  assert.equal(translateFormula('SUM(A1,XFD1)', 1, 0), 'SUM(B1,#REF!)', 'one operand at a time');
-});
-
-test('translateFormula leaves an absolute axis fixed and shifts only the relative one', () => {
-  assert.equal(translateFormula('$A$1', 3, 4), '$A$1', 'fully absolute never moves');
-  assert.equal(translateFormula('$A1', 5, 1), '$A2', 'absolute column, relative row');
-  assert.equal(translateFormula('A$1', 1, 5), 'B$1', 'relative column, absolute row');
-  assert.equal(translateFormula('$A$1+B1', 1, 1), '$A$1+C2', 'mixed within one formula');
-});
-
-test('translateFormula is the identity for a zero delta', () => {
-  assert.equal(translateFormula('SUM($A$1:B7)*C8', 0, 0), 'SUM($A$1:B7)*C8');
-});
-
-test('translateFormula shifts both endpoints of a range independently', () => {
-  assert.equal(translateFormula('SUM(A1:B2)', 1, 10), 'SUM(B11:C12)');
-  assert.equal(translateFormula('A1:$B$2', 0, 5), 'A6:$B$2', 'the absolute endpoint stays');
-});
-
-// Filling `COUNTIF(A:A,A1)` right is exactly what Excel stores as a shared formula, and the clone used
-// to read back as `COUNTIF(A:A,B1)`: only `A1`-shaped references moved, so a whole-line range never did.
-test('translateFormula shifts a whole-column range, each end only where it is relative', () => {
-  assert.equal(
-    translateFormula('COUNTIF(A:A,A1)', 1, 1),
-    'COUNTIF(B:B,B2)',
-    'the range moves with the cell beside it',
-  );
-  assert.equal(translateFormula('SUM(A:A)', 1, 0), 'SUM(B:B)');
-  assert.equal(translateFormula('SUM($A:$A)', 1, 0), 'SUM($A:$A)', 'anchored at both ends');
-  assert.equal(translateFormula('SUM(A:$C)', 1, 0), 'SUM(B:$C)', 'anchored at one end');
-  assert.equal(translateFormula('SUM(A:A)', 0, 5), 'SUM(A:A)', 'a row shift cannot move a column');
-});
-
-test('translateFormula shifts a whole-row range, each end only where it is relative', () => {
-  assert.equal(translateFormula('SUM(1:1)', 0, 1), 'SUM(2:2)');
-  assert.equal(translateFormula('SUM($1:2)', 0, 1), 'SUM($1:3)', 'anchored at one end');
-  assert.equal(translateFormula('SUM(1:1)', 3, 0), 'SUM(1:1)', 'a column shift cannot move a row');
-});
-
-test('translateFormula shifts a sheet-qualified whole-line range but not the sheet name', () => {
-  assert.equal(translateFormula('SUM(Sheet1!A:A)', 1, 0), 'SUM(Sheet1!B:B)');
-  assert.equal(translateFormula("SUM('My Sheet'!1:1)", 0, 1), "SUM('My Sheet'!2:2)");
-});
-
-test('translateFormula answers #REF! for a whole-line range pushed off the grid', () => {
-  assert.equal(translateFormula('SUM(XFD:XFD)', 1, 0), 'SUM(#REF!)', 'past the last column');
-  assert.equal(translateFormula('SUM(1:1)', 0, -1), 'SUM(#REF!)', 'before the first row');
-  assert.equal(translateFormula('SUM(1048576:1048576)', 0, 1), 'SUM(#REF!)', 'past the last row');
-});
-
-test('translateFormula leaves a time in a string alone and still reads a cell range as two cells', () => {
-  assert.equal(translateFormula('IF(A1="10:30",1,0)', 0, 1), 'IF(A2="10:30",1,0)');
-  assert.equal(translateFormula('SUM(A1:B2)', 1, 1), 'SUM(B2:C3)');
-});
-
-test('translateFormula never touches a function name or a defined name', () => {
-  assert.equal(translateFormula('SUM(A1:A3)', 0, 1), 'SUM(A2:A4)', 'SUM has no row digits');
-  assert.equal(translateFormula('TaxRate*A1', 2, 2), 'TaxRate*C3', 'a defined name is left alone');
-  assert.equal(
-    translateFormula('LOG10(A1)', 0, 1),
-    'LOG10(A2)',
-    'a call ending in digits is not a reference',
-  );
-});
-
-test('translateFormula shifts a sheet-qualified cell but not the sheet name', () => {
-  assert.equal(translateFormula('Sheet1!A1', 0, 1), 'Sheet1!A2', 'the cell after ! moves');
-  assert.equal(
-    translateFormula('Q1!A1', 0, 1),
-    'Q1!A2',
-    'a sheet name that looks like a reference is untouched',
-  );
-  assert.equal(
-    translateFormula("'My Sheet'!A1+B2", 1, 1),
-    "'My Sheet'!B2+C3",
-    'a quoted sheet name is copied verbatim',
-  );
-});
-
-test('translateFormula reads a bare cell-shaped name before a colon as a cell, as Excel does', () => {
-  // `Q1:Q4!B2` looks like a 3-D span over quarter-named sheets, but a span over sheets named like
-  // cells must be quoted, `'Q1:Q4'!B2`. Excel reads the bare form as the range from cell Q1 to Q4!B2
-  // and re-spells it `Q1:'Q4'!B2` (Excel 16.0 build 20326), so Q1 is a relative cell and moves.
-  assert.equal(translateFormula('SUM(Q1:Q4!B2)', 0, 1), 'SUM(Q2:Q4!B3)');
-  assert.equal(translateFormula("SUM('Q1:Q4'!B2)", 0, 1), "SUM('Q1:Q4'!B3)", 'the quoted span');
-});
-
-test('translateFormula copies a string literal verbatim, references outside it still move', () => {
-  assert.equal(translateFormula('IF(A1>0,"A1 is B2",B2)', 0, 1), 'IF(A2>0,"A1 is B2",B3)');
 });
 
 test('quoteSheetName leaves a plain identifier bare and quotes anything else', () => {
