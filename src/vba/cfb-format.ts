@@ -2,14 +2,58 @@
 //
 // `vbaProject.bin` is the one place in this tree where a hand-written binary reader and a
 // hand-written binary writer are expected to round-trip each other's output byte for byte, and the
-// whole edit-in-place path rests on that. Two independent transcriptions of the same five numbers
-// is the cheapest way for that to break, and it would break quietly: a wrong `TYPE_*` in one file
-// yields a container this library still reads and Excel rejects.
+// whole edit-in-place path rests on that. Two independent transcriptions of the same numbers is the
+// cheapest way for that to break, and it would break quietly: a wrong `TYPE_*` or field offset in one
+// file yields a container this library still reads and Excel rejects.
 //
-// Only what both directions are bound by lives here. The v3 sector layout the writer chooses to
-// emit does not, because the reader deliberately takes every one of those off the header it was
-// handed: a file may legally say otherwise, and a shared constant would invite a reader to trust
-// the layout over the header field.
+// What lives here is what the format fixes for every file: the signature, the chain markers and object
+// types, where each header and directory-entry field sits, and the values the reader refuses to see
+// otherwise (the mini-sector shift, the mini-stream cutoff, the header's 109 DIFAT slots). What does
+// not is the v3 layout the writer chooses to emit (512-byte sectors, version 3), because the reader
+// takes those off the header it was handed: a file may legally say otherwise, and a shared constant
+// would invite a reader to trust the layout over the header field.
+
+/** The header's first eight bytes, as the two little-endian `u32`s both directions handle them as. */
+export const CFB_SIGNATURE = {low: 0xe011cfd0, high: 0xe11ab1a1} as const;
+
+/** Byte offsets of the header fields either direction reads or writes ([MS-CFB] 2.2). */
+export const HEADER_FIELD = {
+  signatureLow: 0,
+  signatureHigh: 4,
+  minorVersion: 24,
+  majorVersion: 26,
+  byteOrder: 28,
+  sectorShift: 30,
+  miniSectorShift: 32,
+  fatSectors: 44,
+  firstDirectorySector: 48,
+  miniStreamCutoff: 56,
+  firstMiniFatSector: 60,
+  miniFatSectors: 64,
+  firstDifatSector: 68,
+  difatSectors: 72,
+  difat: 76,
+} as const;
+
+/** Byte offsets within a directory entry, from the entry's start ([MS-CFB] 2.6.1). The name's UTF-16
+ * code units begin at offset 0. */
+export const DIR_ENTRY_FIELD = {
+  nameLength: 64,
+  objectType: 66,
+  color: 67,
+  leftSibling: 68,
+  rightSibling: 72,
+  child: 76,
+  startSector: 116,
+  sizeLow: 120,
+  sizeHigh: 124,
+} as const;
+
+/** FAT-sector pointers the header holds before a DIFAT sector is needed ([MS-CFB] 2.2). */
+export const HEADER_DIFAT_SLOTS = 109;
+
+/** 64-byte mini sectors: [MS-CFB] 2.2 fixes the shift at 6 for both versions. */
+export const MINI_SECTOR_SHIFT = 6;
 
 /** Sector chain markers ([MS-CFB] 2.2). */
 export const FREESECT = 0xffffffff;

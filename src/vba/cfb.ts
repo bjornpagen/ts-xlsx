@@ -13,8 +13,13 @@
 import {quoted} from '../errors.ts';
 import {concat, decodeUtf16le, readU16, readU32} from './bytes.ts';
 import {
+  CFB_SIGNATURE,
+  DIR_ENTRY_FIELD,
   DIR_ENTRY_SIZE,
+  HEADER_DIFAT_SLOTS,
+  HEADER_FIELD,
   MAX_REGULAR_SECTOR,
+  MINI_SECTOR_SHIFT,
   MINI_STREAM_CUTOFF,
   NOSTREAM,
   sameEntryName,
@@ -53,9 +58,6 @@ interface SectorChain {
   readonly next: (sector: number) => number;
 }
 
-const CFB_SIGNATURE_LO = 0xe011cfd0;
-const CFB_SIGNATURE_HI = 0xe11ab1a1;
-
 // The sibling tree a storage navigates is red-black, so a container written by anything that follows
 // [MS-CFB] has depth logarithmic in its entry count: a project with a thousand streams nests around
 // ten. A hostile file is under no such obligation, and linking every entry as the left child of the one
@@ -78,34 +80,37 @@ export class CompoundFile {
     this.#buf = buf;
 
     if (buf.length < 512) throw new VbaParseError('compound file shorter than its 512-byte header');
-    if (readU32(this.#buf, 0) !== CFB_SIGNATURE_LO || readU32(this.#buf, 4) !== CFB_SIGNATURE_HI) {
+    if (
+      readU32(this.#buf, HEADER_FIELD.signatureLow) !== CFB_SIGNATURE.low ||
+      readU32(this.#buf, HEADER_FIELD.signatureHigh) !== CFB_SIGNATURE.high
+    ) {
       throw new VbaParseError('not a compound file (bad OLE2 signature)');
     }
 
-    const sectorShift = readU16(this.#buf, 30);
-    const miniSectorShift = readU16(this.#buf, 32);
+    const sectorShift = readU16(this.#buf, HEADER_FIELD.sectorShift);
+    const miniSectorShift = readU16(this.#buf, HEADER_FIELD.miniSectorShift);
     // [MS-CFB] fixes these: 512-byte sectors (shift 9) for v3, 4096 (shift 12) for v4; mini shift 6.
     if (sectorShift !== 9 && sectorShift !== 12) {
       throw new VbaParseError(`unsupported sector shift ${sectorShift}`);
     }
-    if (miniSectorShift !== 6)
+    if (miniSectorShift !== MINI_SECTOR_SHIFT)
       throw new VbaParseError(`unsupported mini-sector shift ${miniSectorShift}`);
     this.#sectorSize = 1 << sectorShift;
     this.#miniSectorSize = 1 << miniSectorShift;
     this.#maxSector = Math.floor(buf.length / this.#sectorSize);
 
-    const numFatSectors = readU32(this.#buf, 44);
-    const firstDirSector = readU32(this.#buf, 48);
-    this.#miniCutoff = readU32(this.#buf, 56);
+    const numFatSectors = readU32(this.#buf, HEADER_FIELD.fatSectors);
+    const firstDirSector = readU32(this.#buf, HEADER_FIELD.firstDirectorySector);
+    this.#miniCutoff = readU32(this.#buf, HEADER_FIELD.miniStreamCutoff);
     // Checked on the same terms as the two shifts above, and for a sharper reason: a wrong shift is
     // caught downstream by arithmetic that stops making sense, while a wrong cutoff routes every
     // stream through the *other* allocator, which is bounds-checked and will happily return bytes.
     if (this.#miniCutoff !== MINI_STREAM_CUTOFF) {
       throw new VbaParseError(`unsupported mini-stream cutoff ${this.#miniCutoff}`);
     }
-    const firstMiniFatSector = readU32(this.#buf, 60);
-    const firstDifatSector = readU32(this.#buf, 68);
-    const numDifatSectors = readU32(this.#buf, 72);
+    const firstMiniFatSector = readU32(this.#buf, HEADER_FIELD.firstMiniFatSector);
+    const firstDifatSector = readU32(this.#buf, HEADER_FIELD.firstDifatSector);
+    const numDifatSectors = readU32(this.#buf, HEADER_FIELD.difatSectors);
 
     const fatSectorIds = this.#readDifat(numFatSectors, firstDifatSector, numDifatSectors);
     this.#fat = this.#readFat(fatSectorIds);
@@ -225,9 +230,9 @@ export class CompoundFile {
   #readDifat(numFatSectors: number, firstDifat: number, numDifat: number): number[] {
     const wanted = Math.min(numFatSectors, this.#maxSector);
     const ids: number[] = [];
-    // The first 109 FAT-sector pointers live in the header; the rest chain through DIFAT sectors.
-    for (let i = 0; i < 109 && ids.length < wanted; i++) {
-      const v = readU32(this.#buf, 76 + i * 4);
+    // The first FAT-sector pointers live in the header; the rest chain through DIFAT sectors.
+    for (let i = 0; i < HEADER_DIFAT_SLOTS && ids.length < wanted; i++) {
+      const v = readU32(this.#buf, HEADER_FIELD.difat + i * 4);
       if (v >= MAX_REGULAR_SECTOR) break;
       ids.push(v);
     }
@@ -288,7 +293,7 @@ export class CompoundFile {
     // Empty slots are kept as placeholders (not skipped) so array indices stay equal to the on-disk
     // directory-entry ids the sibling-tree links reference: the tree walk in #buildSiblings needs them.
     for (let off = 0; off + DIR_ENTRY_SIZE <= raw.length; off += DIR_ENTRY_SIZE) {
-      const type = raw[off + 66] as number;
+      const type = raw[off + DIR_ENTRY_FIELD.objectType] as number;
       if (
         type !== TYPE_EMPTY &&
         type !== TYPE_STORAGE &&
@@ -297,9 +302,9 @@ export class CompoundFile {
       ) {
         throw new VbaParseError(`directory entry has invalid object type ${type}`);
       }
-      const left = readU32(raw, off + 68);
-      const right = readU32(raw, off + 72);
-      const child = readU32(raw, off + 76);
+      const left = readU32(raw, off + DIR_ENTRY_FIELD.leftSibling);
+      const right = readU32(raw, off + DIR_ENTRY_FIELD.rightSibling);
+      const child = readU32(raw, off + DIR_ENTRY_FIELD.child);
       if (type === TYPE_EMPTY) {
         entries.push({
           name: '',
@@ -312,17 +317,17 @@ export class CompoundFile {
         });
         continue;
       }
-      const nameLen = readU16(raw, off + 64);
+      const nameLen = readU16(raw, off + DIR_ENTRY_FIELD.nameLength);
       if (nameLen > 64 || nameLen % 2 !== 0) {
         throw new VbaParseError(`directory entry has invalid name length ${nameLen}`);
       }
       const name = decodeUtf16le(raw.subarray(off, off + Math.max(0, nameLen - 2)));
-      const startSector = readU32(raw, off + 116);
-      const size = readU32(raw, off + 120); // low 32 bits, ample for a VBA project
+      const startSector = readU32(raw, off + DIR_ENTRY_FIELD.startSector);
+      const size = readU32(raw, off + DIR_ENTRY_FIELD.sizeLow); // ample for a VBA project
       // The high half is not ample for anything this library reads, but ignoring it is not the same
       // as refusing it: a stream declaring 4 GiB + 10 bytes would otherwise read back as its first
       // ten, silently, which is a module's source truncated rather than a file rejected.
-      if (readU32(raw, off + 124) !== 0) {
+      if (readU32(raw, off + DIR_ENTRY_FIELD.sizeHigh) !== 0) {
         throw new VbaParseError(
           `directory entry ${quoted(name)} declares a stream larger than 4 GiB`,
         );

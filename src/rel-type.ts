@@ -18,6 +18,18 @@
 // across three layers.
 
 /**
+ * The last segment of a relationship Type (`vbaProjectSignatureAgile` in
+ * `http://schemas.microsoft.com/office/2014/relationships/vbaProjectSignatureAgile`), or the whole Type
+ * when it has no `/`: for a caller that looks the segment up rather than testing for one class.
+ *
+ * {@link isRelType} is not built on it, because a class name may span segments: the ribbon's is
+ * `ui/extensibility`.
+ */
+export function relTypeSegment(type: string): string {
+  return type.slice(type.lastIndexOf('/') + 1);
+}
+
+/**
  * Does a relationship Type name this class of part?
  *
  * A Type is a URI whose last segment names the part class, and the namespace in front of it varies by

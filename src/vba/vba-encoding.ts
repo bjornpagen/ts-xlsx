@@ -14,16 +14,16 @@ import {VbaAuthorError} from './errors.ts';
 const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 /**
- * Validate a module, project, or reference name against the shared VBA identifier contract: a valid
- * identifier, at most 31 characters (the CFB stream-name limit, which doubles as VBA's own module-name
- * limit). Used by {@link project-editor.ts | project-editor}'s structural edits.
+ * Validate a library reference's name against the VBA identifier contract: a valid identifier, at
+ * most 31 characters (the CFB stream-name limit, which VBA also applies to its names). The reference
+ * is the one new name {@link project-editor.ts | project-editor}'s structural edits write.
  *
  * @throws {VbaAuthorError} if `name` is not a valid VBA identifier or exceeds 31 characters.
  */
-export function validateVbaName(name: string, what: 'project' | 'module' | 'reference'): void {
+export function validateReferenceName(name: string): void {
   if (!IDENTIFIER.test(name) || name.length > MAX_NAME_CHARS) {
     throw new VbaAuthorError(
-      `invalid ${what} name ${quoted(name)} (must be a VBA identifier ≤ 31 chars)`,
+      `invalid reference name ${quoted(name)} (must be a VBA identifier ≤ 31 chars)`,
     );
   }
 }

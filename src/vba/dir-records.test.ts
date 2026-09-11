@@ -45,7 +45,7 @@ test('dirRecords refuses a record whose payload runs past the stream, naming the
     () => [...dirRecords(truncated, 'overruns while removing a module')],
     (error: unknown) => {
       assert.ok(error instanceof VbaParseError);
-      assert.match(error.message, /0x19/);
+      assert.match(error.message, /0x0019/);
       assert.match(error.message, /overruns while removing a module/);
       return true;
     },

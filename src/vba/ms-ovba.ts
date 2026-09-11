@@ -12,6 +12,7 @@
 // compressor is the authoring inverse: it is fed our own bytes, and its output re-expands to the input
 // byte-for-byte (the round-trip is the correctness contract).
 
+import {hex} from '../hex.ts';
 import {readU16} from './bytes.ts';
 import {VbaParseError} from './errors.ts';
 
@@ -49,7 +50,7 @@ export function decompressContainer(
   }
   if (buf[start] !== 0x01) {
     throw new VbaParseError(
-      `compressed container must begin with a 0x01 signature byte, found 0x${(buf[start] ?? 0).toString(16)}`,
+      `compressed container must begin with a 0x01 signature byte, found 0x${hex(buf[start] ?? 0, 2)}`,
     );
   }
 
@@ -64,7 +65,7 @@ export function decompressContainer(
     const chunkDataSize = (header & 0x0fff) + 1;
     const compressed = (header & CHUNK_COMPRESSED_FLAG) !== 0;
     if ((header & CHUNK_SIGNATURE_MASK) !== CHUNK_SIGNATURE) {
-      throw new VbaParseError(`chunk header has a bad 0b011 signature (0x${header.toString(16)})`);
+      throw new VbaParseError(`chunk header has a bad 0b011 signature (0x${hex(header, 4)})`);
     }
     const chunkEnd = pos + chunkDataSize;
     if (chunkEnd > buf.length) {

@@ -9,9 +9,7 @@
 // the wider VBA feature map see the ADRs: read view (docs/decisions/0016), authoring (0017/0019), and
 // structural edits (0018/0019), plus docs/knowledge/specs/xlsm-macro-preservation.md.
 
-export {type CfbNode, type CfbStorage, type CfbStream, writeCompoundFile} from './cfb-writer.ts';
 export {VbaAuthorError, VbaParseError} from './errors.ts';
-export {compressContainer, decompressContainer} from './ms-ovba.ts';
 export {
   parseVbaProject,
   VBA_PROJECT_CONTENT_TYPE,

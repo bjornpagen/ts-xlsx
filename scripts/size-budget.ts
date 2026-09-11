@@ -50,7 +50,10 @@ const DIST = join(ROOT, 'dist');
 //
 // Raised again, from 588, when the MS-OVBA compressor began padding a raw chunk to the 4096 bytes the
 // format fixes, a tenth over.
-const TOTAL_BUDGET_BYTES = 589 * 1024;
+//
+// Raised again, from 589, by the [MS-CFB] layout records on every entry that carries the VBA editors,
+// described above the entry budgets.
+const TOTAL_BUDGET_BYTES = 591 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -98,6 +101,13 @@ const TOTAL_BUDGET_BYTES = 589 * 1024;
 // And again, on `.` and `/xlsx` alone, when data validations began carrying `showDropDown` and
 // `imeMode`: the reader and writer for them sit in the XML codec, and a closed token guard and its
 // union came to a few tenths of a kilobyte more than either entry had left.
+//
+// Re-baselined when the [MS-CFB] header and directory-entry offsets moved into named records in
+// `vba/cfb-format.ts` that the reader and the writer both index, where each had written them as bare
+// numbers. The measurement is of unminified code, so every `HEADER_FIELD.fatSectors` costs its full
+// text: about 1.8 KB across the CFB modules, on every entry that reaches the VBA editors, which is all
+// of them but `/customui` and `/errors`. That is the price of one transcription of the layout instead
+// of two, paid deliberately. Each number below is the next whole kilobyte above today's measurement.
 const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised from 570 when the future-function registry took [MS-XLSX]'s full table and the names Excel
   // prefixes beyond it, fifty-odd names more, which put this entry seven tenths over.
@@ -122,7 +132,7 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 577, when the attribute scanner began reading a raw tab, LF or CR in a value as
   // the space XML 1.0 makes it, two tenths over.
-  '.': 578,
+  '.': 580,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -140,7 +150,7 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 213, when the MS-OVBA compressor began storing a chunk raw only at the 4096 bytes
   // the format fixes, padding a short one. `Workbook` reaches the VBA editors, so this entry pays for it,
   // two tenths over.
-  './core': 214,
+  './core': 216,
   // Raised from 554 by the same future-function registry as `.`, which put this entry nine tenths over.
   //
   // Raised again, from 555, by the same conditional-format boundaries as `.`, eight tenths over.
@@ -154,7 +164,7 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 558, when the package-level VBA edit began finding parts through the reader's
   // case-folding accessors and removing a stale signature's references at scanner-found offsets rather
   // than by pattern, three tenths over.
-  './xlsx': 559,
+  './xlsx': 561,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -176,7 +186,7 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 302, by the same pivot role refusals as `/core`, seven tenths over.
   //
   // Raised again, from 303, by the same MS-OVBA raw-chunk padding as `/core`, two tenths over.
-  './xlsb': 304,
+  './xlsb': 306,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
@@ -202,7 +212,7 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 224, when the writer began placing row N on line N and refusing a quote, CR or
   // LF as a delimiter and a row delimiter it cannot keep apart from the data. Two tenths over.
-  './csv': 225,
+  './csv': 227,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //
@@ -229,12 +239,12 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 417, by the same conditional-format boundaries as `.`, seven tenths over.
   //
   // Raised again, from 418, by the same pivot role refusals as `/core`, three tenths over.
-  './node': 419,
+  './node': 421,
   // Raised from 50 when the MS-OVBA encoder stopped rescanning its whole back-window for every
   // output byte. The hash chain that replaced the rescan is the cost, and it buys a time bound on a
   // path an untrusted `.xlsm` reaches through `removeVbaModule`; the CFB and `dir` guards landed
   // alongside it are the rest. Restores this entry's tenth of headroom against that measurement.
-  './vba': 56,
+  './vba': 57,
   './customui': 16,
   // The taxonomy reaches nothing but itself, and that is the point: classifying a failure must
   // not cost a parser. A jump here means an error class started importing the layer it describes.

@@ -12,6 +12,7 @@
 
 import {utf16leBytes} from '../bytes.ts';
 import {InternalError, quoted} from '../errors.ts';
+import {hex} from '../hex.ts';
 import {concat, readU16, spliceBytes, writeU16, writeU32} from './bytes.ts';
 import {sameEntryName} from './cfb-format.ts';
 import {type CfbNode, isStream, writeCompoundFile} from './cfb-writer.ts';
@@ -31,7 +32,7 @@ import {
 import {VbaAuthorError, VbaParseError} from './errors.ts';
 import {compressContainer, decompressContainer} from './ms-ovba.ts';
 import {DIR_PATH, parseVbaProjectIn, PROJECT_PATH, PROJECTWM_PATH, VBA_STORAGE} from './project.ts';
-import {validateVbaName} from './vba-encoding.ts';
+import {validateReferenceName} from './vba-encoding.ts';
 
 /**
  * Remove a standard module from an existing `vbaProject.bin`, returning new bytes that carry every
@@ -160,7 +161,7 @@ interface NormalizedReference {
 // byte-for-byte against a real Excel-authored reference (2026-07-23):
 // `*\G{420B2830-E718-11CF-893D-00A0C9054228}#1.0#0#C:\Windows\System32\scrrun.dll#Microsoft Scripting Runtime`.
 function normalizeReference(ref: VbaLibraryReference): NormalizedReference {
-  validateVbaName(ref.name, 'reference');
+  validateReferenceName(ref.name);
 
   const guidMatch = GUID_PATTERN.exec(ref.guid.trim());
   if (!guidMatch) throw new VbaAuthorError(`invalid reference GUID ${quoted(ref.guid)}`);
@@ -202,8 +203,7 @@ function normalizeReference(ref: VbaLibraryReference): NormalizedReference {
   }
 
   const libid =
-    `*\\G${guid}#${ref.majorVersion.toString(16).toUpperCase()}.` +
-    `${ref.minorVersion.toString(16).toUpperCase()}#${lcid.toString(16).toUpperCase()}` +
+    `*\\G${guid}#${hex(ref.majorVersion, 1)}.${hex(ref.minorVersion, 1)}#${hex(lcid, 1)}` +
     `#${ref.path}#${displayName}`;
   return {name: ref.name, libid};
 }

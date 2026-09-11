@@ -22,12 +22,17 @@
 
 import {quoted} from '../errors.ts';
 import {
+  CFB_SIGNATURE,
   DIFSECT,
+  DIR_ENTRY_FIELD,
   DIR_ENTRY_SIZE,
   ENDOFCHAIN,
   FATSECT,
   FREESECT,
+  HEADER_DIFAT_SLOTS,
+  HEADER_FIELD,
   MAX_NAME_CHARS,
+  MINI_SECTOR_SHIFT,
   MINI_STREAM_CUTOFF,
   NOSTREAM,
   TYPE_ROOT,
@@ -54,23 +59,19 @@ export type CfbNode = CfbStream | CfbStorage;
  *
  * Exported beside the union rather than kept private, because the discriminant is `'data' in node`
  * and that is the sort of test callers re-spell inline: `project-editor.ts` had it three times, once
- * negated. The name says what the test means, and the pair says that a node is one or the other.
+ * negated. The name says what the test means, and a node it answers `false` for is a storage.
  */
 export function isStream(node: CfbNode): node is CfbStream {
   return 'data' in node;
 }
 
-export function isStorage(node: CfbNode): node is CfbStorage {
-  return !isStream(node);
-}
-
-// The v3 layout this writer chooses to emit. Not shared with the reader, which takes every one of
-// these off the header it was handed because a file may legally say otherwise.
-const SECTOR = 512;
-const MINI_SECTOR = 64;
+// The v3 layout this writer chooses to emit. Not shared with the reader, which takes the sector size
+// off the header it was handed because a file may legally say otherwise.
+const SECTOR_SHIFT = 9;
+const SECTOR = 1 << SECTOR_SHIFT;
+const MINI_SECTOR = 1 << MINI_SECTOR_SHIFT;
 const ENTRIES_PER_DIR_SECTOR = SECTOR / DIR_ENTRY_SIZE; // 4
 const FAT_ENTRIES_PER_SECTOR = SECTOR / 4; // 128
-const DIFAT_HEADER_SLOTS = 109; // FAT-sector pointers that fit in the header before DIFAT sectors
 
 // The red-black colour byte ([MS-CFB] 2.6.1). Every entry this writer emits is black, which is
 // legal for any tree; the reader ignores the byte entirely, so it is not a shared constant.
@@ -197,16 +198,16 @@ export function writeCompoundFile(root: readonly CfbNode[]): Uint8Array {
     const needFat = Math.ceil(total / FAT_ENTRIES_PER_SECTOR);
     // Each DIFAT sector holds 127 FAT pointers + a next-DIFAT pointer; the first 109 live in the header.
     const needDifat =
-      needFat > DIFAT_HEADER_SLOTS
-        ? Math.ceil((needFat - DIFAT_HEADER_SLOTS) / (FAT_ENTRIES_PER_SECTOR - 1))
+      needFat > HEADER_DIFAT_SLOTS
+        ? Math.ceil((needFat - HEADER_DIFAT_SLOTS) / (FAT_ENTRIES_PER_SECTOR - 1))
         : 0;
     if (needFat === fatSectors && needDifat === difatSectors) break;
     fatSectors = needFat;
     difatSectors = needDifat;
   }
-  if (fatSectors > DIFAT_HEADER_SLOTS) {
+  if (fatSectors > HEADER_DIFAT_SLOTS) {
     throw new VbaAuthorError(
-      `project needs ${fatSectors} FAT sectors, exceeding the ${DIFAT_HEADER_SLOTS}-sector single-header bound`,
+      `project needs ${fatSectors} FAT sectors, exceeding the ${HEADER_DIFAT_SLOTS}-sector single-header bound`,
     );
   }
 
@@ -279,7 +280,7 @@ export function writeCompoundFile(root: readonly CfbNode[]): Uint8Array {
   for (let d = 0; d < difatSectors; d++) {
     const base = at(difatStart + d);
     for (let i = 0; i < FAT_ENTRIES_PER_SECTOR - 1; i++) {
-      const fatIdx = DIFAT_HEADER_SLOTS + d * (FAT_ENTRIES_PER_SECTOR - 1) + i;
+      const fatIdx = HEADER_DIFAT_SLOTS + d * (FAT_ENTRIES_PER_SECTOR - 1) + i;
       dv.setUint32(base + i * 4, fatIdx < fatSectors ? fatStart + fatIdx : FREESECT, true);
     }
     dv.setUint32(
@@ -349,35 +350,36 @@ function writeHeader(
     fatStart: number;
   },
 ): void {
-  dv.setUint32(0, 0xe011cfd0, true); // OLE2 signature (lo/hi)
-  dv.setUint32(4, 0xe11ab1a1, true);
-  dv.setUint16(24, 0x003e, true); // minor version
-  dv.setUint16(26, 0x0003, true); // major version → v3 (512-byte sectors)
-  dv.setUint16(28, 0xfffe, true); // little-endian byte order mark
-  dv.setUint16(30, 9, true); // sector shift → 512
-  dv.setUint16(32, 6, true); // mini-sector shift → 64
-  dv.setUint32(44, p.fatSectors, true);
-  dv.setUint32(48, p.dirStart, true);
-  dv.setUint32(56, MINI_STREAM_CUTOFF, true);
-  dv.setUint32(60, p.miniFatStart, true);
-  dv.setUint32(64, p.miniFatSectors, true);
-  dv.setUint32(68, p.difatSectors > 0 ? p.difatStart : ENDOFCHAIN, true);
-  dv.setUint32(72, p.difatSectors, true);
-  // Header DIFAT: the first 109 FAT-sector pointers. Contiguous from fatStart under the enforced bound.
-  for (let i = 0; i < DIFAT_HEADER_SLOTS; i++) {
-    dv.setUint32(76 + i * 4, i < p.fatSectors ? p.fatStart + i : FREESECT, true);
+  dv.setUint32(HEADER_FIELD.signatureLow, CFB_SIGNATURE.low, true);
+  dv.setUint32(HEADER_FIELD.signatureHigh, CFB_SIGNATURE.high, true);
+  dv.setUint16(HEADER_FIELD.minorVersion, 0x003e, true);
+  dv.setUint16(HEADER_FIELD.majorVersion, 0x0003, true); // v3: 512-byte sectors
+  dv.setUint16(HEADER_FIELD.byteOrder, 0xfffe, true); // little-endian
+  dv.setUint16(HEADER_FIELD.sectorShift, SECTOR_SHIFT, true);
+  dv.setUint16(HEADER_FIELD.miniSectorShift, MINI_SECTOR_SHIFT, true);
+  dv.setUint32(HEADER_FIELD.fatSectors, p.fatSectors, true);
+  dv.setUint32(HEADER_FIELD.firstDirectorySector, p.dirStart, true);
+  dv.setUint32(HEADER_FIELD.miniStreamCutoff, MINI_STREAM_CUTOFF, true);
+  dv.setUint32(HEADER_FIELD.firstMiniFatSector, p.miniFatStart, true);
+  dv.setUint32(HEADER_FIELD.miniFatSectors, p.miniFatSectors, true);
+  dv.setUint32(HEADER_FIELD.firstDifatSector, p.difatSectors > 0 ? p.difatStart : ENDOFCHAIN, true);
+  dv.setUint32(HEADER_FIELD.difatSectors, p.difatSectors, true);
+  // The header's FAT-sector pointers, contiguous from fatStart under the enforced bound.
+  for (let i = 0; i < HEADER_DIFAT_SLOTS; i++) {
+    dv.setUint32(HEADER_FIELD.difat + i * 4, i < p.fatSectors ? p.fatStart + i : FREESECT, true);
   }
 }
 
 function writeDirEntry(dv: DataView, off: number, e: DirEntry): void {
   for (let i = 0; i < e.name.length; i++) dv.setUint16(off + i * 2, e.name.charCodeAt(i), true);
-  dv.setUint16(off + 64, (e.name.length + 1) * 2, true); // name byte length incl. NUL terminator
-  dv.setUint8(off + 66, e.type);
-  dv.setUint8(off + 67, COLOR_BLACK);
-  dv.setUint32(off + 68, e.left, true);
-  dv.setUint32(off + 72, e.right, true);
-  dv.setUint32(off + 76, e.child, true);
-  dv.setUint32(off + 116, e.startSector, true);
-  dv.setUint32(off + 120, e.size, true);
-  // Size high (124), CLSID (80..95), state/time fields stay zero: valid for a v3 entry.
+  // The name's byte length counts its NUL terminator.
+  dv.setUint16(off + DIR_ENTRY_FIELD.nameLength, (e.name.length + 1) * 2, true);
+  dv.setUint8(off + DIR_ENTRY_FIELD.objectType, e.type);
+  dv.setUint8(off + DIR_ENTRY_FIELD.color, COLOR_BLACK);
+  dv.setUint32(off + DIR_ENTRY_FIELD.leftSibling, e.left, true);
+  dv.setUint32(off + DIR_ENTRY_FIELD.rightSibling, e.right, true);
+  dv.setUint32(off + DIR_ENTRY_FIELD.child, e.child, true);
+  dv.setUint32(off + DIR_ENTRY_FIELD.startSector, e.startSector, true);
+  dv.setUint32(off + DIR_ENTRY_FIELD.sizeLow, e.size, true);
+  // The size's high half, the CLSID, and the state and time fields stay zero: valid for a v3 entry.
 }

@@ -14,6 +14,7 @@
 // is not. The second is how a structural edit corrupts a macro project without saying anything. One
 // walk, stated once, is what stops the fourth copy from being written without the correction.
 
+import {hex} from '../hex.ts';
 import {readU16, readU32, writeU16, writeU32} from './bytes.ts';
 import {VbaParseError} from './errors.ts';
 
@@ -89,7 +90,7 @@ export function* dirRecords(dir: Uint8Array, context: string): Generator<DirReco
     const size = readU32(dir, pos + 2);
     const dataStart = pos + 6;
     if (dataStart + size > dir.length) {
-      throw new VbaParseError(`dir record 0x${id.toString(16)} ${context}`);
+      throw new VbaParseError(`dir record 0x${hex(id, 4)} ${context}`);
     }
     // The whole reason this walk is not inline at three call sites.
     const end = dataStart + size + (id === REC_PROJECT_VERSION ? 2 : 0);

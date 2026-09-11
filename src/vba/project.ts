@@ -7,6 +7,7 @@
 // project code page. The p-code is version-specific and deliberately not exposed; a reader wants source.
 
 import {quoted} from '../errors.ts';
+import {relTypeSegment} from '../rel-type.ts';
 import {readU16, readU32} from './bytes.ts';
 import {CompoundFile} from './cfb.ts';
 import {type Decoder, decoderForCodePage} from './codepage.ts';
@@ -89,7 +90,7 @@ const SIGNATURE_KIND_BY_REL_SEGMENT: ReadonlyMap<string, VbaProjectSignatureKind
  * carries (`.../office/2006/...` vs `.../2014/...` vs `.../2020/...`).
  */
 export function vbaProjectSignatureKind(relType: string): VbaProjectSignatureKind | undefined {
-  return SIGNATURE_KIND_BY_REL_SEGMENT.get(relType.slice(relType.lastIndexOf('/') + 1));
+  return SIGNATURE_KIND_BY_REL_SEGMENT.get(relTypeSegment(relType));
 }
 
 interface PendingModule {
