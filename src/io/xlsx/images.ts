@@ -8,14 +8,25 @@ import {
   type AnchorPoint,
   type Extent,
   type ImageAnchor,
+  type ImageCrop,
   type ImageEditAs,
   isImageEditAs,
   isOneCellAnchor,
+  type PictureProperties,
 } from '../../core/image.ts';
-import {enumToken, numFinite} from '../../xml/xml-attrs.ts';
+import {assertWritableNumber, AuthoringError} from '../../errors.ts';
+import {enumToken, numFinite, numInteger} from '../../xml/xml-attrs.ts';
 import {parseXml, TextCapture} from '../../xml/xml-read.ts';
 import {localName} from '../../xml/xml-scan.ts';
-import {checkedToken, numAttr, numberText, XML_DECLARATION} from '../../xml/xml.ts';
+import {
+  checkedToken,
+  escapeAttr,
+  intAttr,
+  numAttr,
+  numberText,
+  textAttr,
+  XML_DECLARATION,
+} from '../../xml/xml.ts';
 import {relAttr, RELATIONSHIPS_NS} from '../opc/namespaces.ts';
 import {DRAWINGML_NS, XDR_NS} from './namespaces.ts';
 
@@ -43,12 +54,15 @@ export function imageContentType(extension: string): string {
   return IMAGE_CONTENT_TYPES.get(ext) ?? `image/${ext}`;
 }
 
-/** One image placed in a drawing: where it sits and the drawing-local relationship id that ties it
- * to its media bytes. */
+/** One image placed in a drawing: where it sits, the drawing-local relationship id that ties it to its
+ * media bytes, and the picture's own properties. */
 export interface DrawingImage {
   readonly anchor: ImageAnchor;
   /** The `r:embed` id referencing this image's entry in the drawing's own `.rels`. */
   readonly embedId: string;
+  readonly properties: PictureProperties;
+  /** The `r:id` of the hyperlink relationship in the drawing's own `.rels`, when the picture is a link. */
+  readonly hyperlinkId?: string;
 }
 
 /** The `xl/drawings/drawing{n}.xml` part: one anchor per image, two-cell or one-cell by its shape. */
@@ -64,16 +78,10 @@ export function drawingXml(images: readonly DrawingImage[]): string {
 
 function anchorXml(image: DrawingImage, id: number): string {
   const {anchor} = image;
+  const pic = picXml(image, id, anchor.rotation);
   return isOneCellAnchor(anchor)
-    ? oneCellAnchorXml(anchor.from, anchor.ext, anchor.rotation, image.embedId, id)
-    : twoCellAnchorXml(
-        anchor.from,
-        anchor.to,
-        anchor.editAs ?? 'oneCell',
-        anchor.rotation,
-        image.embedId,
-        id,
-      );
+    ? oneCellAnchorXml(anchor.from, anchor.ext, pic)
+    : twoCellAnchorXml(anchor.from, anchor.to, anchor.editAs ?? 'oneCell', pic);
 }
 
 // A picture anchored between two grid points. The geometry lives entirely in <xdr:from>/<xdr:to>, so
@@ -84,15 +92,13 @@ function twoCellAnchorXml(
   from: AnchorPoint,
   to: AnchorPoint,
   editAs: ImageEditAs,
-  rotation: number | undefined,
-  embedId: string,
-  id: number,
+  pic: string,
 ): string {
   return (
     `<xdr:twoCellAnchor editAs="${checkedToken(editAs, isImageEditAs, 'image anchor edit mode')}">` +
     `<xdr:from>${anchorPointXml(from)}</xdr:from>` +
     `<xdr:to>${anchorPointXml(to)}</xdr:to>` +
-    picXml(embedId, id, rotation) +
+    pic +
     '<xdr:clientData/>' +
     '</xdr:twoCellAnchor>'
   );
@@ -100,34 +106,78 @@ function twoCellAnchorXml(
 
 // A picture pinned at one grid point with a fixed EMU extent. editAs is a two-cell-only attribute and
 // the schema forbids it here, so a one-cell anchor never carries one.
-function oneCellAnchorXml(
-  from: AnchorPoint,
-  ext: Extent,
-  rotation: number | undefined,
-  embedId: string,
-  id: number,
-): string {
+function oneCellAnchorXml(from: AnchorPoint, ext: Extent, pic: string): string {
   return (
     '<xdr:oneCellAnchor>' +
     `<xdr:from>${anchorPointXml(from)}</xdr:from>` +
     `<xdr:ext${numAttr('cx', ext.cx)}${numAttr('cy', ext.cy)}/>` +
-    picXml(embedId, id, rotation) +
+    pic +
     '<xdr:clientData/>' +
     '</xdr:oneCellAnchor>'
   );
 }
 
-function picXml(embedId: string, id: number, rotation: number | undefined): string {
+// The picture itself, spelled as Excel 16.0 spells what a picture says about itself: alternative text and a
+// title as `descr` and `title` on `cNvPr`, a link as an `a:hlinkClick` inside it naming a hyperlink
+// relationship of the drawing, and a crop as an `a:srcRect` between the blip and its stretch.
+function picXml(image: DrawingImage, id: number, rotation: number | undefined): string {
+  const {embedId, properties, hyperlinkId} = image;
   const xfrm = rotation !== undefined ? `<a:xfrm${numAttr('rot', rotation)}/>` : '';
+  const attributes =
+    textAttr('descr', properties.description) + textAttr('title', properties.title);
+  const link =
+    hyperlinkId === undefined
+      ? ''
+      : `<a:hlinkClick r:id="${escapeAttr(hyperlinkId)}"` +
+        `${textAttr('tooltip', properties.hyperlink?.tooltip)}/>`;
+  const cNvPr =
+    link === ''
+      ? `<xdr:cNvPr id="${id}" name="Picture ${id}"${attributes}/>`
+      : `<xdr:cNvPr id="${id}" name="Picture ${id}"${attributes}>${link}</xdr:cNvPr>`;
   return (
     '<xdr:pic>' +
-    `<xdr:nvPicPr><xdr:cNvPr id="${id}" name="Picture ${id}"/>` +
+    `<xdr:nvPicPr>${cNvPr}` +
     '<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>' +
     `<xdr:blipFill><a:blip r:embed="${embedId}"/>` +
+    srcRectXml(properties.crop) +
     '<a:stretch><a:fillRect/></a:stretch></xdr:blipFill>' +
     `<xdr:spPr>${xfrm}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>` +
     '</xdr:pic>'
   );
+}
+
+// A crop edge is a fraction of the picture in the model and an `xsd:int` in thousandths of a percent on
+// the wire, where `100000` is the whole picture. An edge that crops nothing is omitted, as Excel omits it.
+const CROP_UNITS = 100_000;
+const INT_MAX = 2_147_483_647;
+
+function srcRectXml(crop: ImageCrop | undefined): string {
+  if (crop === undefined) return '';
+  const edge = (name: string, fraction: number | undefined): string => {
+    if (fraction === undefined) return '';
+    assertWritableNumber(fraction);
+    const units = Math.round(fraction * CROP_UNITS);
+    if (units > INT_MAX) {
+      throw new AuthoringError(`cannot write the picture crop ${name}="${units}": past xsd:int`);
+    }
+    return units === 0 ? '' : intAttr(name, units, -INT_MAX - 1);
+  };
+  const attributes =
+    edge('l', crop.left) + edge('t', crop.top) + edge('r', crop.right) + edge('b', crop.bottom);
+  return attributes === '' ? '' : `<a:srcRect${attributes}/>`;
+}
+
+// Read a crop edge in either spelling `ST_Percentage` allows: thousandths of a percent (`9999`), or a
+// percentage with its sign (`10%`).
+function cropEdge(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const percent = value.endsWith('%') ? numFinite(value.slice(0, -1)) : undefined;
+  const units = percent === undefined ? numInteger(value) : Math.round(percent * 1000);
+  // Bounded to `xsd:int`, so a crop read from a file is always one the writer can put back.
+  if (units === undefined || units === 0 || units > INT_MAX || units < -INT_MAX - 1) {
+    return undefined;
+  }
+  return units / CROP_UNITS;
 }
 
 // The grid point's four numbers are all author-reachable through `addImageAnchor`, and each is an
@@ -152,6 +202,12 @@ export interface ParsedImageAnchor {
   readonly editAs?: ImageEditAs;
   readonly rotation?: number;
   readonly embed: string;
+  readonly description?: string;
+  readonly title?: string;
+  readonly crop?: ImageCrop;
+  /** The `r:id` of the picture's `a:hlinkClick`, for the caller to resolve against the drawing's rels. */
+  readonly hyperlinkId?: string;
+  readonly tooltip?: string;
 }
 
 type PointDraft = {col: number; row: number; colOff: number; rowOff: number};
@@ -208,6 +264,14 @@ export function parseDrawing(xml: string): ParsedDrawing {
   let rotation: number | undefined;
   let embed: string | undefined;
   let pictures = 0;
+  // What the picture says about itself, gathered from its `cNvPr`, `hlinkClick` and `srcRect`.
+  let properties: {
+    description?: string;
+    title?: string;
+    crop?: ImageCrop;
+    hyperlinkId?: string;
+    tooltip?: string;
+  } = {};
   // The point (<xdr:from> or <xdr:to>) whose coordinate children are currently streaming in.
   let target: PointDraft | null = null;
   // Depth inside <xdr:pic>, so the anchor-level <xdr:ext> is not confused with the <a:ext> nested in
@@ -228,6 +292,7 @@ export function parseDrawing(xml: string): ParsedDrawing {
         rotation = undefined;
         embed = undefined;
         pictures = 0;
+        properties = {};
         // `twoCell` is the schema default, so it is what a file omitting the attribute means, and what
         // one spelling it with a token outside the enumeration is read as. Left undefined, it was
         // written back with this library's authoring default, `oneCell`, and the picture stopped
@@ -239,6 +304,26 @@ export function parseDrawing(xml: string): ParsedDrawing {
       } else if (local === 'pic') {
         picDepth++;
         pictures++;
+      } else if (local === 'cNvPr' && picDepth > 0) {
+        if (attrs.descr !== undefined && attrs.descr !== '') properties.description = attrs.descr;
+        if (attrs.title !== undefined && attrs.title !== '') properties.title = attrs.title;
+      } else if (local === 'hlinkClick' && picDepth > 0) {
+        const id = relAttr(scope, attrs, 'id');
+        if (id !== undefined && id !== '') {
+          properties.hyperlinkId = id;
+          if (attrs.tooltip !== undefined) properties.tooltip = attrs.tooltip;
+        }
+      } else if (local === 'srcRect' && picDepth > 0) {
+        const crop: {-readonly [K in keyof ImageCrop]?: number} = {};
+        const left = cropEdge(attrs.l);
+        const top = cropEdge(attrs.t);
+        const right = cropEdge(attrs.r);
+        const bottom = cropEdge(attrs.b);
+        if (left !== undefined) crop.left = left;
+        if (top !== undefined) crop.top = top;
+        if (right !== undefined) crop.right = right;
+        if (bottom !== undefined) crop.bottom = bottom;
+        if (Object.keys(crop).length > 0) properties.crop = crop;
       } else if (local === 'xfrm' && picDepth > 0) {
         // The picture's own rotation: the one spPr transform that can't be derived from the anchor.
         const rot = numFinite(attrs.rot);
@@ -283,9 +368,9 @@ export function parseDrawing(xml: string): ParsedDrawing {
           fullyModeled = false;
         } else if (to !== null) {
           const mode = editAs !== undefined ? {editAs} : {};
-          anchors.push({from: {...from}, to: {...to}, ...mode, ...rot, embed});
+          anchors.push({from: {...from}, to: {...to}, ...mode, ...rot, embed, ...properties});
         } else if (ext !== undefined) {
-          anchors.push({from: {...from}, ext, ...rot, embed});
+          anchors.push({from: {...from}, ext, ...rot, embed, ...properties});
         } else {
           fullyModeled = false;
         }

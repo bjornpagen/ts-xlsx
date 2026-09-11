@@ -17,7 +17,13 @@ import type {ConditionalFormatting} from './conditional-formatting.ts';
 import {DataValidationOverlay} from './data-validation-overlay.ts';
 import type {DataValidation, DataValidationEntry} from './data-validation.ts';
 import {GridEdits} from './grid-edits.ts';
-import type {AnchoredImage, AnchorPoint, ImageAnchor, ImageEditAs} from './image.ts';
+import type {
+  AnchoredImage,
+  AnchorPoint,
+  ImageAnchor,
+  ImageEditAs,
+  PictureProperties,
+} from './image.ts';
 import {INTERNAL} from './internal.ts';
 import {clearCoveredValues} from './merge.ts';
 import type {HeaderFooter, PageBreak, PageMargins, PageSetup, PrintOptions} from './page-setup.ts';
@@ -666,10 +672,14 @@ export class Worksheet {
    *
    * Grid points are 0-based (`{col: 0, row: 0}` is cell A1). A later row/column splice re-pins the
    * anchor to the same logical position.
+   *
+   * `properties` gives the picture alternative text and a title, crops it, or makes it a link; see
+   * {@link PictureProperties}.
    */
   addImage(
     imageId: number,
     anchor: {readonly tl: AnchorPoint; readonly br: AnchorPoint; readonly editAs?: ImageEditAs},
+    properties?: PictureProperties,
   ): void;
   addImage(
     imageId: number,
@@ -677,10 +687,11 @@ export class Worksheet {
       readonly tl: AnchorPoint;
       readonly ext: {readonly width: number; readonly height: number};
     },
+    properties?: PictureProperties,
   ): void;
-  addImage(imageId: number, anchor: PixelAnchor): void {
+  addImage(imageId: number, anchor: PixelAnchor, properties?: PictureProperties): void {
     refuseImagesBesideKeptDrawing(this);
-    this.#images.add(imageId, anchor);
+    this.#images.add(imageId, anchor, properties);
   }
 
   /**
@@ -688,9 +699,9 @@ export class Worksheet {
    * low-level primitive {@link addImage} builds on and the reader uses to re-pin an image parsed from
    * a drawing part without a lossy pixel round-trip.
    */
-  addImageAnchor(imageId: number, anchor: ImageAnchor): void {
+  addImageAnchor(imageId: number, anchor: ImageAnchor, properties?: PictureProperties): void {
     refuseImagesBesideKeptDrawing(this);
-    this.#images.addAnchor(imageId, anchor);
+    this.#images.addAnchor(imageId, anchor, properties);
   }
 
   /** Drop every anchor of the given workbook image from this sheet. The image stays registered on the

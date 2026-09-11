@@ -10,6 +10,7 @@
 import {strToU8, zip, zipSync} from 'fflate';
 
 import type {Person} from '../../core/comment-thread.ts';
+import {pictureProperties} from '../../core/image.ts';
 import type {Workbook} from '../../core/workbook.ts';
 import {refuseImagesBesideKeptDrawing, type Worksheet} from '../../core/worksheet.ts';
 import {AuthoringError, InternalError, quoted} from '../../errors.ts';
@@ -19,7 +20,7 @@ import {relsPartXml} from '../opc/rels.ts';
 import {FIXED_ENTRY_MTIME} from '../opc/zip-mtime.ts';
 import {collectComments, commentsXml, vmlDrawingXml} from './comments.ts';
 import {collectHyperlinks, liveCells, planHyperlinks} from './hyperlinks.ts';
-import {drawingXml} from './images.ts';
+import {type DrawingImage, drawingXml} from './images.ts';
 import {
   type BackgroundPlan,
   type CommentPlan,
@@ -241,12 +242,18 @@ function planSheet(context: {
     // An image's embed relationship belongs to the drawing part, so it is recorded in the drawing's
     // own ledger rather than the sheet's.
     const drawingRels = new RelationshipLedger(path);
-    const images = sheet.images.map((image) => {
+    const images = sheet.images.map((image): DrawingImage => {
       const {number: mediaNumber, image: registered} = media.resolve(image.imageId);
-      return {
-        anchor: image.anchor,
-        embedId: drawingRels.add(REL.image, mediaPart(mediaNumber, registered.extension)),
-      };
+      const embedId = drawingRels.add(REL.image, mediaPart(mediaNumber, registered.extension));
+      const properties = pictureProperties(image);
+      const target = properties.hyperlink?.target;
+      // A link to a place in this workbook is a hyperlink relationship whose target is the `#` location,
+      // not an external one, which is how Excel writes it; a URL is an external relationship.
+      if (target === undefined) return {anchor: image.anchor, embedId, properties};
+      const hyperlinkId = target.startsWith('#')
+        ? drawingRels.addInDocument(REL.hyperlink, target)
+        : drawingRels.addExternal(REL.hyperlink, target);
+      return {anchor: image.anchor, embedId, properties, hyperlinkId};
     });
     drawing = {
       number,

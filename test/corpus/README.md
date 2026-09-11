@@ -311,6 +311,7 @@ implementation is shaped. Current vocabulary:
 | `errorLiteralReport(codes)` | Author each code as a cell's error value, write and read back → a map of code → `{written, readBack, refused}`. |
 | `dataTableInputDeletionReport(dir)` | Read Excel's saved data table whose input row was deleted, and splice that row out of its `before` twin here → `{excel, spliced}`, each `{ref, r1, r1Deleted, written}`. |
 | `xlsbSheetProtection()` | Each sheet of the xlsb twin fixture → its protection model, or null for an unprotected sheet. |
+| `readFixturePictureProperties(rel)` | Read a fixture and report each first-sheet picture's `{description, title, crop, hyperlink}` → `{read, rewritten}`, as read and after a write and a second read. |
 
 `inspectPackage`'s per-sheet fact also carries `elementOrder` (raw positions of `drawing` /
 `legacyDrawing` / `tableParts` plus the `legacyBeforeTableParts` etc. adjacency invariants) so a

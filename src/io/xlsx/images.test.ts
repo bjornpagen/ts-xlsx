@@ -335,3 +335,102 @@ test('imageContentType falls back to a string for an extension naming an Object.
   assert.strictEqual(type, 'image/constructor');
   assert.strictEqual(imageContentType('PNG'), 'image/png', 'the known table still answers');
 });
+
+// ── What a picture says about itself ─────────────────────────────────────────────────────────────────
+// The spellings below are the ones Excel 16.0 (build 20326) wrote for a picture given alternative text, a
+// title, a crop and a link over COM; `test/corpus/fixtures/picture-properties-survive-roundtrip/` holds
+// that file.
+
+const LOGO = {
+  description: 'Company logo',
+  title: 'Logo',
+  crop: {left: 0.1, top: 0.015, right: 0.2},
+  hyperlink: {target: 'https://example.com/about', tooltip: 'About us'},
+};
+
+function pictured(properties: object): Workbook {
+  const wb = new Workbook();
+  const id = wb.addImage({buffer: ONE_PX_PNG, extension: 'png'});
+  wb.addWorksheet('S').addImage(id, {tl: {col: 0, row: 0}, br: {col: 2, row: 3}}, properties);
+  return wb;
+}
+
+test('alternative text, a title, a crop and a link are written where Excel writes them', () => {
+  const parts = partsWritten(pictured(LOGO));
+  const drawing = partIn(parts, 'xl/drawings/drawing1.xml');
+  assert.match(
+    drawing,
+    /<xdr:cNvPr id="1" name="Picture 1" descr="Company logo" title="Logo"><a:hlinkClick r:id="(rId\d+)" tooltip="About us"\/><\/xdr:cNvPr>/,
+  );
+  assert.match(
+    drawing,
+    /<a:blip r:embed="rId\d+"\/><a:srcRect l="10000" t="1500" r="20000"\/><a:stretch>/,
+  );
+  const rels = partIn(parts, 'xl/drawings/_rels/drawing1.xml.rels');
+  assert.match(
+    rels,
+    /\/hyperlink" Target="https:\/\/example\.com\/about" TargetMode="External"\/>/,
+  );
+});
+
+test("a link to a place in the workbook is a hyperlink relationship to the '#' location, not an external one", () => {
+  const parts = partsWritten(pictured({hyperlink: {target: '#Sheet1!C3'}}));
+  const rels = partIn(parts, 'xl/drawings/_rels/drawing1.xml.rels');
+  assert.match(rels, /\/hyperlink" Target="#Sheet1!C3"\/>/);
+  assert.doesNotMatch(
+    partIn(parts, 'xl/drawings/drawing1.xml'),
+    /tooltip=/,
+    'no tooltip was given',
+  );
+});
+
+test('a picture reads back with its alternative text, title, crop and link', () => {
+  const [picture] = roundtrip(pictured(LOGO)).getWorksheet('S')?.images ?? [];
+  assert.deepStrictEqual(
+    {
+      description: picture?.description,
+      title: picture?.title,
+      crop: picture?.crop,
+      link: picture?.hyperlink,
+    },
+    {description: LOGO.description, title: LOGO.title, crop: LOGO.crop, link: LOGO.hyperlink},
+  );
+});
+
+test('a plain picture carries no picture properties and writes none', () => {
+  const drawing = partIn(partsWritten(anchored()), 'xl/drawings/drawing1.xml');
+  assert.doesNotMatch(drawing, /descr=|title=|hlinkClick|srcRect/);
+  const [picture] = roundtrip(anchored()).getWorksheet('S')?.images ?? [];
+  assert.deepStrictEqual(Object.keys(picture ?? {}).sort(), ['anchor', 'imageId']);
+});
+
+test('a crop edge reads in either spelling ST_Percentage allows, and one past xsd:int is dropped', () => {
+  const patched = patchParts(writeXlsx(pictured({crop: {left: 0.1}})), {
+    'xl/drawings/drawing1.xml': (xml) =>
+      xml.replace('<a:srcRect l="10000"/>', '<a:srcRect l="12.5%" t="3000000000" b="-2000"/>'),
+  });
+  const [picture] = readXlsx(patched).getWorksheet('S')?.images ?? [];
+  assert.deepStrictEqual(picture?.crop, {left: 0.125, bottom: -0.02});
+});
+
+test('a crop the wire cannot hold is refused rather than written', () => {
+  assert.throws(() => writeXlsx(pictured({crop: {left: Number.NaN}})), {name: 'AuthoringError'});
+  assert.throws(() => writeXlsx(pictured({crop: {top: 30_000}})), {name: 'AuthoringError'});
+});
+
+test('picture properties survive a splice and a transfer to another workbook', () => {
+  const source = pictured(LOGO);
+  const sheet = source.requireWorksheet('S');
+  sheet.insertRow(1, []);
+  const [moved] = sheet.images;
+  assert.deepStrictEqual(moved?.hyperlink, LOGO.hyperlink, 'a splice re-pins the anchor only');
+  assert.strictEqual(moved?.anchor.from.row, 1);
+
+  const target = new Workbook();
+  const copy = target.addWorksheet('T');
+  target.importImages(copy, source.exportImages(sheet));
+  assert.deepStrictEqual(
+    {description: copy.images[0]?.description, crop: copy.images[0]?.crop},
+    {description: LOGO.description, crop: LOGO.crop},
+  );
+});

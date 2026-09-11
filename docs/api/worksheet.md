@@ -210,6 +210,7 @@ class Worksheet {
   addImage(
     imageId: number,
     anchor: {readonly tl: AnchorPoint; readonly br: AnchorPoint; readonly editAs?: ImageEditAs},
+    properties?: PictureProperties,
   ): void;
   addImage(
     imageId: number,
@@ -217,9 +218,10 @@ class Worksheet {
       readonly tl: AnchorPoint;
       readonly ext: {readonly width: number; readonly height: number};
     },
+    properties?: PictureProperties,
   ): void;
-  addImage(imageId: number, anchor: PixelAnchor): void;
-  addImageAnchor(imageId: number, anchor: ImageAnchor): void;
+  addImage(imageId: number, anchor: PixelAnchor, properties?: PictureProperties): void;
+  addImageAnchor(imageId: number, anchor: ImageAnchor, properties?: PictureProperties): void;
   removeImage(imageId: number): void;
   get images(): readonly AnchoredImage[];
   addBackgroundImage(imageId: number): void;
@@ -650,6 +652,7 @@ so a cell merely covered by the anchor's merged region is not a match.
 addImage(
     imageId: number,
     anchor: {readonly tl: AnchorPoint; readonly br: AnchorPoint; readonly editAs?: ImageEditAs},
+    properties?: PictureProperties,
   ): void;
 addImage(
     imageId: number,
@@ -657,6 +660,7 @@ addImage(
       readonly tl: AnchorPoint;
       readonly ext: {readonly width: number; readonly height: number};
     },
+    properties?: PictureProperties,
   ): void;
 ```
 
@@ -670,10 +674,13 @@ Anchor a workbook image (the id returned by [`Workbook.addImage`](./workbook.md#
 Grid points are 0-based (`{col: 0, row: 0}` is cell A1). A later row/column splice re-pins the
 anchor to the same logical position.
 
+`properties` gives the picture alternative text and a title, crops it, or makes it a link; see
+[`PictureProperties`](./images.md#pictureproperties).
+
 #### `Worksheet.addImageAnchor`
 
 ```ts
-addImageAnchor(imageId: number, anchor: ImageAnchor): void;
+addImageAnchor(imageId: number, anchor: ImageAnchor, properties?: PictureProperties): void;
 ```
 
 Anchor an image with a pre-built model anchor in the model's own units (EMUs). This is the

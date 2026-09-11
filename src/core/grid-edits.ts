@@ -318,7 +318,7 @@ export class GridEdits {
       const anchor: ImageAnchor = isOneCellAnchor(image.anchor)
         ? {...image.anchor, from}
         : {...image.anchor, from, to: shiftAnchor(image.anchor.to)};
-      return {imageId: image.imageId, anchor};
+      return {...image, anchor};
     });
     replaceContents(this.#images, moved);
   }

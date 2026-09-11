@@ -55,7 +55,10 @@ const DIST = join(ROOT, 'dist');
 // described above the entry budgets.
 //
 // Raised again, from 591, when the BIFF12 reader began reading sheet protection, a tenth over.
-const TOTAL_BUDGET_BYTES = 592 * 1024;
+//
+// Raised again, from 592, when pictures began carrying alternative text, a title, a crop and a link
+// through the drawing codec, 4.6 KB over.
+const TOTAL_BUDGET_BYTES = 597 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -137,7 +140,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 580, by the same BIFF12 sheet protection reader as `/xlsb`, which left this
   // entry sitting on its budget.
-  '.': 581,
+  //
+  // Raised again, from 581, by the same picture properties as `/xlsx`, 4.3 KB over.
+  '.': 586,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -182,7 +187,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 562, by the same data-table input flag as `/core`, read and written here as
   // `del1`/`del2`, three tenths over.
-  './xlsx': 563,
+  //
+  // Raised again, from 563, when the drawing codec began reading and writing a picture's alternative
+  // text and title, its crop in either spelling `ST_Percentage` allows, and its link through a hyperlink
+  // relationship, with the checks that keep each writable. 4.0 KB over.
+  './xlsx': 568,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -210,7 +219,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 307, when the worksheet reader began reading `BrtSheetProtection` and
   // `BrtSheetProtectionIso` into the model, which also brings the base64 encoder into this entry for
   // the credential. A protected `.xlsb` sheet used to read as unprotected. 2.3 KB over.
-  './xlsb': 310,
+  //
+  // Raised again, from 310, by the model half of the picture properties (`core/image.ts`), two tenths
+  // over.
+  './xlsb': 311,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
@@ -265,7 +277,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 417, by the same conditional-format boundaries as `.`, seven tenths over.
   //
   // Raised again, from 418, by the same pivot role refusals as `/core`, three tenths over.
-  './node': 421,
+  //
+  // Raised again, from 421, by the same picture properties as `/xlsx`, which this entry's writer carries,
+  // 3.6 KB over.
+  './node': 425,
   // Raised from 50 when the MS-OVBA encoder stopped rescanning its whole back-window for every
   // output byte. The hash chain that replaced the rescan is the cost, and it buys a time bound on a
   // path an untrusted `.xlsm` reaches through `removeVbaModule`; the CFB and `dir` guards landed

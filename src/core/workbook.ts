@@ -26,7 +26,7 @@ import {
 } from '../vba/index.ts';
 import {commentThreadGuid, type Person} from './comment-thread.ts';
 import type {DateEpoch} from './date.ts';
-import type {WorkbookImage, WorksheetImages} from './image.ts';
+import {pictureProperties, type WorkbookImage, type WorksheetImages} from './image.ts';
 import {INTERNAL} from './internal.ts';
 import {INVALID_SHEET_NAME_CHARS, MAX_SHEET_NAME_LENGTH} from './limits.ts';
 import type {PreservedPart, PreservedRootReference} from './preserved.ts';
@@ -749,9 +749,10 @@ export class Workbook {
   exportImages(sheet: Worksheet): WorksheetImages {
     const background = sheet.backgroundImageId;
     return {
-      anchored: sheet.images.map(({imageId, anchor}) => ({
-        image: this.#media.require(imageId, sheet.name),
-        anchor,
+      anchored: sheet.images.map((picture) => ({
+        image: this.#media.require(picture.imageId, sheet.name),
+        anchor: picture.anchor,
+        ...pictureProperties(picture),
       })),
       background:
         background === undefined ? undefined : this.#media.require(background, sheet.name),
@@ -780,8 +781,12 @@ export class Workbook {
     if (images.anchored.length > 0) refuseImagesBesideKeptDrawing(sheet);
     for (const id of new Set(sheet.images.map((image) => image.imageId))) sheet.removeImage(id);
     sheet.removeBackgroundImage();
-    for (const {image, anchor} of images.anchored) {
-      sheet.addImageAnchor(this.#media.registerExisting(image), anchor);
+    for (const picture of images.anchored) {
+      sheet.addImageAnchor(
+        this.#media.registerExisting(picture.image),
+        picture.anchor,
+        pictureProperties(picture),
+      );
     }
     if (images.background !== undefined) {
       sheet.addBackgroundImage(this.#media.registerExisting(images.background));

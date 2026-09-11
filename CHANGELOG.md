@@ -14,6 +14,14 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Added
 
+- **Picture alternative text, title, crop and link.** `AnchoredImage` and `PortableImage` carry
+  `description`, `title`, `crop` (`ImageCrop`, each edge a fraction of the picture) and `hyperlink`
+  (`ImageHyperlink`, a URL or a `#`-prefixed place in the workbook, with a `tooltip`), and
+  `Worksheet.addImage` and `addImageAnchor` take them as a third argument. A read used to drop all four,
+  so a saved template's logo lost its accessibility text, uncropped itself and stopped being a link.
+  They are written in the spelling Excel uses, and they move with a splice and across
+  `exportImages`/`importImages`.
+
 - **`SheetProtection.legacyPasswordHash`** carries the legacy 16-bit `password="XXXX"` hash a file
   protected a sheet with, verbatim, so that protection survives a save. The library never derives one
   from a password; `protect` still writes only the agile credential.

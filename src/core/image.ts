@@ -104,11 +104,53 @@ export function resolveAnchorPoint(
   return {col, row, colOff, rowOff};
 }
 
-/** An image pinned to a worksheet: which workbook media it shows (`imageId`) and where. */
-export interface AnchoredImage {
+/**
+ * How much of a picture is cut away at each edge, as a fraction of the picture's own size: `0.1` crops
+ * a tenth, and a negative value pads the picture out. An absent edge is not cropped.
+ */
+export interface ImageCrop {
+  readonly left?: number;
+  readonly top?: number;
+  readonly right?: number;
+  readonly bottom?: number;
+}
+
+/** Where clicking a picture goes: a URL, or a `#`-prefixed place in this workbook (`#Sheet1!C3`), as a
+ * cell's {@link HyperlinkValue.hyperlink} spells one. */
+export interface ImageHyperlink {
+  readonly target: string;
+  /** The text shown when the pointer rests on the picture. */
+  readonly tooltip?: string;
+}
+
+/** What a picture says about itself beyond which image it shows and where. */
+export interface PictureProperties {
+  /** Alternative text: what a screen reader says in place of the picture. */
+  readonly description?: string;
+  /** The picture's title, shown with its alternative text. */
+  readonly title?: string;
+  readonly crop?: ImageCrop;
+  readonly hyperlink?: ImageHyperlink;
+}
+
+/** An image pinned to a worksheet: which workbook media it shows (`imageId`), where, and the picture's
+ * own properties. */
+export interface AnchoredImage extends PictureProperties {
   /** Index into the workbook's media registry (the id {@link Workbook.addImage} returned). */
   readonly imageId: number;
   readonly anchor: ImageAnchor;
+}
+
+/** The {@link PictureProperties} a value carries, and nothing else, so an image can be re-pinned or carried
+ * to another workbook without its alternative text, crop or link being left behind. */
+export function pictureProperties(picture: PictureProperties): PictureProperties {
+  const {description, title, crop, hyperlink} = picture;
+  return {
+    ...(description === undefined ? {} : {description}),
+    ...(title === undefined ? {} : {title}),
+    ...(crop === undefined ? {} : {crop: {...crop}}),
+    ...(hyperlink === undefined ? {} : {hyperlink: {...hyperlink}}),
+  };
 }
 
 /** A picture's bytes and its file kind, as held in the workbook's media registry. */
@@ -161,7 +203,7 @@ export function normalizeImageExtension(extension: string | undefined, data: Uin
  * itself is what lets an anchor cross that boundary, which is why the transfer form carries bytes
  * where the stored form carries an id.
  */
-export interface PortableImage {
+export interface PortableImage extends PictureProperties {
   readonly image: WorkbookImage;
   readonly anchor: ImageAnchor;
 }

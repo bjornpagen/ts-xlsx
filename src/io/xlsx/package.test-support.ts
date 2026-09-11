@@ -260,7 +260,8 @@ export function assertRelationshipsWired(pkg: Uint8Array): void {
     for (const rel of declared) {
       if (rel.external) continue;
       const target = resolveRelativePart(path, rel.target);
-      if (files[target] === undefined) {
+      // A `#` target is a place in the document (a picture's link to `#Sheet1!C3`), not a part.
+      if (!rel.target.startsWith('#') && files[target] === undefined) {
         problems.push(`${path} declares ${rel.id} to ${target}, which the package does not hold`);
       }
       if (!cited.has(rel.id) && !FOUND_BY_TYPE.has(relTypeSegment(rel.type))) {

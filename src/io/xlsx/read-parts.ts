@@ -7,6 +7,7 @@
 // does each feature live in, and what comes back when it is read.
 
 import type {CommentThread} from '../../core/comment-thread.ts';
+import type {PictureProperties} from '../../core/image.ts';
 import {INTERNAL} from '../../core/internal.ts';
 import {mergesOverlappingTables} from '../../core/merge.ts';
 import type {PreservedWorksheetReference} from '../../core/preserved.ts';
@@ -25,7 +26,7 @@ import {
   readPartRelationships,
 } from '../opc/read-opc.ts';
 import {admitting} from '../read-policy/read-repair.ts';
-import {parseDrawing} from './images.ts';
+import {type ParsedImageAnchor, parseDrawing} from './images.ts';
 import {type ParsedComment, parseComments} from './read-comments.ts';
 import {parsePivotTable} from './read-pivot.ts';
 import {parseTable} from './tables.ts';
@@ -171,13 +172,31 @@ export function readSheetImages(
     const id = internImage(context, mediaPath);
     if (id === undefined) continue;
     const rot = anchor.rotation !== undefined ? {rotation: anchor.rotation} : {};
+    const properties = pictureOf(anchor, drawingRels);
     if (anchor.to !== undefined) {
       const mode = anchor.editAs !== undefined ? {editAs: anchor.editAs} : {};
-      sheet.addImageAnchor(id, {from: anchor.from, to: anchor.to, ...mode, ...rot});
+      sheet.addImageAnchor(id, {from: anchor.from, to: anchor.to, ...mode, ...rot}, properties);
     } else if (anchor.ext !== undefined) {
-      sheet.addImageAnchor(id, {from: anchor.from, ext: anchor.ext, ...rot});
+      sheet.addImageAnchor(id, {from: anchor.from, ext: anchor.ext, ...rot}, properties);
     }
   }
+}
+
+// What a parsed picture says about itself, with its link's relationship resolved. A link whose relationship
+// is missing, or that names nothing, is dropped rather than kept pointing nowhere. A relationship that is
+// not external keeps its target as written, the `#Sheet1!C3` form Excel uses for a place in the workbook.
+function pictureOf(anchor: ParsedImageAnchor, drawingRels: PartRelationships): PictureProperties {
+  const {description, title, crop, hyperlinkId, tooltip} = anchor;
+  const link = hyperlinkId === undefined ? undefined : drawingRels.byId(hyperlinkId);
+  const target = link === undefined || link.target === '' ? undefined : link.target;
+  return {
+    ...(description === undefined ? {} : {description}),
+    ...(title === undefined ? {} : {title}),
+    ...(crop === undefined ? {} : {crop}),
+    ...(target === undefined
+      ? {}
+      : {hyperlink: tooltip === undefined ? {target} : {target, tooltip}}),
+  };
 }
 
 // A sheet background is a workbook image referenced by the worksheet's `<picture>` element through a

@@ -6,10 +6,11 @@
 
 <sub>interface</sub>
 
-An image pinned to a worksheet: which workbook media it shows (`imageId`) and where.
+An image pinned to a worksheet: which workbook media it shows (`imageId`), where, and the picture's
+own properties.
 
 ```ts
-interface AnchoredImage {
+interface AnchoredImage extends PictureProperties {
   /** Index into the workbook's media registry (the id {@link Workbook.addImage} returned). */
   readonly imageId: number;
   readonly anchor: ImageAnchor;
@@ -68,6 +69,24 @@ type ImageAnchor = TwoCellAnchor | OneCellAnchor;
 
 ---
 
+### `ImageCrop`
+
+<sub>interface</sub>
+
+How much of a picture is cut away at each edge, as a fraction of the picture's own size: `0.1` crops
+a tenth, and a negative value pads the picture out. An absent edge is not cropped.
+
+```ts
+interface ImageCrop {
+  readonly left?: number;
+  readonly top?: number;
+  readonly right?: number;
+  readonly bottom?: number;
+}
+```
+
+---
+
 ### `ImageEditAs`
 
 <sub>type</sub>
@@ -79,6 +98,23 @@ without one is written as `oneCell`, which is this library's own default.
 
 ```ts
 type ImageEditAs = 'oneCell' | 'twoCell' | 'absolute';
+```
+
+---
+
+### `ImageHyperlink`
+
+<sub>interface</sub>
+
+Where clicking a picture goes: a URL, or a `#`-prefixed place in this workbook (`#Sheet1!C3`), as a
+cell's [`HyperlinkValue.hyperlink`](./cell-values.md#hyperlinkvalue) spells one.
+
+```ts
+interface ImageHyperlink {
+  readonly target: string;
+  /** The text shown when the pointer rests on the picture. */
+  readonly tooltip?: string;
+}
 ```
 
 ---
@@ -126,6 +162,25 @@ interface OneCellAnchor {
 
 ---
 
+### `PictureProperties`
+
+<sub>interface</sub>
+
+What a picture says about itself beyond which image it shows and where.
+
+```ts
+interface PictureProperties {
+  /** Alternative text: what a screen reader says in place of the picture. */
+  readonly description?: string;
+  /** The picture's title, shown with its alternative text. */
+  readonly title?: string;
+  readonly crop?: ImageCrop;
+  readonly hyperlink?: ImageHyperlink;
+}
+```
+
+---
+
 ### `PortableImage`
 
 <sub>interface</sub>
@@ -139,7 +194,7 @@ itself is what lets an anchor cross that boundary, which is why the transfer for
 where the stored form carries an id.
 
 ```ts
-interface PortableImage {
+interface PortableImage extends PictureProperties {
   readonly image: WorkbookImage;
   readonly anchor: ImageAnchor;
 }

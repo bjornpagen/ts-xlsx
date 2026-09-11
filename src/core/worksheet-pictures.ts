@@ -24,6 +24,8 @@ import {
   type Extent,
   type ImageAnchor,
   type ImageEditAs,
+  type PictureProperties,
+  pictureProperties,
   PX_TO_EMU,
   resolveAnchorPoint,
   type TwoCellAnchor,
@@ -66,7 +68,8 @@ export class WorksheetPictures {
 
   // Bind the pure anchor geometry to this sheet's per-column/row sizes; a size a column or row does
   // not set defers to the sheet default, then (inside resolveAnchorPoint) to Excel's own default.
-  add(imageId: number, anchor: PixelAnchor): void {
+  add(imageId: number, anchor: PixelAnchor, properties: PictureProperties = {}): void {
+    const picture = pictureProperties(properties);
     const columnWidth = (col: number): number | undefined => this.#metrics.columnWidth(col);
     const rowHeight = (row: number): number | undefined => this.#metrics.rowHeight(row);
     if ('ext' in anchor) {
@@ -75,18 +78,18 @@ export class WorksheetPictures {
         cy: Math.round(anchor.ext.height * PX_TO_EMU),
       };
       const from = resolveAnchorPoint(anchor.tl, columnWidth, rowHeight);
-      this.#anchors.push({imageId, anchor: {from, ext}});
+      this.#anchors.push({imageId, anchor: {from, ext}, ...picture});
       return;
     }
     const from = resolveAnchorPoint(anchor.tl, columnWidth, rowHeight);
     const to = resolveAnchorPoint(anchor.br, columnWidth, rowHeight);
     const twoCell: TwoCellAnchor =
       anchor.editAs !== undefined ? {from, to, editAs: anchor.editAs} : {from, to};
-    this.#anchors.push({imageId, anchor: twoCell});
+    this.#anchors.push({imageId, anchor: twoCell, ...picture});
   }
 
-  addAnchor(imageId: number, anchor: ImageAnchor): void {
-    this.#anchors.push({imageId, anchor});
+  addAnchor(imageId: number, anchor: ImageAnchor, properties: PictureProperties = {}): void {
+    this.#anchors.push({imageId, anchor, ...pictureProperties(properties)});
   }
 
   remove(imageId: number): void {

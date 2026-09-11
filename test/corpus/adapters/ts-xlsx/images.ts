@@ -11,7 +11,14 @@ import {
   partOf,
   roundtrip,
 } from './package-facts.ts';
-import {fixtureBytes, readFixture, readXlsx, Workbook, writeXlsx} from './runtime.ts';
+import {
+  fixtureBytes,
+  readFixture,
+  readXlsx,
+  Workbook,
+  type WorkbookInstance,
+  writeXlsx,
+} from './runtime.ts';
 import {anchorSpecImage, buildFrom, ONE_PX_PNG} from './spec-model.ts';
 import {
   attrsOf,
@@ -275,6 +282,24 @@ export const images = {
       }
     }
     return {images, count: images.length};
+  },
+
+  // Read a fixture and report what each picture on its first sheet says about itself, as read and after a
+  // write and a second read → { read, rewritten }, each a list of { description, title, crop, hyperlink }
+  // in drawing order, with null for a property the picture does not carry.
+  readFixturePictureProperties(rel: string) {
+    const propertiesOf = (workbook: WorkbookInstance) =>
+      (workbook.worksheets[0]?.images ?? []).map((picture) => ({
+        description: picture.description ?? null,
+        title: picture.title ?? null,
+        crop: picture.crop ?? null,
+        hyperlink: picture.hyperlink ?? null,
+      }));
+    const workbook = readFixture(rel);
+    return {
+      read: propertiesOf(workbook),
+      rewritten: propertiesOf(readXlsx(writeXlsx(workbook))),
+    };
   },
 
   // Add one image whose extension may carry a leading dot or a query string, write, and report the

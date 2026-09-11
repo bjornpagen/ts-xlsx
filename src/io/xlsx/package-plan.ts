@@ -65,6 +65,12 @@ export class RelationshipLedger {
     return this.#record({type, target: url, external: true});
   }
 
+  /** Record a relationship to a place inside this document (a picture link's `#Sheet1!C3`), kept as
+   * written rather than resolved as a part path, and return its id. */
+  addInDocument(type: string, location: string): string {
+    return this.#record({type, target: location});
+  }
+
   /** Every relationship recorded, in id order. */
   get relationships(): readonly PlannedRelationship[] {
     return this.#relationships;
