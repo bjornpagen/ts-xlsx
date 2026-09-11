@@ -48,7 +48,10 @@ never replaces the Tier-2 seam fact that locks a behavior.**
   COM server is absent, so on a non-Excel host it degrades with a clear message rather than
   silently emitting empty facts.
 
-One command: `node tools/excel-oracle/run.ts <probe.json>` gives observation JSON out. For
+One command: `node tools/excel-oracle/run.ts <probe.json>` gives observation JSON out, and
+`--xlsx <file.xlsx> --cells …` does the same for a package that already exists rather than one
+emitted from a spec (added 2026-09-11, after a run of reader questions about shapes the writer never
+produces had each needed a one-off COM script). For
 geometry, `pwsh -NoProfile -File tools/excel-oracle/read-geometry.ps1 -Path <file.xlsx>` gives
 observation JSON out.
 

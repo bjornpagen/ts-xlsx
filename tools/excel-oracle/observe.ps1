@@ -18,7 +18,8 @@ param(
   # Comma-joined cell addresses (e.g. "B1,B2,D5"). Taken as one string and split here on purpose: a
   # [string[]] param bound via -File from an external spawn collapses to a single element, and Excel's
   # Range() reads a comma as a union operator, so a joined token silently reads one merged area, not
-  # each cell. Splitting here keeps one address per readback.
+  # each cell. Splitting here keeps one address per readback. An address may name its sheet
+  # (`Sheet2!B2`), which is also why a sheet name holding a comma cannot be observed.
   [string] $Cells = '',
   [string] $SaveAsPath = '',
   [switch] $NoResave,
@@ -82,14 +83,31 @@ $work = {
       $result.workbookName = $wb.Name
       $result.repaired = ($wb.Name -match '\[Repaired\]')
 
-      $sheet = $wb.Worksheets.Item(1)
       foreach ($addr in $Cells) {
-        $rng = $sheet.Range($addr)
+        # `Sheet!A1` names another sheet; a bare address is the first sheet's. The sheet name is taken
+        # up to the last `!`, and a quoted one (`'My Sheet'!A1`) loses its quotes.
+        $bang = $addr.LastIndexOf('!')
+        if ($bang -ge 0) {
+          $sheetName = $addr.Substring(0, $bang) -replace "^'(.*)'$", '$1' -replace "''", "'"
+          $sheet = $wb.Worksheets.Item($sheetName)
+          $local = $addr.Substring($bang + 1)
+        } else {
+          $sheet = $wb.Worksheets.Item(1)
+          $local = $addr
+        }
+        $rng = $sheet.Range($local)
+        $raw = $rng.Value2
         $result.cells += [ordered]@{
           address    = $addr
           hasFormula = [bool]$rng.HasFormula
           formula    = [string]$rng.Formula
-          value      = "$($rng.Value2)"
+          value      = "$raw"
+          # What `value` cannot say. An empty string and a blank cell both stringify to "", and an error
+          # is a bare Int32 (CVErr code) that looks like a number: the type and ISBLANK tell them apart,
+          # and `Text` is what the cell displays.
+          valueType  = $(if ($null -eq $raw) { 'null' } else { $raw.GetType().Name })
+          text       = [string]$rng.Text
+          isBlank    = [bool]$sheet.Evaluate("ISBLANK($local)")
         }
       }
 

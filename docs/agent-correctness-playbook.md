@@ -287,7 +287,13 @@ On a Windows host with Excel installed, don't do it by hand: run the Excel-oracl
 Write a probe (`tools/excel-oracle/probes/<invariant>.json`: a cell spec plus the cells to
 observe), then `node tools/excel-oracle/run.ts <probe.json> --out test/corpus/fixtures/excel-oracle/<invariant>.json`.
 It opens the file headless over COM, reads formula/value per cell, re-saves to reveal the
-geometry Excel considers canonical, and writes an auditable observation sidecar. This
+geometry Excel considers canonical, and writes an auditable observation sidecar. Each cell also
+reports `text` (what it displays), `valueType` (`null` for a blank, `Int32` for an error's CVErr
+code) and `isBlank`, which is what separates an empty string from no value, and an address may be
+sheet-qualified (`Sheet2!B2`). When the question is about a package our writer would never emit, a
+typed cell without `<v>` or a hand-patched part, skip the spec and open it as it is:
+`node tools/excel-oracle/run.ts --xlsx <file.xlsx> --cells A1,Sheet2!B2 [--no-resave]`, or put
+`"xlsx": "<path relative to the probe>"` in the probe file in place of `"spec"`. This
 **seeds** the invariant only. Then **lock** it with a Tier-2 seam fact that runs in CI and
 a case carrying `provenance: {source: 'excel-desktop-verification', ref: '<sidecar>'}`. The
 harness is a probe, not a test: it needs Windows+Excel+`pwsh`, self-guards to a loud refusal

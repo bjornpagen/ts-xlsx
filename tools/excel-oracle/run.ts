@@ -5,11 +5,17 @@
 //   emit (spec -> .xlsx)  ->  observe (headless COM readback + re-save)  ->  collect (parse + canonical
 //   ref readback in Node).
 //
+// A probe either describes a workbook for our own writer to emit (`spec`) or names a package that
+// already exists (`xlsx`). The second is for a reader question about a shape the writer never produces,
+// a typed cell without `<v>` or a hand-patched part, which otherwise needed a one-off COM script.
+//
 // This tool is a PROBE, not a test. It is Windows/Excel-bound and never runs in CI; the corpus runner
 // (`node test/corpus/run.ts`) must never depend on it. Its output is a *recorded fact* that seeds a
 // case; a Tier-2 seam fact is what locks that case and runs in CI (ADR 0012, seed+lock split).
 //
 // Usage:  node tools/excel-oracle/run.ts <probe.json> [--out <observation.json>] [--keep]
+//         node tools/excel-oracle/run.ts --xlsx <package.xlsx> --cells A1,Sheet2!B2 [--invariant <name>]
+//           [--no-resave] [--out <observation.json>] [--keep]
 //
 // Self-guards: it refuses to run (loud, non-zero exit) if pwsh or a registered Excel COM server is
 // absent, so on a non-Excel host it degrades with a clear message rather than silently emitting empty
@@ -33,11 +39,14 @@ const OBSERVE_PS1 = path.join(HERE, 'observe.ps1');
 const fail: (message: string) => never = failWith('excel-oracle');
 const PWSH_TIMEOUT_MS = 120_000;
 
-/** A probe file: the workbook to emit, and what to observe once Excel has opened it. */
+/** A probe file: the workbook to emit, or the package to open, and what to observe once Excel has. */
 interface Probe {
   readonly invariant: string;
   readonly description?: string;
-  readonly spec: ProbeSpec;
+  /** The workbook to emit through our writer. Exactly one of this and {@link xlsx}. */
+  readonly spec?: ProbeSpec;
+  /** A package to open as it is, relative to the probe file. Exactly one of this and {@link spec}. */
+  readonly xlsx?: string;
   readonly observe: {readonly cells: readonly string[]; readonly resave?: boolean};
   /** The authored interpretation the probe records; echoed verbatim into the observation sidecar. */
   readonly verdict?: string;
@@ -45,10 +54,18 @@ interface Probe {
 
 /** One cell as Excel Desktop reported it back over COM. */
 interface CellReadback {
+  /** As requested: a bare address on the first sheet, or `Sheet!A1`. */
   readonly address: string;
   readonly hasFormula: boolean;
   readonly formula: string;
+  /** `Value2`, stringified: an empty string and a blank cell both read as `""` here. */
   readonly value: string;
+  /** `Value2`'s .NET type: `null` for a blank, `Int32` for an error's CVErr code. */
+  readonly valueType: string;
+  /** What the cell displays. */
+  readonly text: string;
+  /** `ISBLANK` over the cell, which separates a blank from an empty string. */
+  readonly isBlank: boolean;
 }
 
 /** The raw observation blob observe.ps1 emits on stdout. */
@@ -96,13 +113,18 @@ function readProbe(probePath: string): Probe {
   if (typeof p.invariant !== 'string' || p.invariant.length === 0) {
     fail(`probe ${probePath} is missing a non-empty "invariant"`);
   }
-  if (!p.spec || !Array.isArray(p.spec.sheets)) {
+  if ((p.spec === undefined) === (p.xlsx === undefined)) {
+    fail(`probe ${probePath} must carry exactly one of "spec" and "xlsx"`);
+  }
+  if (p.spec !== undefined && !Array.isArray(p.spec.sheets)) {
     fail(`probe ${probePath} is missing "spec.sheets"`);
   }
   if (!p.observe || !Array.isArray(p.observe.cells)) {
     fail(`probe ${probePath} is missing "observe.cells"`);
   }
-  return p as Probe;
+  return p.xlsx === undefined
+    ? (p as Probe)
+    : {...(p as Probe), xlsx: path.resolve(path.dirname(probePath), p.xlsx)};
 }
 
 /** Read back the shared-formula `<f>` elements Excel itself wrote: its canonical form for the group. */
@@ -121,25 +143,52 @@ function canonicalSharedFormulas(resavedPath: string): Record<string, string[]> 
   return out;
 }
 
+/** A path relative to the working directory, `/`-separated, as a recorded observation spells one. */
+function repoPath(file: string): string {
+  return path.relative(process.cwd(), file).replaceAll('\\', '/');
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  const probePath = argv.find((a) => !a.startsWith('--'));
-  if (!probePath)
-    fail('usage: node tools/excel-oracle/run.ts <probe.json> [--out <file>] [--keep]');
-  const outIdx = argv.indexOf('--out');
-  const outPath = outIdx >= 0 ? argv[outIdx + 1] : undefined;
+  const flag = (name: string): string | undefined => {
+    const index = argv.indexOf(name);
+    return index >= 0 ? argv[index + 1] : undefined;
+  };
+  const usage =
+    'usage: node tools/excel-oracle/run.ts <probe.json> [--out <file>] [--keep]\n' +
+    '       node tools/excel-oracle/run.ts --xlsx <package.xlsx> --cells A1,Sheet2!B2 ' +
+    '[--invariant <name>] [--no-resave] [--out <file>] [--keep]';
+  const outPath = flag('--out');
   const keep = argv.includes('--keep');
+  const packageArg = flag('--xlsx');
+  const flagValues = new Set(
+    ['--out', '--xlsx', '--cells', '--invariant'].map(flag).filter((value) => value !== undefined),
+  );
+  const probePath = argv.find((arg) => !arg.startsWith('--') && !flagValues.has(arg));
+
+  let probe: Probe;
+  if (packageArg !== undefined) {
+    const cells = flag('--cells');
+    if (probePath !== undefined || cells === undefined) fail(usage);
+    probe = {
+      invariant: flag('--invariant') ?? path.basename(packageArg, path.extname(packageArg)),
+      xlsx: path.resolve(packageArg),
+      observe: {cells: cells.split(','), resave: !argv.includes('--no-resave')},
+    };
+  } else {
+    if (probePath === undefined) fail(usage);
+    probe = readProbe(probePath);
+  }
 
   await assertExcelAvailable();
-  const probe = readProbe(probePath);
   const resave = probe.observe.resave !== false;
 
   const work = scratchDir('excel-oracle');
-  const xlsxPath = path.join(work, `${probe.invariant}.xlsx`);
+  const xlsxPath = probe.xlsx ?? path.join(work, `${probe.invariant}.xlsx`);
   const resavedPath = path.join(work, `${probe.invariant}.excel-resaved.xlsx`);
 
   try {
-    emitProbe(probe.spec, xlsxPath);
+    if (probe.spec !== undefined) emitProbe(probe.spec, xlsxPath);
 
     const args = ['-File', OBSERVE_PS1, '-Path', xlsxPath, '-Cells', probe.observe.cells.join(',')];
     if (resave) args.push('-SaveAsPath', resavedPath);
@@ -165,8 +214,10 @@ async function main(): Promise<void> {
     const observation = {
       invariant: probe.invariant,
       ...(probe.description !== undefined ? {description: probe.description} : {}),
-      // The probe that produced this observation, so the recorded fact points back at its own inputs.
-      probeSpecRef: path.relative(process.cwd(), probePath).replaceAll('\\', '/'),
+      // What produced this observation, so the recorded fact points back at its own inputs: the probe
+      // file, and the package opened as it was when there was one.
+      ...(probePath !== undefined ? {probeSpecRef: repoPath(probePath)} : {}),
+      ...(probe.xlsx !== undefined ? {xlsxRef: repoPath(probe.xlsx)} : {}),
       excel: {version: raw.version, build: raw.build},
       capturedAt: new Date().toISOString().slice(0, 10),
       openClass: 'automation-open (DisplayAlerts=false, AutomationSecurity=ForceDisable)',
