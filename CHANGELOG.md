@@ -106,6 +106,22 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Fixed
 
+- **A Strict workbook could not be written back out.** `writeXlsx` threw `InternalError: two package
+  parts claim the path "docProps/app.xml"` for any workbook read from an ISO/IEC 29500 Strict
+  package, because Strict names the app-properties relationship `extendedProperties` and the reader
+  kept it as an unmodelled part. It is now recognised, and the workbook is written as Transitional.
+
+- **A frozen split assigned to `Worksheet.view` was dropped or written as given.** A NaN or negative
+  `xSplit`/`ySplit` wrote a sheet with no frozen pane, and a fraction was written into the attribute.
+  The writer now refuses a split that is not a whole count leaving one line to scroll with an
+  `AuthoringError`, and the reader drops such a split from a file.
+
+- **A sheet name that reads as an R1C1 reference or a boolean was left unquoted in a formula.** A
+  sheet named `R1C1`, `RC`, `R`, `C`, `R1X` or `TRUE` was written as `R1C1!A1` in the autofilter's
+  defined name and in formulas decoded from `.xlsb`, which Excel reads as a different reference. These
+  are now quoted exactly as Excel quotes them, and a name shaped like a cell past the grid, such as
+  `XFE1`, is no longer quoted.
+
 - **A raw tab, newline or carriage return in an XML attribute value was read as itself.** XML 1.0
   reads each as a space, a CRLF pair as one, which is what Excel shows. Both readers kept them raw, so
   a foreign file's validation prompt with a literal newline read as two lines, and a save wrote the
