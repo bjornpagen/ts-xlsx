@@ -1,7 +1,8 @@
-// Worksheet serialisation: a Worksheet model into its `xl/worksheets/sheetN.xml` part and the sheet's
-// rels part. Orchestrates the whole sheet body: the print/page/view/protection blocks live in
-// `sheet-properties.ts`, shared-formula planning in `shared-formulas.ts`, and rendering one row and
-// its cells in `row-xml.ts`, each imported here rather than duplicated. Table *parts*
+// Worksheet serialisation: a Worksheet model into its `xl/worksheets/sheetN.xml` part (the sheet's rels
+// part is the writer's relationship ledger for the sheet). Orchestrates the whole sheet body: the
+// print/page/view/protection blocks live in `sheet-properties.ts`, shared-formula planning in
+// `shared-formulas.ts`, and rendering one row and its cells in `row-xml.ts`, each imported here rather
+// than duplicated. Table *parts*
 // (`xl/tables/tableN.xml`) are `tables.ts`'s concern, alongside their reader; this module only wires
 // the sheet's `<tableParts>` back-references to them.
 //
@@ -17,7 +18,6 @@ import {pickStyleFacets} from '../../core/style.ts';
 import type {ColumnProperties, Worksheet, WorksheetProperties} from '../../core/worksheet.ts';
 import {AuthoringError, InternalError, quoted} from '../../errors.ts';
 import {escapeAttr, numberText, XML_DECLARATION} from '../../xml/xml.ts';
-import {relationship, relationshipsPart} from '../opc/rels.ts';
 import {
   conditionalFormattingsExtXml,
   conditionalFormattingsXml,
@@ -25,21 +25,10 @@ import {
   dataBarExtLinks,
 } from './conditional-formatting.ts';
 import {dataValidationsExtXml, dataValidationsXml} from './data-validation.ts';
-import {type HyperlinkPlan, hyperlinksXml, isExternalHyperlink} from './hyperlinks.ts';
+import {type HyperlinkPlan, hyperlinksXml} from './hyperlinks.ts';
 import {SLICER_LIST_EXT_URI} from './namespaces.ts';
-import type {SheetPlan, TablePlan} from './package-plan.ts';
-import {
-  commentsPart,
-  drawingPart,
-  mediaPart,
-  pivotTablePart,
-  printerSettingsPart,
-  tablePart,
-  targetFromWorksheet,
-  threadedCommentsPart,
-  vmlDrawingPart,
-} from './part-names.ts';
-import {NS, REL} from './relationships.ts';
+import type {TablePlan} from './package-plan.ts';
+import {NS} from './relationships.ts';
 import {
   assertWritableLevel,
   buildColumnDefaults,
@@ -264,97 +253,6 @@ function tablePartsXml(tables: readonly TablePlan[]): string {
   if (tables.length === 0) return '';
   const parts = tables.map(({relId}) => `<tablePart r:id="${relId}"/>`).join('');
   return `<tableParts count="${tables.length}">${parts}</tableParts>`;
-}
-
-export function worksheetRelsXml(plan: SheetPlan): string {
-  const {
-    tables,
-    drawing,
-    comments,
-    threadedComments,
-    printerSettings,
-    background,
-    hyperlinks,
-    preservedRefs: preservedReferences,
-    pivots,
-  } = plan;
-  const rels = [
-    ...tables.map(({relId, number}) =>
-      relationship(relId, REL.table, targetFromWorksheet(tablePart(number))),
-    ),
-    // A pivot table hosted on this sheet is reached by a relationship of type pivotTable; Excel
-    // discovers the pivot from the rels part, so the sheet body itself carries no reference to it.
-    ...pivots.map((pivot) =>
-      relationship(
-        pivot.sheetRelId,
-        REL.pivotTable,
-        targetFromWorksheet(pivotTablePart(pivot.number)),
-      ),
-    ),
-    ...(drawing === null
-      ? []
-      : [
-          relationship(
-            drawing.relId,
-            REL.drawing,
-            targetFromWorksheet(drawingPart(drawing.number)),
-          ),
-        ]),
-    ...(comments === null
-      ? []
-      : [
-          relationship(
-            comments.vmlRelId,
-            REL.vmlDrawing,
-            targetFromWorksheet(vmlDrawingPart(comments.number)),
-          ),
-          relationship(
-            comments.commentsRelId,
-            REL.comments,
-            targetFromWorksheet(commentsPart(comments.number)),
-          ),
-        ]),
-    // A threaded-comment part, like a pivot table, is reached by relationship alone: no worksheet element
-    // names it, so this relationship is the only thing that makes Excel look for the conversation.
-    ...(threadedComments === null
-      ? []
-      : [
-          relationship(
-            threadedComments.relId,
-            REL.threadedComment,
-            targetFromWorksheet(threadedCommentsPart(threadedComments.number)),
-          ),
-        ]),
-    ...(printerSettings === null
-      ? []
-      : [
-          relationship(
-            printerSettings.relId,
-            REL.printerSettings,
-            targetFromWorksheet(printerSettingsPart(printerSettings.number)),
-          ),
-        ]),
-    ...(background === null
-      ? []
-      : [
-          relationship(
-            background.relId,
-            REL.image,
-            targetFromWorksheet(mediaPart(background.mediaNumber, background.extension)),
-          ),
-        ]),
-    // A preserved reference targets its entry part's new (package-absolute) path, made relative the
-    // same way every generated target above is.
-    ...preservedReferences.map((reference) =>
-      relationship(reference.relId, reference.relType, targetFromWorksheet(reference.entryPath)),
-    ),
-    // An external hyperlink's target is a URL outside the package, so its relationship carries
-    // TargetMode="External". Internal links have no relId and contribute nothing here.
-    ...hyperlinks
-      .filter(isExternalHyperlink)
-      .map((link) => relationship(link.relId, REL.hyperlink, link.target, {external: true})),
-  ];
-  return relationshipsPart(rels);
 }
 
 // Excel's standard row height in points, emitted as the `defaultRowHeight` when the sheet does not

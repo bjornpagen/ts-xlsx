@@ -1,6 +1,6 @@
-// Workbook-level serialisation: the package's `[Content_Types].xml`, its root and workbook `.rels`
-// parts, `xl/workbook.xml` (sheets, defined names, calc/protection settings, pivot-cache and slicer
-// registrations), and the `docProps` core/app property parts.
+// Workbook-level serialisation: the package's `[Content_Types].xml`, `xl/workbook.xml` (sheets,
+// defined names, calc/protection settings, pivot-cache and slicer registrations), and the `docProps`
+// core/app property parts. The root and workbook `.rels` parts are the writer's relationship ledgers.
 
 import {mangleFormula, quoteSheetName} from '../../core/formula.ts';
 import {WORKBOOK_PROTECTION_CREDENTIAL_ATTRS} from '../../core/workbook-protection.ts';
@@ -18,13 +18,12 @@ import {
   XML_DECLARATION,
 } from '../../xml/xml.ts';
 import {extensionOf, THEME_PART_PATH} from '../opc/part-paths.ts';
-import {relationship, relationshipsPart} from '../opc/rels.ts';
 import {imageContentType} from './images.ts';
 import {SLICER_CACHES_EXT_URI} from './namespaces.ts';
 import type {
   PivotPlan,
+  PlannedRelationship,
   PreservedPartPlan,
-  PreservedRootReferencePlan,
   PreservedWorkbookReferencePlan,
   TablePlan,
 } from './package-plan.ts';
@@ -40,12 +39,11 @@ import {
   SHARED_STRINGS_PART,
   STYLES_PART,
   tablePart,
-  targetFromWorkbook,
   threadedCommentsPart,
   WORKBOOK_PART,
   worksheetPart,
 } from './part-names.ts';
-import {NS, REL} from './relationships.ts';
+import {NS} from './relationships.ts';
 import {x14Ext} from './x14-ext.ts';
 
 const CT = {
@@ -73,28 +71,26 @@ const CT = {
   person: 'application/vnd.ms-excel.person+xml',
 } as const;
 
-// A preserved workbook reference with the relationship id assigned for emission (see the body and
-// rels-part wiring in `buildPackageParts`).
+// A preserved workbook reference with the relationship id recorded for it (see the writer's
+// `planWorkbookRelationships`).
 export type PreservedWorkbookRel = PreservedWorkbookReferencePlan & {readonly relId: string};
 
 /**
- * The workbook part's relationship ids, drawn once by the writer's `assignWorkbookRelIds` and handed
- * to every consumer rather than re-derived by any of them.
+ * The workbook part's relationships, recorded once by the writer's `planWorkbookRelationships`, with
+ * the ids the workbook body cites picked out of them.
  *
- * Declared here because both consumers are here: the rels part wires the ids, and the workbook body
- * *references* them from `<sheet r:id>`. The body used to spell that reference `rId${i + 1}`, which
- * agreed with the allocator only because sheets happen to be the first ids it hands out. Anything
- * laid ahead of them would have re-pointed every sheet at the wrong part, and the package would have
- * stayed schema-valid while doing it -- a class of corruption no validator catches and no round-trip
- * through this library notices, because the reader resolves the same wrong ids consistently.
+ * Declared here because the body is the consumer of the ids: it references them from `<sheet r:id>`.
+ * The body used to spell that reference `rId${i + 1}`, which agreed with the allocator only because
+ * sheets happen to be the first ids it hands out. Anything laid ahead of them would have re-pointed
+ * every sheet at the wrong part, and the package would have stayed schema-valid while doing it -- a
+ * class of corruption no validator catches and no round-trip through this library notices, because
+ * the reader resolves the same wrong ids consistently.
  */
 export interface WorkbookRelPlan {
   readonly sheetRelIds: readonly string[];
-  readonly stylesRelId: string;
-  readonly themeRelId: string;
-  readonly sharedStringsRelId: string | null;
-  readonly personsRelId: string | null;
   readonly preservedWorkbookRels: readonly PreservedWorkbookRel[];
+  /** Every relationship the workbook's `.rels` part declares, in id order. */
+  readonly relationships: readonly PlannedRelationship[];
 }
 
 /**
@@ -258,19 +254,6 @@ function override(partPath: string, contentType: string): string {
 // extension carries: the extension-level counterpart to {@link override}'s per-part declaration.
 function defaultType(extension: string, contentType: string): string {
   return `<Default Extension="${escapeAttr(extension)}" ContentType="${escapeAttr(contentType)}"/>`;
-}
-
-// The package root relationships: the three the writer regenerates from the model (the office
-// document and the core/app properties), followed by any preserved root references (customUI ribbon
-// parts, custom properties, a thumbnail) re-declared with fresh ids past the fixed three so a
-// round-trip keeps content wired from `_rels/.rels` that the model does not otherwise emit.
-export function rootRelsXml(rootRefs: readonly PreservedRootReferencePlan[]): string {
-  return relationshipsPart([
-    relationship('rId1', REL.officeDocument, WORKBOOK_PART),
-    relationship('rId2', REL.coreProps, CORE_PROPS_PART),
-    relationship('rId3', REL.extProps, APP_PROPS_PART),
-    ...rootRefs.map((ref, i) => relationship(`rId${4 + i}`, ref.relType, ref.entryPath)),
-  ]);
 }
 
 export function workbookXml(
@@ -492,53 +475,6 @@ function definedNamesXml(workbook: Workbook): string {
 function filterDatabaseRefersTo(sheetName: string, range: string): string {
   const absolute = range.replace(/([A-Z]+)(\d+)/g, '$$$1$$$2');
   return `${quoteSheetName(sheetName)}!${absolute}`;
-}
-
-/**
- * The workbook part's `.rels`, rendered from the ids the planner drew.
- *
- * Every id arrives in `plan`; none is computed here. It used to re-derive the styles, theme and
- * shared-strings ids from the sheet count and a shared constant while `write.ts` independently summed
- * the same inputs to place everything after them, so one sequence was spelled in two files and only
- * its fixed part was shared. The relationship *order* is still stated here, because that is what this
- * function is; the numbering is not, because two numberings of one sequence is how they drift apart.
- */
-export function workbookRelsXml(plan: WorkbookRelPlan, pivots: readonly PivotPlan[]): string {
-  const {personsRelId} = plan;
-  const preservedRels = plan.preservedWorkbookRels;
-  return relationshipsPart([
-    ...plan.sheetRelIds.map((relId, i) =>
-      relationship(relId, REL.worksheet, targetFromWorkbook(worksheetPart(i + 1))),
-    ),
-    relationship(plan.stylesRelId, REL.styles, targetFromWorkbook(STYLES_PART)),
-    relationship(plan.themeRelId, REL.theme, targetFromWorkbook(THEME_PART_PATH)),
-    ...(plan.sharedStringsRelId === null
-      ? []
-      : [
-          relationship(
-            plan.sharedStringsRelId,
-            REL.sharedStrings,
-            targetFromWorkbook(SHARED_STRINGS_PART),
-          ),
-        ]),
-    // The threaded-comment identity registry every conversation on every sheet resolves its authors and
-    // @mentions through. Workbook-level and singular, so this one relationship serves all the sheets.
-    ...(personsRelId === null
-      ? []
-      : [relationship(personsRelId, REL.person, targetFromWorkbook(PERSONS_PART))]),
-    // A preserved cache's target is package-absolute; express it relative to the workbook part.
-    ...preservedRels.map((ref) =>
-      relationship(ref.relId, ref.relType, targetFromWorkbook(ref.entryPath)),
-    ),
-    // A generated pivot cache's workbook relationship reaches its cache definition part.
-    ...pivots.map((pivot) =>
-      relationship(
-        pivot.workbookRelId,
-        REL.pivotCacheDefinition,
-        targetFromWorkbook(pivotCacheDefinitionPart(pivot.number)),
-      ),
-    ),
-  ]);
 }
 
 export function corePropsXml(properties: WorkbookProperties): string {

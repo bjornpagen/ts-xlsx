@@ -726,10 +726,16 @@ where most of the subtlety in that reader lives.
 Namespace URIs and ext-URI GUIDs are registered once, split by which layer owns them: the
 package-level URIs (`.rels`, content types, the relationship vocabulary) in
 `src/io/opc/namespaces.ts`, the SpreadsheetML and extension ones in `src/io/xlsx/namespaces.ts`.
-Sheet-local relationship ids are handed out by a single monotonic `SheetRelIds` allocator. Id
-prefixes were once re-derived by hand-summing every prior part's count, which silently collides two
-parts onto one id when a prefix drifts. Ids are now unique by construction and never recomputed by
-arithmetic.
+Every relationship the writer generates is recorded in a `RelationshipLedger`
+(`src/io/xlsx/package-plan.ts`) at the moment its id is handed out: one ledger per owning part (each
+sheet, each drawing, the workbook, the package root, and each link of a pivot's part chain). The
+ledger returns the id, and its record is the `.rels` part, so a part with an empty ledger has no
+`.rels` at all. Id prefixes were once re-derived by hand-summing every prior part's count, which
+silently collides two parts onto one id when a prefix drifts; later the ids came from a counter while
+the relationships were listed again, in another order, by a separate renderer. Ids are now unique by
+construction, never recomputed by arithmetic, and never listed twice. `assertRelationshipsWired` in
+the xlsx test support checks the result on every package the round-trip helpers write: each cited id
+is declared, each relationship reaches a part, and each is cited or found by its type.
 
 The public API is eight curated entry barrels under [`src/entries/`](../src/entries/), one
 per subpath the package publishes (`/core`, `/xlsx`, `/xlsb`, `/csv`, `/node`, `/vba`,

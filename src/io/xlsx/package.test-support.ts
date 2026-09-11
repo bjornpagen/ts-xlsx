@@ -17,6 +17,11 @@ import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
 
 import {Workbook} from '../../core/workbook.ts';
 import {AuthoringError} from '../../errors.ts';
+import {relTypeSegment} from '../../rel-type.ts';
+import {openElements} from '../../xml/xml-read.ts';
+import {PKG_RELS_NS, RELATIONSHIPS_NS} from '../opc/namespaces.ts';
+import {relsPathFor, resolveRelativePart} from '../opc/part-paths.ts';
+import {parseRelationshipRecords} from '../opc/read-opc.ts';
 import {readXlsx} from './read.ts';
 import {type WriteOptions, writeXlsx} from './write.ts';
 
@@ -53,10 +58,13 @@ export function partsOf(pkg: Uint8Array): Record<string, string> {
  * that start from a `Workbook` rather than from bytes.
  *
  * Two test files declared this locally, byte-identical down to the comment, each shadowing the
- * imported `partsOf` it wrapped, which is the drift this module exists to stop.
+ * imported `partsOf` it wrapped, which is the drift this module exists to stop. The package is checked by
+ * {@link assertRelationshipsWired} on the way, so every test that writes through here checks the graph.
  */
 export function partsWritten(workbook: Workbook): Record<string, string> {
-  return partsOf(writeXlsx(workbook));
+  const pkg = writeXlsx(workbook);
+  assertRelationshipsWired(pkg);
+  return partsOf(pkg);
 }
 
 /** One named part's text. Fails the test, naming the part, when it is absent. */
@@ -143,10 +151,13 @@ export function sheetXml(pkg: Uint8Array): string {
  * Write a workbook and read it straight back: the round-trip under test.
  *
  * The helper existed and was imported by two files while ninety-eight call sites spelled it out.
- * That is worse than its being missing: the next author reads the ninety-eight and copies one.
+ * That is worse than its being missing: the next author reads the ninety-eight and copies one. The
+ * package is checked by {@link assertRelationshipsWired} before it is read back.
  */
 export function roundtrip(workbook: Workbook, options?: WriteOptions): Workbook {
-  return readXlsx(writeXlsx(workbook, options));
+  const pkg = writeXlsx(workbook, options);
+  assertRelationshipsWired(pkg);
+  return readXlsx(pkg);
 }
 
 /**
@@ -188,6 +199,84 @@ export function readPatched(parts: Record<string, string>): Workbook {
   const files = unzipSync(writeXlsx(sheeted()));
   for (const [name, xml] of Object.entries(parts)) files[name] = strToU8(xml);
   return readXlsx(zipSync(files));
+}
+
+// Relationship types a consumer finds by scanning the owner's `.rels` part for the type, so no element
+// of the owner cites their id. Named by the Type's last segment; anything else a package declares and
+// nothing cites is a relationship the writer recorded for a part it then forgot to reference.
+const FOUND_BY_TYPE: ReadonlySet<string> = new Set([
+  'officeDocument',
+  'core-properties',
+  'extended-properties',
+  'styles',
+  'theme',
+  'sharedStrings',
+  'person',
+  'comments',
+  'threadedComment',
+  'pivotTable',
+  'pivotCacheDefinition',
+  'vbaProject',
+  'chartStyle',
+  'chartColorStyle',
+]);
+
+// The attributes a part cites a relationship through: the relationships namespace's `id`, `embed`,
+// `link` and `pict`, and VML's `o:relid`.
+const CITING_ATTRIBUTES: readonly (readonly [namespace: string, local: string])[] = [
+  ...['id', 'embed', 'link', 'pict'].map((local) => [RELATIONSHIPS_NS, local] as const),
+  ['urn:schemas-microsoft-com:office:office', 'relid'],
+];
+
+/**
+ * Assert a package's relationship graph is wired both ways: every relationship id a part cites is
+ * declared in that part's `.rels`, every internal relationship targets a part the package holds, and
+ * every internal relationship is either cited or of a type a consumer finds by scanning for it.
+ *
+ * The writer used to list a sheet's relationships in one place, hand out their ids in another, and
+ * decide whether the `.rels` part existed in a third, so a part could cite an id nothing declared, or
+ * declare one nothing used, with every package-level test still green. This checks the result rather
+ * than any one of those places.
+ */
+export function assertRelationshipsWired(pkg: Uint8Array): void {
+  const files = filesOf(pkg);
+  const problems: string[] = [];
+  for (const path of Object.keys(files)) {
+    if (!/\.(xml|vml)$/i.test(path) || path === '[Content_Types].xml') continue;
+    const relsXml = optionalPartText(pkg, relsPathFor(path));
+    const declared = relsXml === undefined ? [] : parseRelationshipRecords(relsXml);
+    const ids = new Set(declared.map((rel) => rel.id));
+
+    const cited = new Set<string>();
+    for (const {attrs, scope} of openElements(partText(pkg, path))) {
+      for (const [namespace, local] of CITING_ATTRIBUTES) {
+        const id = scope.attr(attrs, namespace, local);
+        if (id !== undefined) cited.add(id);
+      }
+    }
+    for (const id of cited) {
+      if (!ids.has(id)) problems.push(`${path} cites ${id}, which its .rels does not declare`);
+    }
+    for (const rel of declared) {
+      if (rel.external) continue;
+      const target = resolveRelativePart(path, rel.target);
+      if (files[target] === undefined) {
+        problems.push(`${path} declares ${rel.id} to ${target}, which the package does not hold`);
+      }
+      if (!cited.has(rel.id) && !FOUND_BY_TYPE.has(relTypeSegment(rel.type))) {
+        problems.push(
+          `${path} declares ${rel.id} (${relTypeSegment(rel.type)}), which nothing cites`,
+        );
+      }
+    }
+  }
+  const rootRels = optionalPartText(pkg, relsPathFor(''));
+  for (const rel of rootRels === undefined ? [] : parseRelationshipRecords(rootRels)) {
+    if (!rel.external && files[resolveRelativePart('', rel.target)] === undefined) {
+      problems.push(`the package root declares ${rel.id} to ${rel.target}, which it does not hold`);
+    }
+  }
+  assert.deepEqual(problems, [], 'every relationship is declared, targets a part, and is used');
 }
 
 /** A one-sheet workbook with `A1` set: the least a workbook needs before the writer reaches anything. */
@@ -258,12 +347,11 @@ export function foreignSheet(rows: string): string {
   return `<?xml version="1.0"?><worksheet><sheetData>${rows}</sheetData></worksheet>`;
 }
 
-const RELATIONSHIPS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const OFFICE_RELATIONSHIP = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 
 /** A `.rels` part around {@link relationship} entries. */
 export function relationshipsPart(entries: string): string {
-  return `<?xml version="1.0"?><Relationships xmlns="${RELATIONSHIPS_NS}">${entries}</Relationships>`;
+  return `<?xml version="1.0"?><Relationships xmlns="${PKG_RELS_NS}">${entries}</Relationships>`;
 }
 
 /** One relationship whose type is an ECMA-376 one, named by its last segment (`drawing`, `image`). */

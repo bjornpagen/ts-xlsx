@@ -2,15 +2,15 @@
 //
 // Every generated part is named three times over, in three modules that never see each other's
 // output. `write.ts` emits it under its package-absolute path; `workbook-xml.ts` declares that path
-// again, slash-prefixed, as a `<Override PartName>` in `[Content_Types].xml`; and `worksheet-xml.ts`
-// or `write.ts` names it a third time as a relationship Target, spelled relative to whichever part
-// carries the relationship. A package where those three disagree is not malformed - it is
-// well-formed and wrong, which is the expensive kind: the schema validates, and Excel then reports a
-// part it cannot find, or silently drops the feature the relationship was reaching.
+// again, slash-prefixed, as a `<Override PartName>` in `[Content_Types].xml`; and the relationship
+// ledger in `package-plan.ts` names it a third time as a relationship Target, spelled relative to
+// whichever part carries the relationship. A package where those three disagree is not malformed - it
+// is well-formed and wrong, which is the expensive kind: the schema validates, and Excel then reports
+// a part it cannot find, or silently drops the feature the relationship was reaching.
 //
 // So the path is written once, here, and the other two forms are derived from it: the content-type
-// name by the slash, the relationship Target by the same {@link relativePartPath} the preserved
-// references already went through. Renumbering a part kind or moving a directory is then one edit.
+// name by the slash, the relationship Target by the same `relativePartPath` the preserved references
+// already went through. Renumbering a part kind or moving a directory is then one edit.
 //
 // SpreadsheetML-specific, and therefore here rather than in `io/opc/part-paths.ts`: those are the
 // rules of the container (an extension, a `_rels` location, the arithmetic between two paths), which
@@ -18,8 +18,6 @@
 // worksheets. The reader consults none of them, because it follows relationships instead of
 // predicting names, and that asymmetry is deliberate: a file Excel wrote may put its parts anywhere
 // OPC allows, so a reader that guessed would be wrong on real files.
-
-import {relativePartPath} from '../opc/part-paths.ts';
 
 /** The office document part: the workbook every other part hangs off. */
 export const WORKBOOK_PART = 'xl/workbook.xml';
@@ -86,18 +84,4 @@ export function pivotCacheDefinitionPart(number: number): string {
 /** `xl/pivotCache/pivotCacheRecords{n}.xml`: the cached rows the definition points at. */
 export function pivotCacheRecordsPart(number: number): string {
   return `xl/pivotCache/pivotCacheRecords${number}.xml`;
-}
-
-/**
- * A part named as a Target of a relationship carried by a *worksheet*. Every worksheet part lives in
- * `xl/worksheets/`, so one sheet's view of a target is every sheet's, and the sheet number the
- * arithmetic runs against does not matter.
- */
-export function targetFromWorksheet(partPath: string): string {
-  return relativePartPath(worksheetPart(1), partPath);
-}
-
-/** A part named as a Target of a relationship carried by the workbook part. */
-export function targetFromWorkbook(partPath: string): string {
-  return relativePartPath(WORKBOOK_PART, partPath);
 }

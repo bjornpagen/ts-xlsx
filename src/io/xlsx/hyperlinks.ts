@@ -18,7 +18,8 @@ import {type CollectingPass} from '../../xml/xml-read.ts';
 import {localName} from '../../xml/xml-scan.ts';
 import {escapeAttr, textAttr} from '../../xml/xml.ts';
 import {relAttr} from '../opc/namespaces.ts';
-import type {RelIdAllocator} from './package-plan.ts';
+import type {RelationshipLedger} from './package-plan.ts';
+import {REL} from './relationships.ts';
 
 /** A hyperlink gathered from a sheet for serialisation: the cell it sits on, its target, and an
  * optional tooltip. The visible label is the cell's own value and is serialised as that value.
@@ -36,12 +37,11 @@ export interface CollectedHyperlink {
 }
 
 /** A hyperlink resolved for serialisation. An external target carries a `relId` (the sheet
- * relationship holding the URL) plus that `target`; an internal target carries a `location` (the
- * in-workbook reference). Exactly one of `relId`/`location` is ever set. */
+ * relationship holding the URL); an internal target carries a `location` (the in-workbook
+ * reference). Exactly one of `relId`/`location` is ever set. */
 export interface HyperlinkPlan {
   readonly ref: string;
   readonly relId?: string;
-  readonly target?: string;
   readonly location?: string;
   readonly tooltip?: string;
 }
@@ -79,31 +79,12 @@ export function* liveCells(sheet: Worksheet): Generator<Cell, void, undefined> {
   for (const {cells} of sheet.rows()) yield* cells;
 }
 
-/** An external hyperlink: the two fields a `TargetMode="External"` relationship needs, both present. */
-export type ExternalHyperlinkPlan = HyperlinkPlan & {
-  readonly relId: string;
-  readonly target: string;
-};
-
-/**
- * Whether a planned hyperlink is the external kind, narrowing it so the relationship writer reads
- * `relId` and `target` as the strings they are.
- *
- * A predicate rather than a filter plus two casts: the filter already proved both fields present, and
- * a cast repeating that proof one line later is a claim the compiler cannot check against the filter
- * it is supposed to be echoing. `planHyperlinks` sets exactly one of `relId`/`location`, so testing
- * either field is testing the kind.
- */
-export function isExternalHyperlink(link: HyperlinkPlan): link is ExternalHyperlinkPlan {
-  return link.relId !== undefined && link.target !== undefined;
-}
-
-/** Split collected links into internal (location, no rel) and external (relationship) forms, drawing
- * each external link's relationship id from the sheet's allocator so external ids follow every other
- * sheet-local relationship in canonical order. An internal ('#'-prefixed) link consumes no id. */
+/** Split collected links into internal (location, no rel) and external (relationship) forms,
+ * recording each external link's URL in the sheet's ledger so its relationship follows every other
+ * sheet-local relationship in canonical order. An internal ('#'-prefixed) link records nothing. */
 export function planHyperlinks(
   links: readonly CollectedHyperlink[],
-  rels: RelIdAllocator,
+  rels: RelationshipLedger,
 ): HyperlinkPlan[] {
   return links.map((link) => {
     const tooltip = link.tooltip !== undefined ? {tooltip: link.tooltip} : {};
@@ -112,7 +93,7 @@ export function planHyperlinks(
     if (link.target.startsWith('#')) {
       return {ref: link.ref, location: link.target.slice(1), ...tooltip};
     }
-    return {ref: link.ref, relId: rels.next(), target: link.target, ...tooltip};
+    return {ref: link.ref, relId: rels.addExternal(REL.hyperlink, link.target), ...tooltip};
   });
 }
 

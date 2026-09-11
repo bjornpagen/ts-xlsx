@@ -24,54 +24,85 @@ import {
 } from './part-names.ts';
 import {applyThemeOverrides} from './theme-xml.ts';
 
-// A relationship-id allocator: hands out `rId1`, `rId2`, … in the one canonical order the package
-// wires the parts of whatever owns them. A sheet draws its tables, drawing, comments, threaded
-// comments, printer settings, external hyperlinks, background, preserved references and pivot tables
-// from one; the workbook part draws its sheets, styles, theme, shared strings, person registry,
-// preserved references and pivot caches from another.
-//
-// Every id is drawn in sequence, so no step re-derives its starting offset by summing the counts of
-// the steps before it: the arithmetic that, open-coded once per step with subtly different prefixes,
-// could silently hand two parts the same id and corrupt the package. Monotonic by construction, so
-// collisions cannot arise however the steps grow. One fresh allocator per owner; ids are scoped to it.
-export class RelIdAllocator {
-  #next = 1;
-  /** The next relationship id (`rId1`, `rId2`, …), advancing the counter. */
-  next(): string {
-    return `rId${this.#next++}`;
+/** One relationship a generated `.rels` part declares, its target already relative to the owner. */
+export interface PlannedRelationship {
+  readonly id: string;
+  readonly type: string;
+  readonly target: string;
+  readonly external?: boolean;
+}
+
+/**
+ * The relationships one part owns, recorded as their ids are handed out.
+ *
+ * An id and the relationship it names are one fact, so they are written down in one call. When the
+ * ids came from a counter and the `.rels` part was listed somewhere else, a sheet's set was spelled
+ * three times: once where ids were drawn, once in the rels renderer in another order, and once more in
+ * a nine-way condition deciding whether the rels part existed at all. A tenth kind of part needed all
+ * three edits, and missing the last dropped the `.rels` part while the sheet XML still cited the id.
+ * Now the ledger is the rels part, and a part with an empty ledger has none.
+ *
+ * Ids run `rId1`, `rId2`, … in the order parts are added, so no id is derived by summing the ones
+ * before it, and the `.rels` part lists them in that same order. One ledger per owning part; ids are
+ * scoped to it.
+ */
+export class RelationshipLedger {
+  readonly #owner: string;
+  readonly #relationships: PlannedRelationship[] = [];
+
+  /** @param owner the package path of the part whose `.rels` this is, `''` for the package root. */
+  constructor(owner: string) {
+    this.#owner = owner;
+  }
+
+  /** Record a relationship to a package part, named by its package path, and return its id. */
+  add(type: string, partPath: string): string {
+    return this.#record({type, target: relativePartPath(this.#owner, partPath)});
+  }
+
+  /** Record a relationship to a target outside the package (a hyperlink's URL) and return its id. */
+  addExternal(type: string, url: string): string {
+    return this.#record({type, target: url, external: true});
+  }
+
+  /** Every relationship recorded, in id order. */
+  get relationships(): readonly PlannedRelationship[] {
+    return this.#relationships;
+  }
+
+  #record(relationship: Omit<PlannedRelationship, 'id'>): string {
+    const id = `rId${this.#relationships.length + 1}`;
+    this.#relationships.push({id, ...relationship});
+    return id;
   }
 }
 
 // A pivot table planned for emission: its global part number, the workbook-unique `cacheId` its
-// `<pivotCaches>` registration and `pivotTableDefinition` agree on, the sheet-local relationship
-// linking its host sheet to the pivot-table part, and the workbook relationship reaching its cache
-// definition (assigned once the modeled workbook rels are counted).
+// `<pivotCaches>` registration and `pivotTableDefinition` agree on, and the workbook relationship
+// reaching its cache definition (assigned once the modeled workbook rels are recorded).
 export interface PivotPlan {
   readonly number: number;
   readonly cacheId: string;
   readonly table: PivotTable;
-  readonly sheetRelId: string;
   workbookRelId: string;
 }
 
 // A sheet's comments (its cells' notes and one legacy fallback per threaded conversation) paired with
-// the part number and sheet-local relationship ids that link the sheet to its comments part (by type)
-// and its VML drawing (by the `<legacyDrawing>` element).
+// the part number and the sheet-local relationship id its `<legacyDrawing>` element cites for the VML
+// drawing. The comments part itself is found by relationship type, so nothing cites its id.
 export interface CommentPlan {
   readonly number: number;
   readonly comments: readonly CommentCell[];
   readonly vmlRelId: string;
-  readonly commentsRelId: string;
 }
 
 // A sheet's threaded conversations paired with the part number naming its
-// `threadedComments/threadedComment{n}.xml` and the sheet-local relationship id reaching it. No worksheet
-// element points at that part. Excel discovers it by scanning the sheet's relationships, the way it
-// finds a pivot table, so the relationship is the whole of the wiring.
+// `threadedComments/threadedComment{n}.xml`. No worksheet element points at that part. Excel discovers
+// it by scanning the sheet's relationships, the way it finds a pivot table, so the relationship the
+// sheet's ledger records is the whole of the wiring.
 export interface ThreadedCommentPlan {
   readonly number: number;
   readonly threads: readonly CommentThread[];
-  readonly relId: string;
 }
 
 // A sheet's opaque printer-settings blob paired with the part number naming its `.bin` part and the
@@ -91,11 +122,9 @@ export interface TablePlan {
 }
 
 // A sheet background image resolved for serialisation: the sheet-local relationship id its
-// `<picture>` element references, and the media part (global number + extension) that holds the bytes.
+// `<picture>` element references. The relationship to the media part is in the sheet's ledger.
 export interface BackgroundPlan {
   readonly relId: string;
-  readonly mediaNumber: number;
-  readonly extension: string;
 }
 
 // A verbatim-preserved package part resolved for serialisation: the collision-proof path it is
@@ -112,10 +141,9 @@ export interface PreservedPartPlan {
 // A preserved worksheet reference resolved for serialisation, short of its sheet-local relationship
 // id: the worksheet element that wires it (`undefined` for a pivot-table/slicer reference the sheet
 // carries by relationship alone), the relationship Type, and the new path of the entry part it
-// targets. The id is assigned by the caller from the sheet's {@link RelIdAllocator} allocator, at the
-// reference's canonical position in the sheet-local id sequence (after tables/drawing/comments/
-// threaded-comments/printer-settings/external-hyperlinks/background) so a preserved reference never
-// renumbers an id already threaded into the sheet XML.
+// targets. The id is recorded by the caller in the sheet's {@link RelationshipLedger}, after the
+// sheet's generated parts, so a preserved reference never renumbers an id already threaded into the
+// sheet XML.
 export interface ResolvedPreservedReference {
   readonly element: 'drawing' | 'legacyDrawingHF' | undefined;
   readonly relType: string;
@@ -129,8 +157,8 @@ export interface PreservedReferencePlan extends ResolvedPreservedReference {
 
 // A preserved workbook reference resolved for serialisation: its relationship Type, the new path of
 // the entry part, and, for a pivot cache, the `cacheId` its `<pivotCaches>` registration carries.
-// The workbook relationship id is assigned at emit time (it follows the modeled workbook rels, whose
-// count depends on whether a shared-strings part is emitted), so it is not fixed here.
+// The workbook relationship id is recorded at emit time (it follows the modeled workbook rels, whose
+// number depends on whether a shared-strings part is emitted), so it is not fixed here.
 export interface PreservedWorkbookReferencePlan {
   readonly relType: string;
   readonly entryPath: string;
@@ -139,8 +167,8 @@ export interface PreservedWorkbookReferencePlan {
 }
 
 // A preserved package-root reference resolved for serialisation: its relationship Type and the new
-// path of the entry part it targets. The root-rels relationship id is assigned at emit time, following
-// the fixed root relationships (the office document and the core/app properties).
+// path of the entry part it targets. Its root relationship is recorded at emit time, after the fixed
+// root relationships (the office document and the core/app properties).
 export interface PreservedRootReferencePlan {
   readonly relType: string;
   readonly entryPath: string;
@@ -164,18 +192,13 @@ export interface PreservedPlan {
 }
 
 // A sheet's drawing part: its workbook-global number, the sheet-local relationship id linking the
-// sheet's `<drawing>` element to it, and the images it lays out.
+// sheet's `<drawing>` element to it, the images it lays out, and the drawing's own relationships, one
+// per image, which each image's `r:embed` cites.
 export interface DrawingPlan {
   readonly number: number;
   readonly relId: string;
-  readonly images: readonly ImagePlan[];
-}
-
-// An anchored image resolved for serialisation: its anchor and drawing-local embed id (via
-// DrawingImage) plus the media part number and extension its embed relationship targets.
-export interface ImagePlan extends DrawingImage {
-  readonly mediaNumber: number;
-  readonly extension: string;
+  readonly images: readonly DrawingImage[];
+  readonly relationships: readonly PlannedRelationship[];
 }
 
 // One picture written to `xl/media/`: its global part number, extension, and bytes.
@@ -280,8 +303,8 @@ export function planMedia(workbook: Workbook, sheets: readonly Worksheet[]): Med
 // reference's captured part closure is re-numbered onto collision-proof `preservedP{n}` paths, so
 // preserved content never clobbers a generated drawing/VML/media part, with the closure's internal
 // relationships rewritten to the new sibling paths. Part numbering is the only cross-sheet concern
-// here; each reference's sheet-local relationship id is assigned by the caller from the sheet's
-// {@link RelIdAllocator} allocator, so this function stays free of the sheet-local id arithmetic.
+// here; each reference's sheet-local relationship is recorded by the caller in the sheet's
+// {@link RelationshipLedger}, so this function stays free of sheet-local ids.
 export function planPreservedParts(
   workbook: Workbook,
   generatedDrawingCount: number,
@@ -460,10 +483,12 @@ function isNumberedPart(path: string, prefix: string): boolean {
   return path.startsWith(prefix) && /^\d+\.xml$/.test(path.slice(prefix.length));
 }
 
-// One worksheet's planned package parts and the sheet-local relationship ids wiring them, produced in
+// One worksheet's planned package parts and the sheet-local relationships wiring them, produced in
 // the single planning pass. Held as a struct per sheet rather than eight index-aligned arrays, so a
 // downstream step reads one sheet's plan as a unit and cannot transpose two sheets by mis-indexing.
 export interface SheetPlan {
+  /** Every relationship the sheet's `.rels` part declares, in id order; empty when it needs none. */
+  readonly relationships: readonly PlannedRelationship[];
   readonly tables: TablePlan[];
   readonly drawing: DrawingPlan | null;
   readonly comments: CommentPlan | null;

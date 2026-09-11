@@ -1,7 +1,8 @@
 // Anchored images on the wire: the `xl/drawings/drawing{n}.xml` part (a DrawingML two-cell anchor
-// per image), the drawing's own relationships to the `xl/media/` bytes, and the reader that turns a
-// drawing back into anchors. The image bytes themselves are opaque here: the writer copies them
-// verbatim into a media part and the reader hands them back untouched.
+// per image) and the reader that turns a drawing back into anchors. The drawing's relationships to
+// the `xl/media/` bytes are recorded by the writer as it plans each image's embed id. The image bytes
+// themselves are opaque here: the writer copies them verbatim into a media part and the reader hands
+// them back untouched.
 
 import {
   type AnchorPoint,
@@ -16,10 +17,7 @@ import {parseXml, TextCapture} from '../../xml/xml-read.ts';
 import {localName} from '../../xml/xml-scan.ts';
 import {checkedToken, numAttr, numberText, XML_DECLARATION} from '../../xml/xml.ts';
 import {relAttr, RELATIONSHIPS_NS} from '../opc/namespaces.ts';
-import {relationship, relationshipsPart} from '../opc/rels.ts';
 import {DRAWINGML_NS, XDR_NS} from './namespaces.ts';
-
-const IMAGE_REL_TYPE = `${RELATIONSHIPS_NS}/image`;
 
 // The content type Excel expects for each image kind, keyed by lower-case extension. An unlisted
 // extension falls back to `image/<ext>`, which is what a well-behaved consumer infers anyway.
@@ -141,14 +139,6 @@ function anchorPointXml(point: AnchorPoint): string {
     `<xdr:colOff>${numberText(point.colOff ?? 0)}</xdr:colOff>` +
     `<xdr:row>${numberText(point.row)}</xdr:row>` +
     `<xdr:rowOff>${numberText(point.rowOff ?? 0)}</xdr:rowOff>`
-  );
-}
-
-/** The drawing's `_rels/drawing{n}.xml.rels`: one image relationship per anchor, in `embedId` order
- * (`rId1`, `rId2`, …), each pointing at the media part the anchor shows. */
-export function drawingRelsXml(mediaTargets: readonly string[]): string {
-  return relationshipsPart(
-    mediaTargets.map((target, i) => relationship(`rId${i + 1}`, IMAGE_REL_TYPE, target)),
   );
 }
 

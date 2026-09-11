@@ -32,11 +32,11 @@ const METRIC_CAPTIONS: Record<PivotMetric, string> = {
   varp: 'Varp',
 };
 
-/** The `pivotCacheDefinition` part: the source reference and the field catalogue. `r:id="rId1"`
- * names the cache-records part through this cache's own rels part. `refreshOnLoad="1"` tells Excel to
- * rebuild the pivot body from the cache on open, so the layout stays correct without us computing it
- * to the pixel. `recordCount` is the number of source data rows. */
-export function pivotCacheDefinitionXml(table: PivotTable): string {
+/** The `pivotCacheDefinition` part: the source reference and the field catalogue. `recordsRelId` is
+ * the id this cache's own rels part gives the cache-records part, which `r:id` cites.
+ * `refreshOnLoad="1"` tells Excel to rebuild the pivot body from the cache on open, so the layout stays
+ * correct without us computing it to the pixel. `recordCount` is the number of source data rows. */
+export function pivotCacheDefinitionXml(table: PivotTable, recordsRelId: string): string {
   const fields = table.cacheFields
     .map((field) => {
       const shared = field.sharedItems;
@@ -63,7 +63,7 @@ export function pivotCacheDefinitionXml(table: PivotTable): string {
     .join('');
   return (
     XML_DECLARATION +
-    `<pivotCacheDefinition xmlns="${SPREADSHEETML_NS}" xmlns:r="${RELATIONSHIPS_NS}" r:id="rId1" refreshOnLoad="1" ` +
+    `<pivotCacheDefinition xmlns="${SPREADSHEETML_NS}" xmlns:r="${RELATIONSHIPS_NS}" r:id="${escapeAttr(recordsRelId)}" refreshOnLoad="1" ` +
     `refreshedBy="ts-xlsx" createdVersion="8" refreshedVersion="8" minRefreshableVersion="3" ` +
     `recordCount="${table.records.length}">` +
     `<cacheSource type="worksheet">` +

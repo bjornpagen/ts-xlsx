@@ -22,7 +22,10 @@ function renderedPivot(
     });
   });
   const pivot = new PivotTable({source: src, ...options});
-  return {table: pivotTableXml(pivot, name, cacheId), cache: pivotCacheDefinitionXml(pivot)};
+  return {
+    table: pivotTableXml(pivot, name, cacheId),
+    cache: pivotCacheDefinitionXml(pivot, 'rId1'),
+  };
 }
 
 function encode(col: number, row: number): string {

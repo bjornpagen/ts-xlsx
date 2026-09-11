@@ -20,28 +20,29 @@ import type {Workbook} from '../../core/workbook.ts';
 import {refuseImagesBesideKeptDrawing, type Worksheet} from '../../core/worksheet.ts';
 import {AuthoringError, InternalError, quoted} from '../../errors.ts';
 import {isRelType} from '../../rel-type.ts';
-import {relativePartPath, relsPathFor, THEME_PART_PATH} from '../opc/part-paths.ts';
+import {relsPathFor, THEME_PART_PATH} from '../opc/part-paths.ts';
 import {relsPartXml} from '../opc/rels.ts';
 import {FIXED_ENTRY_MTIME} from '../opc/zip-mtime.ts';
 import {collectComments, commentsXml, vmlDrawingXml} from './comments.ts';
 import {collectHyperlinks, liveCells, planHyperlinks} from './hyperlinks.ts';
-import {drawingRelsXml, drawingXml} from './images.ts';
+import {drawingXml} from './images.ts';
 import {
   type BackgroundPlan,
   type CommentPlan,
   type DrawingPlan,
-  type ImagePlan,
   type MediaPlan,
   type PivotPlan,
+  type PlannedRelationship,
   type PreservedPartPlan,
   type PreservedPlan,
   type PreservedReferencePlan,
+  type PreservedRootReferencePlan,
   type SheetPlan,
   type PreservedWorkbookReferencePlan,
   type PrinterSettingsPlan,
   planMedia,
   planPreservedParts,
-  RelIdAllocator,
+  RelationshipLedger,
   type TablePlan,
   type ThreadedCommentPlan,
 } from './package-plan.ts';
@@ -76,12 +77,10 @@ import {
   appPropsXml,
   contentTypesXml,
   corePropsXml,
-  rootRelsXml,
   type WorkbookRelPlan,
-  workbookRelsXml,
   workbookXml,
 } from './workbook-xml.ts';
-import {type SheetReferences, worksheetRelsXml, worksheetXml} from './worksheet-xml.ts';
+import {type SheetReferences, worksheetXml} from './worksheet-xml.ts';
 
 /** Options controlling how {@link writeXlsx} serialises a workbook. */
 export interface WriteOptions {
@@ -211,15 +210,15 @@ interface PartNumbering {
 }
 
 /**
- * Plan one sheet's parts, drawing every sheet-local relationship id from that sheet's own allocator
- * in the one canonical order the package wires them: tables, drawing, comments (VML + comments part),
- * threaded comments, printer settings, external hyperlinks, background, preserved references, pivot
- * tables.
+ * Plan one sheet's parts, recording every sheet-local relationship in that sheet's own ledger as its
+ * id is taken, in the one canonical order the package wires them: tables, drawing, comments (VML +
+ * comments part), threaded comments, printer settings, external hyperlinks, background, preserved
+ * references, pivot tables.
  *
- * That order is the correctness story. One running allocator per sheet is what keeps the ids gapless
- * and collision-free, because no step re-derives its offset by summing the ones before it, so none
- * can drift into another's id. A step moved above another here silently renumbers a package, and
- * nothing but the corpus would say so.
+ * That order decides the ids, and the ledger is what keeps them gapless and collision-free: no step
+ * re-derives its offset by summing the ones before it. A step moved above another here renumbers a
+ * package, which the determinism tests and the corpus would notice, but no longer breaks one, because
+ * the `.rels` part is the ledger rather than a second listing that has to agree with it.
  */
 function planSheet(context: {
   readonly sheet: Worksheet;
@@ -231,31 +230,36 @@ function planSheet(context: {
   readonly flushed?: FlushedSheet | undefined;
 }): SheetPlan {
   const {sheet, index, media, preserved, numbering, flushed} = context;
-  const rels = new RelIdAllocator();
+  const rels = new RelationshipLedger(worksheetPart(index + 1));
 
-  const tables: TablePlan[] = sheet.tables.map((table) => ({
-    table,
-    number: ++numbering.table,
-    relId: rels.next(),
-  }));
+  const tables: TablePlan[] = sheet.tables.map((table) => {
+    const number = ++numbering.table;
+    return {table, number, relId: rels.add(REL.table, tablePart(number))};
+  });
 
   let drawing: DrawingPlan | null = null;
   if (sheet.images.length > 0) {
     // The authoring doors refuse this already; every write path comes through here, so this is the
     // guarantee that a kept drawing is never left unreferenced by a planned one.
     refuseImagesBesideKeptDrawing(sheet);
-    const images: ImagePlan[] = sheet.images.map((image, j) => {
-      const {number, image: registered} = media.resolve(image.imageId);
+    const number = ++numbering.drawing;
+    const path = drawingPart(number);
+    // An image's embed relationship belongs to the drawing part, so it is recorded in the drawing's
+    // own ledger rather than the sheet's.
+    const drawingRels = new RelationshipLedger(path);
+    const images = sheet.images.map((image) => {
+      const {number: mediaNumber, image: registered} = media.resolve(image.imageId);
       return {
         anchor: image.anchor,
-        // The embed id is local to the drawing part's own rels, not the sheet's, so it is numbered
-        // per image from rId1 rather than drawn from the sheet allocator.
-        embedId: `rId${j + 1}`,
-        mediaNumber: number,
-        extension: registered.extension,
+        embedId: drawingRels.add(REL.image, mediaPart(mediaNumber, registered.extension)),
       };
     });
-    drawing = {number: ++numbering.drawing, relId: rels.next(), images};
+    drawing = {
+      number,
+      relId: rels.add(REL.drawing, path),
+      images,
+      relationships: drawingRels.relationships,
+    };
   }
 
   // A conversation and the legacy fallback `<comment>` that binds its cell to it are two halves of one
@@ -266,21 +270,27 @@ function planSheet(context: {
   // nothing to say, and no head id for its replies or its fallback to hang off.
   const threads = sheet.commentThreads.filter((thread) => thread.comments.length > 0);
   const sheetComments = collectComments(liveCells(sheet), threads, flushed?.notes ?? []);
-  const comments: CommentPlan | null =
-    sheetComments.length === 0
-      ? null
-      : {
-          number: index + 1,
-          comments: sheetComments,
-          vmlRelId: rels.next(),
-          commentsRelId: rels.next(),
-        };
-  const threadedComments: ThreadedCommentPlan | null =
-    threads.length === 0 ? null : {number: index + 1, threads, relId: rels.next()};
+  let comments: CommentPlan | null = null;
+  if (sheetComments.length > 0) {
+    const vmlRelId = rels.add(REL.vmlDrawing, vmlDrawingPart(index + 1));
+    rels.add(REL.comments, commentsPart(index + 1));
+    comments = {number: index + 1, comments: sheetComments, vmlRelId};
+  }
+  let threadedComments: ThreadedCommentPlan | null = null;
+  if (threads.length > 0) {
+    rels.add(REL.threadedComment, threadedCommentsPart(index + 1));
+    threadedComments = {number: index + 1, threads};
+  }
 
   const printerData = sheet.pageSetup.printerSettings;
   const printerSettings: PrinterSettingsPlan | null =
-    printerData === undefined ? null : {number: index + 1, data: printerData, relId: rels.next()};
+    printerData === undefined
+      ? null
+      : {
+          number: index + 1,
+          data: printerData,
+          relId: rels.add(REL.printerSettings, printerSettingsPart(index + 1)),
+        };
 
   // The live rows plus whatever the streaming writer already flushed and evicted, merged back into
   // the row-major order Excel writes them in: a committed row's cells are gone from the model, so the
@@ -295,21 +305,24 @@ function planSheet(context: {
   let background: BackgroundPlan | null = null;
   if (sheet.backgroundImageId !== undefined) {
     const {number, image} = media.resolve(sheet.backgroundImageId);
-    background = {relId: rels.next(), mediaNumber: number, extension: image.extension};
+    background = {relId: rels.add(REL.image, mediaPart(number, image.extension))};
   }
 
   const preservedRefs: PreservedReferencePlan[] = (preserved.perSheet[index] ?? []).map(
-    (reference) => ({...reference, relId: rels.next()}),
+    (reference) => ({...reference, relId: rels.add(reference.relType, reference.entryPath)}),
   );
 
   const pivots: PivotPlan[] = sheet.pivotTables.map((table) => {
     const number = ++numbering.pivot;
-    // Each pivot is numbered globally (its parts and its `cacheId` must be workbook-unique); the
-    // workbook relationship reaching its cache is assigned once the modeled workbook rels are known.
-    return {number, cacheId: String(number), table, sheetRelId: rels.next(), workbookRelId: ''};
+    // A pivot table is found by relationship type, so nothing in the sheet body cites this id. Each
+    // pivot is numbered globally (its parts and its `cacheId` must be workbook-unique); the workbook
+    // relationship reaching its cache is recorded once the modeled workbook rels are.
+    rels.add(REL.pivotTable, pivotTablePart(number));
+    return {number, cacheId: String(number), table, workbookRelId: ''};
   });
 
   return {
+    relationships: rels.relationships,
     tables,
     drawing,
     comments,
@@ -361,8 +374,8 @@ function resolveSheetReferences(plan: SheetPlan): SheetReferences {
 }
 
 /**
- * Draw every workbook-level relationship id, once, in the one canonical order the workbook part wires
- * them, and return the ids the two consumers need.
+ * Record every workbook-level relationship, once, in the one canonical order the workbook part wires
+ * them, and return the ids the workbook body cites along with the relationships its `.rels` declares.
  *
  * The order is the whole of it. The modeled rels come first (one per sheet, then the fixed
  * styles/theme pair, then shared strings when emitted), because they are the ones an existing package
@@ -370,20 +383,10 @@ function resolveSheetReferences(plan: SheetPlan): SheetReferences {
  * The threaded-comment person registry follows, then the preserved workbook references, then the
  * generated pivot caches.
  *
- * This used to be two arithmetics in two files: here, a modeled count summed from the sheet count, a
- * fixed constant and whether shared strings exist; and in `workbookRelsXml`, the styles, theme and
- * shared-strings ids re-derived from the same inputs. Two files had to agree on one sequence with only
- * the fixed part shared through a constant, which is the shape `RelIdAllocator` was introduced to remove
- * at the sheet level: ids are drawn in sequence and never recomputed by arithmetic, so no step
- * re-derives its offset by summing the ones before it and a drift cannot put two parts on one id.
- * `workbookRelsXml` now *receives* this list rather than rebuilding half of it.
- *
- * A pivot's id is written back onto the shared {@link PivotPlan} rather than returned, because two
- * separate parts have to agree on it: the workbook body's `<pivotCaches>` registration and the rels
- * part. Wiring both from one assignment is what makes disagreeing impossible; returning it would put
- * the burden back on two call sites to use the same value.
+ * A pivot's id is written back onto the shared {@link PivotPlan} rather than returned, because the
+ * workbook body's `<pivotCaches>` registration reads it from there, beside the pivot's `cacheId`.
  */
-function assignWorkbookRelIds(context: {
+function planWorkbookRelationships(context: {
   readonly sheetCount: number;
   readonly hasSharedStrings: boolean;
   readonly hasPersons: boolean;
@@ -391,22 +394,42 @@ function assignWorkbookRelIds(context: {
   readonly pivots: readonly PivotPlan[];
 }): WorkbookRelPlan {
   const {sheetCount, hasSharedStrings, hasPersons, preservedWorkbook, pivots} = context;
-  const ids = new RelIdAllocator();
-  const sheetRelIds = Array.from({length: sheetCount}, () => ids.next());
-  const stylesRelId = ids.next();
-  const themeRelId = ids.next();
-  const sharedStringsRelId = hasSharedStrings ? ids.next() : null;
-  const personsRelId = hasPersons ? ids.next() : null;
-  const preservedWorkbookRels = preservedWorkbook.map((ref) => ({...ref, relId: ids.next()}));
-  for (const pivot of pivots) pivot.workbookRelId = ids.next();
-  return {
-    sheetRelIds,
-    stylesRelId,
-    themeRelId,
-    sharedStringsRelId,
-    personsRelId,
-    preservedWorkbookRels,
-  };
+  const rels = new RelationshipLedger(WORKBOOK_PART);
+  const sheetRelIds = Array.from({length: sheetCount}, (_, i) =>
+    rels.add(REL.worksheet, worksheetPart(i + 1)),
+  );
+  rels.add(REL.styles, STYLES_PART);
+  rels.add(REL.theme, THEME_PART_PATH);
+  if (hasSharedStrings) rels.add(REL.sharedStrings, SHARED_STRINGS_PART);
+  // The threaded-comment identity registry every conversation on every sheet resolves its authors and
+  // @mentions through. Workbook-level and singular, so this one relationship serves all the sheets.
+  if (hasPersons) rels.add(REL.person, PERSONS_PART);
+  const preservedWorkbookRels = preservedWorkbook.map((ref) => ({
+    ...ref,
+    relId: rels.add(ref.relType, ref.entryPath),
+  }));
+  for (const pivot of pivots) {
+    pivot.workbookRelId = rels.add(
+      REL.pivotCacheDefinition,
+      pivotCacheDefinitionPart(pivot.number),
+    );
+  }
+  return {sheetRelIds, preservedWorkbookRels, relationships: rels.relationships};
+}
+
+// The package root's relationships: the three the writer regenerates from the model (the office
+// document and the core/app properties), then any preserved root reference (a customUI ribbon part,
+// custom properties, a thumbnail) after them, so a round trip keeps content wired from `_rels/.rels`
+// that the model does not otherwise emit.
+function planRootRelationships(
+  rootRefs: readonly PreservedRootReferencePlan[],
+): readonly PlannedRelationship[] {
+  const rels = new RelationshipLedger('');
+  rels.add(REL.officeDocument, WORKBOOK_PART);
+  rels.add(REL.coreProps, CORE_PROPS_PART);
+  rels.add(REL.extProps, APP_PROPS_PART);
+  for (const ref of rootRefs) rels.add(ref.relType, ref.entryPath);
+  return rels.relationships;
 }
 
 // Everything about a package that is resolved before any of its bytes exist: the media every sheet
@@ -534,7 +557,7 @@ function emitPackageParts(context: {
   // to dead weight, and it is the messages, not the registry, that make an identity worth carrying.
   const persons = threadedCommentNumbers.length === 0 ? [] : workbook.persons;
 
-  const workbookRels = assignWorkbookRelIds({
+  const workbookRels = planWorkbookRelationships({
     sheetCount: sheets.length,
     hasSharedStrings,
     hasPersons: persons.length > 0,
@@ -563,11 +586,11 @@ function emitPackageParts(context: {
       }),
     ),
   );
-  files.add('_rels/.rels', strToU8(rootRelsXml(preserved.root)));
+  files.add(relsPathFor(''), strToU8(relsPartXml(planRootRelationships(preserved.root))));
   files.add(CORE_PROPS_PART, strToU8(corePropsXml(workbook.properties)));
   files.add(APP_PROPS_PART, strToU8(appPropsXml(workbook.properties)));
   files.add(WORKBOOK_PART, strToU8(workbookXml(workbook, workbookRels, allPivots)));
-  files.add(relsPathFor(WORKBOOK_PART), strToU8(workbookRelsXml(workbookRels, allPivots)));
+  files.add(relsPathFor(WORKBOOK_PART), strToU8(relsPartXml(workbookRels.relationships)));
   files.add(STYLES_PART, strToU8(styles.toXml()));
   // A theme read from a source package is emitted through the preserved-part path, closure and all,
   // with any authored overrides already spliced into its entry part by the planner. A workbook without
@@ -698,31 +721,10 @@ function emitSheetParts(
   sheetXml: readonly string[],
 ): void {
   perSheet.forEach((plan, i) => {
-    const {
-      tables,
-      drawing,
-      comments,
-      threadedComments,
-      printerSettings,
-      background,
-      hyperlinks,
-      preservedRefs,
-      pivots,
-    } = plan;
-    const hasExternalHyperlink = hyperlinks.some((link) => link.relId !== undefined);
+    const {relationships, drawing, comments, threadedComments, printerSettings} = plan;
     files.add(worksheetPart(i + 1), strToU8(sheetXml[i] as string));
-    if (
-      tables.length > 0 ||
-      drawing !== null ||
-      comments !== null ||
-      threadedComments !== null ||
-      printerSettings !== null ||
-      background !== null ||
-      hasExternalHyperlink ||
-      preservedRefs.length > 0 ||
-      pivots.length > 0
-    ) {
-      files.add(relsPathFor(worksheetPart(i + 1)), strToU8(worksheetRelsXml(plan)));
+    if (relationships.length > 0) {
+      files.add(relsPathFor(worksheetPart(i + 1)), strToU8(relsPartXml(relationships)));
     }
     if (printerSettings !== null) {
       files.add(printerSettingsPart(printerSettings.number), printerSettings.data);
@@ -730,10 +732,7 @@ function emitSheetParts(
     if (drawing !== null) {
       const drawingPath = drawingPart(drawing.number);
       files.add(drawingPath, strToU8(drawingXml(drawing.images)));
-      const targets = drawing.images.map((image) =>
-        relativePartPath(drawingPath, mediaPart(image.mediaNumber, image.extension)),
-      );
-      files.add(relsPathFor(drawingPath), strToU8(drawingRelsXml(targets)));
+      files.add(relsPathFor(drawingPath), strToU8(relsPartXml(drawing.relationships)));
     }
     if (comments !== null) {
       files.add(commentsPart(comments.number), strToU8(commentsXml(comments.comments)));
@@ -749,33 +748,28 @@ function emitSheetParts(
 }
 
 // Emit every pivot table's three chained parts. A pivot spans a pivot-table part (linked from its host
-// sheet) that references a cache definition, which references its cache records. Each cache carries a
-// rels part naming the next link by `rId1`: the id the definition/table XML resolves against.
+// sheet) that reaches its cache definition by relationship type, and a cache definition whose `r:id`
+// cites the relationship to its cache records. Each link is recorded in its owner's ledger, and the
+// definition is rendered with the id its ledger handed out rather than one both sides assume.
 function emitPivotParts(files: PackageFiles, allPivots: readonly PivotPlan[]): void {
   for (const pivot of allPivots) {
     const {number, cacheId, table} = pivot;
     const tablePath = pivotTablePart(number);
     const definitionPath = pivotCacheDefinitionPart(number);
-    files.add(tablePath, strToU8(pivotTableXml(table, `PivotTable${number}`, cacheId)));
-    addSingleRelPart(files, tablePath, REL.pivotCacheDefinition, definitionPath);
-    files.add(definitionPath, strToU8(pivotCacheDefinitionXml(table)));
-    addSingleRelPart(files, definitionPath, REL.pivotCacheRecords, pivotCacheRecordsPart(number));
-    files.add(pivotCacheRecordsPart(number), strToU8(pivotCacheRecordsXml(table)));
-  }
-}
+    const recordsPath = pivotCacheRecordsPart(number);
 
-// Give `from` a `.rels` part declaring exactly one relationship, at `rId1`, to `to`.
-//
-// `rId1` is not a convention this picks: the referring XML names the id it resolves against, and for a
-// part whose whole rels file is one link that id is `rId1` on both sides. Written out, each of these
-// was eleven lines in which the only moving parts were the type and the two paths, and the target has
-// to be made relative to the *referrer* rather than to the package root, which is the half a
-// hand-written copy gets wrong.
-function addSingleRelPart(files: PackageFiles, from: string, type: string, to: string): void {
-  files.add(
-    relsPathFor(from),
-    strToU8(relsPartXml([{id: 'rId1', type, target: relativePartPath(from, to)}])),
-  );
+    const tableRels = new RelationshipLedger(tablePath);
+    tableRels.add(REL.pivotCacheDefinition, definitionPath);
+    files.add(tablePath, strToU8(pivotTableXml(table, `PivotTable${number}`, cacheId)));
+    files.add(relsPathFor(tablePath), strToU8(relsPartXml(tableRels.relationships)));
+
+    const definitionRels = new RelationshipLedger(definitionPath);
+    const recordsRelId = definitionRels.add(REL.pivotCacheRecords, recordsPath);
+    files.add(definitionPath, strToU8(pivotCacheDefinitionXml(table, recordsRelId)));
+    files.add(relsPathFor(definitionPath), strToU8(relsPartXml(definitionRels.relationships)));
+
+    files.add(recordsPath, strToU8(pivotCacheRecordsXml(table)));
+  }
 }
 
 // Emit the verbatim-preserved parts (and their rewired rels) last: their paths are collision-proof, so
