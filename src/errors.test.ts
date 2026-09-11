@@ -7,6 +7,7 @@ import type {Worksheet} from './core/worksheet.ts';
 import {CustomUiParseError} from './customui/errors.ts';
 import {parseCustomUi} from './customui/ribbon.ts';
 import {AuthoringError, InternalError, quoted, XlsxError, type XlsxErrorCode} from './errors.ts';
+import {CsvParseError} from './io/csv/errors.ts';
 import {PackageReadError, UnsupportedFormatError} from './io/opc/errors.ts';
 import {XlsbParseError} from './io/xlsb/errors.ts';
 import {XlsxParseError} from './io/xlsx/errors.ts';
@@ -30,6 +31,7 @@ const TAXONOMY: ReadonlyArray<
   [XmlParseError, 'malformed-input'],
   [XlsxParseError, 'malformed-input'],
   [XlsbParseError, 'malformed-input'],
+  [CsvParseError, 'malformed-input'],
   [VbaParseError, 'malformed-input'],
   [CustomUiParseError, 'malformed-input'],
   [PackageReadError, 'malformed-input'],

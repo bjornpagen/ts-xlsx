@@ -5,7 +5,8 @@
 // "1-3" (an inventory code), or "3-4" (a range label) are text and must stay text:
 // coercing them corrupts the data and can crash downstream code. Genuinely numeric fields
 // should still become numbers, and genuine ISO dates should still become dates. The reader
-// must coerce conservatively: only clear numbers and strictly-formatted dates convert.
+// must coerce conservatively: only clear numbers and strictly-formatted dates convert. A clear
+// number is one a double holds exactly, and a strictly-formatted date names a real calendar day.
 
 import type {Assert, Case, CorpusApi} from '../case.ts';
 
@@ -51,6 +52,43 @@ export default {
           cell.date,
           /^2018-01-0[45]T/,
           'the parsed date is Jan 5 2018 (modulo timezone)',
+        );
+      },
+    },
+    {
+      name: 'an ISO-shaped field naming no calendar day stays text instead of rolling over',
+      async expect(api: CorpusApi, assert: Assert) {
+        const {rows} = await api.csvRead({csv: '2024-02-30,2023-04-31', options: {}});
+        assert.deepStrictEqual(
+          rows[0],
+          ['2024-02-30', '2023-04-31'],
+          'Feb 30 and Apr 31 are not dates, so they must not become March 1 and May 1',
+        );
+      },
+    },
+    {
+      name: 'a year below 100 is that year, not 1900 plus it',
+      async expect(api: CorpusApi, assert: Assert) {
+        const {rows} = await api.csvRead({csv: '0099-01-01', options: {}});
+        const cell = rows[0]![0];
+        assert.ok(
+          cell && typeof cell === 'object' && typeof cell.date === 'string',
+          `a real date should coerce; got ${JSON.stringify(cell)}`,
+        );
+        assert.match(cell.date, /^0099-01-01T/, 'year 99 must not read as 1999');
+      },
+    },
+    {
+      name: 'a number with more significant digits than a double holds stays text',
+      async expect(api: CorpusApi, assert: Assert) {
+        const {rows} = await api.csvRead({
+          csv: '3.14159265358979323846,4111111111111111',
+          options: {},
+        });
+        assert.deepStrictEqual(
+          rows[0],
+          ['3.14159265358979323846', '4111111111111111'],
+          'coercing either to a number would drop digits',
         );
       },
     },

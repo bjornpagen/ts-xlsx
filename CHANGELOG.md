@@ -24,7 +24,19 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   arrow back on save and an input mode was dropped. Both now round-trip in the standard and the
   extended form; `suppressDropDown` is named for what `showDropDown="1"` does, which is hide the arrow.
 
+- **`CsvParseError`** on `/errors`, code `malformed-input`, for CSV text that does not fit a worksheet.
+
 ### Changed
+
+- **BREAKING: `readCsv` keeps a number with more than 15 significant digits as text.** The reader
+  promised no digit is lost, but checked only magnitude, so `3.14159265358979323846` read as
+  `3.141592653589793` and a 16-digit card number became a number Excel cannot show exactly. Such a
+  field is now the string it was. Leading and trailing zeros do not count.
+
+- **BREAKING: `readCsv` throws `CsvParseError` for a CSV that does not fit a worksheet.** A record
+  with more than 16,384 fields threw the grid's native `RangeError`, which is the error for a caller's
+  mistake, not a file's. It now throws `CsvParseError` naming the record, as soon as the scan reaches
+  the extra field, and so does a file with more data records than a sheet has rows.
 
 - **BREAKING: `Workbook.tableStyles.styles` holds `{name, xml}` definitions rather than bare
   fragments.** An authored table style replaces the preserved definition it shares a name with, and
@@ -72,6 +84,15 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   accepted.
 
 ### Fixed
+
+- **A double quote inside an unquoted CSV field swallowed the rows after it.** Any `"` opened a quoted
+  field, so `John,5'10",tall` followed by `Jane,5'2",short` read as one row whose second field ran to
+  the next quote. A quote now opens a quoted field only as the field's first character, as in Excel;
+  elsewhere it is a literal character.
+
+- **An impossible ISO date in a CSV rolled over, and a year below 100 moved to the 1900s.**
+  `2024-02-30` read as March 1 and `0099-01-01` as 1999. A field that names no calendar day is now
+  kept as text, and a year below 100 is that year.
 
 - **A pivot whose value field is also a row or column field opened with Excel's repair prompt.** The
   writer marked that field with its axis and not as a data field, so the `<dataField>` pointed at a

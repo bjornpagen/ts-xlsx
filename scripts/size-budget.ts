@@ -41,7 +41,10 @@ const DIST = join(ROOT, 'dist');
 //
 // Raised again, from 585, when an authored pivot began refusing a field used twice and a repeated
 // source header, and flagging a value field that is also an axis, three tenths over.
-const TOTAL_BUDGET_BYTES = 586 * 1024;
+//
+// Raised again, from 586, when the CSV reader began refusing a file that does not fit the grid with its
+// own `CsvParseError`, and checking a date and a number's digits before coercing them, four tenths over.
+const TOTAL_BUDGET_BYTES = 587 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -105,7 +108,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 574, when an authored pivot began refusing a field used twice and a repeated
   // source header, and the writer began flagging a value field that is also an axis, which left this
   // entry sitting on its budget.
-  '.': 575,
+  //
+  // Raised again, from 575, by the same CSV reader bounds as `/csv`, two tenths over.
+  '.': 576,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -168,7 +173,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 221, by the same canonical merge storage as `/core`, three tenths over.
   //
   // Raised again, from 222, by the same pivot role refusals as `/core`, two tenths over.
-  './csv': 223,
+  //
+  // Raised again, from 223, when the reader began refusing a record wider than the grid, or more
+  // records than it has rows, with `CsvParseError` rather than the grid's `RangeError`, and checking an
+  // ISO date and a number's significant digits before coercing. Three tenths over.
+  './csv': 224,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //

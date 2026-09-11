@@ -14,6 +14,7 @@
 
 export {CustomUiParseError} from '../customui/errors.ts';
 export {AuthoringError, InternalError, XlsxError, type XlsxErrorCode} from '../errors.ts';
+export {CsvParseError} from '../io/csv/errors.ts';
 export {
   PackageReadError,
   type UnsupportedFormat,

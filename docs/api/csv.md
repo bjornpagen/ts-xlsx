@@ -96,6 +96,9 @@ Parse CSV text (or UTF-8 bytes) into a workbook holding a single worksheet.
 function readCsv(input: string | Uint8Array, options: CsvReadOptions = {}): Workbook;
 ```
 
+**Throws:** [`CsvParseError`](./csv-errors.md#csvparseerror) if a record has more fields than a worksheet has columns, or the data
+records outnumber a worksheet's rows.
+
 ---
 
 ### `writeCsv`

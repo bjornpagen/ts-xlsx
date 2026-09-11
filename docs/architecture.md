@@ -616,7 +616,7 @@ correspondence with the classes would carry nothing the class did not already ca
 | code | what the caller does about it | classes |
 | --- | --- | --- |
 | `unsupported-format` | try a different reader, or reject the input | `UnsupportedFormatError` (its `format` field says *which* unsupported input) |
-| `malformed-input` | reject the file, which is either broken or hostile | `PackageReadError`, `XmlParseError`, `XlsxParseError`, `XlsbParseError`, `VbaParseError`, `CustomUiParseError` |
+| `malformed-input` | reject the file, which is either broken or hostile | `PackageReadError`, `XmlParseError`, `XlsxParseError`, `XlsbParseError`, `CsvParseError`, `VbaParseError`, `CustomUiParseError` |
 | `authoring` | fix the calling code, which described a document that cannot exist | `AuthoringError`, `VbaAuthorError` |
 | `internal` | report it, because an invariant of ours did not hold | `InternalError` |
 
