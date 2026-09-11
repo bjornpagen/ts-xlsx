@@ -89,8 +89,11 @@ export class CellAccumulator {
   // is held for the sheet rather than passed through `finalize`/`decode`/`cachedResult` three times.
   readonly #dateEpoch: DateEpoch;
 
-  constructor(options: {readonly richRuns: boolean; readonly dateEpoch: DateEpoch}) {
-    this.#runs = new RunAccumulator({container: 'is', readRuns: options.richRuns});
+  constructor(options: {readonly dateEpoch: DateEpoch}) {
+    // Both worksheet readers read an inline string's runs. A pooled string's runs are read for both
+    // by the shared-string reader, so flattening here only made the streamed value depend on whether
+    // the producer inlined the string or pooled it.
+    this.#runs = new RunAccumulator({container: 'is', readRuns: true});
     this.#dateEpoch = options.dateEpoch;
   }
 

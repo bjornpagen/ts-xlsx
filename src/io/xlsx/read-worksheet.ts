@@ -170,7 +170,7 @@ export function worksheetPass(
 ): SaxPass {
   // The one `<c>` currently being read: its address/type/style, formula, value, inline text, rich
   // runs, and the sheet-spanning shared-formula master map. Each `<c>` resets it and commits it.
-  const cell = new CellAccumulator({richRuns: true, dateEpoch});
+  const cell = new CellAccumulator({dateEpoch});
   // A row with customFormat="1" supplies a default style for its cells that carry no `s`.
   const autoFilter = new AutoFilterAccumulator();
   const pageBreaks = new PageBreakAccumulator();

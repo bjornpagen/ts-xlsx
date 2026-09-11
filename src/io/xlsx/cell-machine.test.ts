@@ -2,9 +2,9 @@
 // committing a cell means to it. This is the claim that machine exists to make, and the one the
 // comment it replaced could only ask for: read one package both ways and the cells agree.
 //
-// Two differences are deliberate and are the reason this asserts on decoded values rather than
-// deep-equality of the models: the row stream flattens a rich inline string to its text, and it does
-// not resolve a shared formula against its master. Everything else must match.
+// One difference is deliberate and is the reason this asserts on decoded values rather than
+// deep-equality of the models: the row stream does not resolve a shared formula against its master.
+// Everything else must match, a rich string's runs included.
 
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
@@ -12,7 +12,7 @@ import {test} from 'node:test';
 import {MAX_ROW} from '../../core/address.ts';
 import {isFormulaValue} from '../../core/value.ts';
 import {Workbook} from '../../core/workbook.ts';
-import {patchParts, SHEET1, sheetXml} from './package.test-support.ts';
+import {partText, patchParts, SHEET1, sheetXml} from './package.test-support.ts';
 import {readSheetRows} from './read-rows.ts';
 import {readXlsx} from './read.ts';
 import {writeXlsx} from './write.ts';
@@ -53,28 +53,46 @@ test('a package reads the same cell values buffered and streamed', () => {
   assert.deepEqual(seen, ['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1', 'A2', 'B2']);
 });
 
-test('an inline string reads the same both ways, flattened on the streaming side', () => {
-  // Authored as raw XML: the writer pools strings, and `<is>` is the branch this is about.
+// The streamer flattened an inline rich string to its text but kept a pooled one's runs, because the
+// shared-string reader reads runs for both readers. Excel pools rich text, so the same runs streamed as
+// `"bold and not"` or as `{richText: [...]}` depending on how the producer stored them.
+test('a rich string reads with its runs both ways, whether inline or pooled', () => {
+  // With `useSharedStrings` this writer pools plain text but still inlines rich text, so the pooled rich
+  // string is made by replacing a pooled plain one's `<si>`, and the inline cells are authored beside it.
   const wb = new Workbook();
   wb.addWorksheet('S').getCell('A1').value = 'seed';
-  const data = writeXlsx(wb);
+  const data = writeXlsx(wb, {useSharedStrings: true});
+  const seed = '<si><t>seed</t></si>';
+  assert.ok(
+    partText(data, 'xl/sharedStrings.xml').includes(seed),
+    'precondition: the seed is pooled',
+  );
 
-  const inline =
-    '<c r="A1" t="inlineStr"><is><t>plain &amp; simple</t></is></c>' +
-    '<c r="B1" t="inlineStr"><is><r><t>bold</t></r><r><t> and not</t></r></is></c>';
-  const patched = patchSheetBody(data, inline);
+  const patched = patchParts(
+    patchSheetBody(
+      data,
+      '<c r="A1" t="inlineStr"><is><t>plain &amp; simple</t></is></c>' +
+        '<c r="B1" t="inlineStr"><is><r><rPr><b/></rPr><t>bold</t></r><r><t> and not</t></r></is></c>' +
+        '<c r="C1" t="s"><v>0</v></c>',
+    ),
+    {
+      'xl/sharedStrings.xml': (xml) =>
+        xml.replace(seed, '<si><r><rPr><b/></rPr><t>pooled</t></r><r><t> run</t></r></si>'),
+    },
+  );
 
   const sheet = readXlsx(patched).getWorksheet('S')!;
-  assert.equal(sheet.getCell('A1').value, 'plain & simple');
-  assert.deepEqual(sheet.getCell('B1').value, {richText: [{text: 'bold'}, {text: ' and not'}]});
-
+  assert.deepEqual(sheet.getCell('B1').value, {
+    richText: [{text: 'bold', font: {bold: true}}, {text: ' and not'}],
+  });
   const streamed = [...readSheetRows(patched)][0]?.cells ?? [];
-  assert.equal(streamed[0]?.value, 'plain & simple', 'a plain inline string is identical');
-  assert.equal(
-    streamed[1]?.value,
-    'bold and not',
-    'and a rich one flattens, which is the contract',
+  assert.deepEqual(
+    streamed.map((cell) => cell.address),
+    ['A1', 'B1', 'C1'],
   );
+  for (const cell of streamed) {
+    assert.deepEqual(cell.value, sheet.getCell(cell.address).value, `${cell.address} agrees`);
+  }
 });
 
 test('a <v> that is not a number reads as no value, identically both ways', () => {

@@ -18,8 +18,7 @@
 // container, which is now a constructor argument rather than a hand-copied switch.
 //
 // Each caller keeps only what is actually its own: what committing an `<si>` means, and whether the
-// runs are read at all (the row streamer deliberately reads none, so a rich inline string flattens
-// to its concatenated text there).
+// runs are read at all (a note's body reads none, because a note is plain text by model).
 //
 // One invariant spans both, and it is {@link RunAccumulator.beginContainer} that names it: an
 // accumulator is emptied when a *container* opens, never when one closes. It has to be that way round,
@@ -72,9 +71,9 @@ export class RunAccumulator {
   /**
    * @param options.container the element that opens one string: `'si'` for the shared-string pool,
    * `'is'` for an inline string in a worksheet body, `'text'` for a note's body.
-   * @param options.readRuns whether `<r>`/`<rPr>` open a rich-text run. The buffered readers read
-   * them; the row stream deliberately does not, and with runs off every `<t>` falls through to
-   * {@link plainText}, which is exactly the documented flattening.
+   * @param options.readRuns whether `<r>`/`<rPr>` open a rich-text run. A cell's string reads them in
+   * both worksheet readers, pooled or inline; a note's body does not, and with runs off every `<t>`
+   * falls through to {@link plainText}, which is the flattening a plain-text note wants.
    */
   constructor(options: {readonly container: 'si' | 'is' | 'text'; readonly readRuns: boolean}) {
     this.#container = options.container;

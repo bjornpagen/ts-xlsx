@@ -362,10 +362,9 @@ function* scanSheet(
 
   // The in-flight `<c>`, gathered exactly as the buffered reader gathers it, then taken as the
   // cell's plain decoded value (via decode) rather than through the shared-formula / data-table
-  // resolution the buffered finalize adds, which a data read does not want. Rich `<r>` runs are
-  // deliberately not read here, so a rich inline string flattens to its concatenated text as a
-  // streamed value always has.
-  const cell = new CellAccumulator({richRuns: false, dateEpoch});
+  // resolution the buffered finalize adds, which a data read does not want. A rich string keeps its
+  // runs here as it does there, whether the producer inlined it or pooled it.
+  const cell = new CellAccumulator({dateEpoch});
 
   const finalizeCell = (): void => {
     // Whether a cell was placed at all, a row past the grid included, is the accumulator's decision.

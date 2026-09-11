@@ -148,6 +148,22 @@ a file this library did not write is allowed to be wrong, and losing one cell be
 The thing that had to be shared between the two readers was the *decision*, not the throw, and it is:
 `cell-accumulator.ts` makes it once.
 
+## Update (2026-09-11): a streamed rich string keeps its runs
+
+The update above has the streaming reader open no rich `<r>` runs, so a streamed inline string
+flattens to its text. That covered the inline string and never the pooled one: the shared-string
+reader reads runs for both readers, and Excel pools rich text, so the same runs streamed as
+`"bold and not"` when a producer inlined them and as a `RichTextValue` when it pooled them. The
+streamed value depended on an encoding choice the author never made, which is the drift the shared run
+machine exists to prevent, and it broke the streaming reader's own promise of a value identical to
+the one `readXlsx` produces.
+
+The streaming reader now reads runs, so the flattening is gone rather than extended to pooled strings.
+Extending it would have been consistent too, but it discards formatting and breaks consumers all the
+same. `CellAccumulator` lost its `richRuns` option with it. `RunAccumulator` keeps `readRuns`, because
+a note's body is plain text by model and is still read with runs off. The other divergence stands:
+`decode` still surfaces a shared-formula clone's cached result rather than resolving it.
+
 ## Update (2026-09-04): two conventions here have no machine check
 
 Both are held by review, and saying so is the point: a convention a reader assumes is gated is one

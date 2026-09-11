@@ -57,6 +57,13 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   matched however they are written. `mergeCells('Other!E1:F2')` ignored the prefix and merged on the
   sheet it was called on; it now throws `SyntaxError`, as `unmergeCells` does for such a range.
 
+- **BREAKING: a streamed inline rich string keeps its runs.** `readSheetRows` and
+  `readWorkbookStream` flattened a rich string stored inline (`<is>`) to its text, while a pooled one,
+  which is how Excel stores rich text, already streamed as a `RichTextValue`. Both now stream as the
+  `RichTextValue` `readXlsx` produces, so a consumer that expected a plain string for an inline rich
+  cell receives `{richText: [...]}`. That includes rich text in files this library wrote, since its
+  writer stores rich text inline.
+
 ### Fixed
 
 - **A refused cell position left the sheet unreadable and unwritable.** `getCell('A0')`,

@@ -217,8 +217,8 @@ test("a note's body is a container like any other, and leaves its phonetic run o
   assert.strictEqual(runs.plainText, 'note');
 });
 
-// The row streamer reads no runs, so a rich inline string flattens to its concatenated text. That is
-// a documented difference between the two worksheet readers, not a drift.
+// A note's body reads no runs, because a note is plain text by model, so its runs flatten to their
+// concatenated text.
 test('with runs off, every t falls through to the container plain text', () => {
   const runs = read('is', '<is><r><rPr><b/></rPr><t>bo</t></r><r><t>ld</t></r></is>', false);
   assert.deepStrictEqual(runs.runs, []);
