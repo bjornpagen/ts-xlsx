@@ -98,6 +98,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Fixed
 
+- **A raw tab, newline or carriage return in an XML attribute value was read as itself.** XML 1.0
+  reads each as a space, a CRLF pair as one, which is what Excel shows. Both readers kept them raw, so
+  a foreign file's validation prompt with a literal newline read as two lines, and a save wrote the
+  newline back as `&#10;`, a real line break. Such a value now reads with spaces; a character
+  reference such as `&#10;` still reads as the character it names.
+
 - **The VBA compressor wrote raw chunks shorter than [MS-OVBA] allows.** When a chunk's tokens were
   no smaller than its bytes, it was stored raw at its own length, so a short incompressible tail of a
   recompressed `dir` stream went out as a raw chunk of 1 to 4,095 bytes. [MS-OVBA] fixes a raw chunk

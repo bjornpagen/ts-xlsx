@@ -119,7 +119,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 576, by the same CSV writer row positions and delimiter refusals as `/csv`, which
   // left this entry sitting on its budget.
-  '.': 577,
+  //
+  // Raised again, from 577, when the attribute scanner began reading a raw tab, LF or CR in a value as
+  // the space XML 1.0 makes it, two tenths over.
+  '.': 578,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.

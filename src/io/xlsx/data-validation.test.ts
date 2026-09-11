@@ -140,6 +140,26 @@ test('a standard validation with xsd:boolean-spelled flags ("true") reads them o
   assert.equal(dv.showErrorMessage, true);
 });
 
+test('a raw newline in a prompt reads as the space Excel shows, and a save does not make it a line break', () => {
+  // XML 1.0 turns a literal newline in an attribute value into a space; only `&#10;` is a line break.
+  // Read raw, the newline reached the model and the writer escaped it as `&#10;`, so a save turned the
+  // space Excel displayed into a real line break.
+  const part =
+    '<?xml version="1.0"?>' +
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    '<sheetData/>' +
+    '<dataValidations count="1">' +
+    '<dataValidation type="list" showInputMessage="1" prompt="Pick\none" promptTitle="Line&#10;break" ' +
+    'sqref="A1"><formula1>"a,b,c"</formula1></dataValidation>' +
+    '</dataValidations></worksheet>';
+  const workbook = readSheetPartXml(part);
+  const dv = workbook.getWorksheet('S')?.dataValidationAt('A1');
+  assert.ok(dv, 'the rule is read onto its cell');
+  assert.equal(dv.prompt, 'Pick one');
+  assert.equal(dv.promptTitle, 'Line\nbreak', 'a character reference is still a line break');
+  assert.match(sheetXml(writeXlsx(workbook)), /prompt="Pick one"/);
+});
+
 test('a numeric-typed operand spelled non-canonically keeps its verbatim text and re-writes byte-clean', () => {
   // Only a canonical decimal literal coerces to a number; a scientific-notation operand survives as
   // its string so a round-trip re-emits it exactly rather than re-spelling it to 100000.

@@ -98,13 +98,41 @@ test('xmlEvents tolerates a literal ">" inside a quoted attribute value', () => 
 
 const REGEX_SCAN = /([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
+// The oracle is for the scan's structure, which names and values it finds. What a found value then
+// reads as is XML 1.0's whitespace rule, tested on its own below, so the oracle applies it too.
 function regexAttributes(source: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const match of source.matchAll(REGEX_SCAN)) {
-    out[match[1] as string] = match[2] ?? match[3] ?? '';
+    out[match[1] as string] = (match[2] ?? match[3] ?? '').replace(/\r\n|[\t\n\r]/g, ' ');
   }
   return out;
 }
+
+test('a raw tab, LF, CR or CRLF in an attribute value reads as one space, as XML 1.0 §3.3.3 says', () => {
+  assert.equal(parseAttributes(' b="x\ny\tz"').b, 'x y z');
+  assert.equal(parseAttributes(' b="x\ry"').b, 'x y');
+  assert.equal(
+    parseAttributes(" b='x\r\ny'").b,
+    'x y',
+    'a CRLF pair is one line end, so one space',
+  );
+  assert.equal(
+    parseAttributes(' b="\n\n"').b,
+    '  ',
+    'each line end is its own space; none collapse',
+  );
+});
+
+test('a character reference to LF or tab in an attribute value decodes to that character', () => {
+  // A reference is exempt from the rule, which is how a file keeps a real line break in an attribute
+  // and what the writer's escaping relies on.
+  assert.equal(parseAttributes(' b="x&#10;y&#9;z&#xD;"').b, 'x\ny\tz\r');
+});
+
+test('an attribute value with no whitespace characters reads unchanged', () => {
+  assert.equal(parseAttributes(' r="A1" s="12"').r, 'A1');
+  assert.equal(parseAttributes(' b="a b"').b, 'a b', 'a space is already a space');
+});
 
 test('parseAttributes skips what is not an attribute and still reads the attributes after it', () => {
   // A name nothing assigns, a value with no quote, and a quote never closed each cost only themselves.

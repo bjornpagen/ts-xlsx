@@ -178,10 +178,33 @@ export function parseAttributes(source: string): XmlAttributes {
       i = cursor;
       continue;
     }
-    attrs[source.slice(nameStart, i)] = admitText(source.slice(cursor + 1, close));
+    attrs[source.slice(nameStart, i)] = admitText(
+      normalizeAttributeWhitespace(source.slice(cursor + 1, close)),
+    );
     i = close + 1;
   }
   return attrs;
+}
+
+// XML 1.0 §3.3.3: a literal tab, LF or CR in an attribute value reads as a space, and end-of-line
+// handling (§2.11) has already made a CRLF pair one LF, so the pair is one space. Applied to the raw
+// value, before entities are decoded, because a character reference is exempt: `&#10;` is how a file
+// spells a line break an attribute keeps, and the writer escapes one that way for this very rule. Kept
+// raw, a newline in a foreign file's validation prompt read as a line break where Excel shows a space,
+// and a save then wrote it back as `&#10;`, a real line break.
+const ATTRIBUTE_WHITESPACE = /\r\n|[\t\n\r]/g;
+
+function normalizeAttributeWhitespace(raw: string): string {
+  // The scan runs on every attribute of every tag and almost no value holds one of the three, so the
+  // replace is reached only past a loop over the value's few characters; asking the regex costs every
+  // attribute a third again.
+  for (let i = 0; i < raw.length; i++) {
+    const code = raw.charCodeAt(i);
+    if (code === 0x09 || code === 0x0a || code === 0x0d) {
+      return raw.replace(ATTRIBUTE_WHITESPACE, ' ');
+    }
+  }
+  return raw;
 }
 
 // Scan to the tag's closing `>`, honouring quoted attribute values so a `>` inside a
