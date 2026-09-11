@@ -111,6 +111,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   A file carrying such a table reads without it. `TABLE_NAME_PATTERN` still states only the character
   grammar.
 
+- **BREAKING: `ERROR_CODES` holds the error literals Excel reads, which drops `#SPILL!` and `#CALC!`
+  and adds `#BUSY!`.** A cell written with `{error: '#SPILL!'}` or `{error: '#CALC!'}` opened with
+  Excel's repair prompt: Excel stores those errors as `#VALUE!` beside a rich value, never literally.
+  Both now fail the type and are refused by the writer with `AuthoringError`. `#BUSY!` is written and
+  read back like `#N/A`. A file's cell carrying one of the refused spellings literally reads as text.
+
 - **BREAKING: a threaded comment's author must be registered by the time the workbook is written.** A
   message whose `personId` names no person added with `Workbook.addPerson` now makes `writeXlsx` throw
   `AuthoringError`; Excel opened such a package with its repair prompt. A message with no `personId` was

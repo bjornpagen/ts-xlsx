@@ -236,6 +236,33 @@ export const core = {
     return {source, rewritten};
   },
 
+  // Author each code as a cell's error value, write, and read back → a map of code → { written, readBack,
+  // refused }. `written` is the `<v>` of the typed cell, `readBack` the value the package reads as, and
+  // `refused` the writer's message when it declined to write the cell at all.
+  errorLiteralReport(codes: string[]) {
+    return Object.fromEntries(
+      codes.map((code) => {
+        const workbook = new Workbook();
+        // Untyped on purpose: the case names codes the model may not accept, to see what the writer does.
+        workbook.addWorksheet('S').getCell('A1').value = {error: code} as Untyped;
+        try {
+          const bytes = writeXlsx(workbook);
+          const sheet = partMapOf(bytes)['xl/worksheets/sheet1.xml'] ?? '';
+          return [
+            code,
+            {
+              written: /<c r="A1"[^>]*t="e"[^>]*><v>([^<]*)<\/v>/.exec(sheet)?.[1] ?? null,
+              readBack: readXlsx(bytes).worksheets[0]?.getCell('A1').value ?? null,
+              refused: null,
+            },
+          ];
+        } catch (error) {
+          return [code, {written: null, readBack: null, refused: messageOf(error)}];
+        }
+      }),
+    );
+  },
+
   // Write a non-finite numeric cell (NaN / Infinity / -Infinity) and report whether the sheet XML
   // carries a bare token in a <v> → { hasNonFiniteToken, token }. A non-finite value has no OOXML
   // representation, so it must serialize as a valueless cell, never a literal "NaN"/"Infinity".

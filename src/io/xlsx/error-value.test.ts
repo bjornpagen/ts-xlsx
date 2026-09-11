@@ -69,3 +69,17 @@ test('a foreign t="e" cell carrying a non-canonical code reads back as a plain s
   const back = readXlsx(patched).getWorksheet('S')?.getCell('A1').value;
   assert.equal(back, '#UNKNOWN!', 'an unrecognised error literal falls back to its raw text');
 });
+
+test('the error literals are exactly the ones Excel reads back from a typed cell', () => {
+  // Excel 16.0 (build 20326) opened a cell `<c t="e"><v>…</v></c>` clean for `#N/A`, `#GETTING_DATA` and
+  // `#BUSY!`, which reads back as `#BUSY!`. It opened one with its repair prompt for `#SPILL!` and
+  // `#CALC!`, which it stores as `#VALUE!` beside a rich value, and for `#FIELD!`, `#BLOCKED!`,
+  // `#CONNECT!`, `#UNKNOWN!`, `#PYTHON!`, `#EXTERNAL!` and `#TIMEOUT!`.
+  assert.ok(ERROR_CODES.includes('#BUSY!'), '#BUSY! opens clean and reads as #BUSY!');
+  for (const code of ['#SPILL!', '#CALC!', '#FIELD!', '#BLOCKED!', '#CONNECT!', '#UNKNOWN!']) {
+    assert.ok(!ERROR_CODES.includes(code as never), `${code} is not a literal`);
+    const wb = new Workbook();
+    wb.addWorksheet('S').getCell('A1').value = {error: code} as never;
+    assert.throws(() => writeXlsx(wb), {name: 'AuthoringError'}, `${code} is refused, not written`);
+  }
+});

@@ -198,13 +198,17 @@ test('a typed token with no reading for its type is no value, but an unlisted er
   const patched = patchSheetBody(
     seeded(),
     '<c r="A1" t="b"><v>2</v></c><c r="B1" t="s"><v>abc</v></c><c r="C1" t="s"><v>99</v></c>' +
-      '<c r="D1" t="e"><v>#BUSY!</v></c>',
+      '<c r="D1" t="e"><v>#SPILL!</v></c>',
   );
   const sheet = readXlsx(patched).getWorksheet('S')!;
   assert.equal(sheet.getCell('A1').value, null, 'not FALSE');
   assert.equal(sheet.getCell('B1').value, null, 'not ""');
   assert.equal(sheet.getCell('C1').value, null, 'nor "" for an index past the pool');
-  assert.equal(sheet.getCell('D1').value, '#BUSY!', 'a newer error code is data');
+  assert.equal(
+    sheet.getCell('D1').value,
+    '#SPILL!',
+    'an error Excel never stores literally is data',
+  );
 });
 
 test('a typed cell with no value is not written back as one', () => {

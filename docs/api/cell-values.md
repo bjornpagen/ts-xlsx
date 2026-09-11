@@ -118,10 +118,17 @@ function detectValueType(value: CellValue): ValueType;
 
 <sub>const</sub>
 
-The canonical Excel error literals a cell (or formula result) can carry.
+The Excel error literals a cell (or formula result) can carry: the spellings a typed cell's `<v>`
+holds and Excel reads back as that error.
+
+Not every error Excel displays is one. `#SPILL!`, `#CALC!`, `#FIELD!`, `#BLOCKED!`, `#CONNECT!`,
+`#UNKNOWN!` and `#PYTHON!` are stored as `#VALUE!` with a rich value naming the real error beside
+it, and a cell carrying one of them literally makes Excel offer to repair the package, so none of them
+is here. A file's such cell reads as the `#VALUE!` its `<v>` states. `#BUSY!` and `#GETTING_DATA` are
+literals like the classic seven (Excel 16.0 build 20326).
 
 ```ts
-const ERROR_CODES: readonly ["#N/A", "#REF!", "#NAME?", "#DIV/0!", "#NULL!", "#VALUE!", "#NUM!", "#SPILL!", "#CALC!", "#GETTING_DATA"]
+const ERROR_CODES: readonly ["#N/A", "#REF!", "#NAME?", "#DIV/0!", "#NULL!", "#VALUE!", "#NUM!", "#GETTING_DATA", "#BUSY!"]
 ```
 
 ---

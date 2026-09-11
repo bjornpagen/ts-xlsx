@@ -1,0 +1,34 @@
+{
+  "invariant": "error-literals",
+  "description": "Which error spellings may a typed cell carry literally? A one-cell package <c r=\"A1\" t=\"e\"><v>CODE</v></c> was written for each code and opened interactively. Separately, Excel computed a #SPILL! (=SEQUENCE(3) over a blocking value), a #CALC! (a FILTER matching nothing) and a #DIV/0! over COM and saved the workbook, and read #BUSY! back from its one-cell package through Range.Text and Value2.",
+  "probe": ".claude/skills/excel-gui-automation/scripts/open-verdict.ps1 per package; a one-off COM script for the computed errors",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-11",
+  "openVerdicts": {
+    "#N/A": "clean",
+    "#GETTING_DATA": "clean",
+    "#BUSY!": "clean",
+    "#SPILL!": "repair-prompt",
+    "#CALC!": "repair-prompt",
+    "#FIELD!": "repair-prompt",
+    "#BLOCKED!": "repair-prompt",
+    "#CONNECT!": "repair-prompt",
+    "#UNKNOWN!": "repair-prompt",
+    "#PYTHON!": "repair-prompt",
+    "#EXTERNAL!": "repair-prompt",
+    "#TIMEOUT!": "repair-prompt",
+    "#N/A beside #BOGUS!": "repair-prompt"
+  },
+  "busyReadBack": {
+    "text": "#BUSY!",
+    "value2": -2146826237
+  },
+  "excelSaved": {
+    "=SEQUENCE(3) spilling into a value": "<c r=\"A1\" t=\"e\" cm=\"1\" vm=\"1\"><f t=\"array\" aca=\"1\" ref=\"A1\" ca=\"1\">_xlfn.SEQUENCE(3)</f><v>#VALUE!</v></c>, valueMetadata naming a rich value of structure _error with errorType 8",
+    "=FILTER(D1:D3,D1:D3>100)": "<c r=\"C1\" t=\"e\" cm=\"1\" vm=\"2\"><f t=\"array\" ref=\"C1\">_xlfn._xlws.FILTER(D1:D3,D1:D3&gt;100)</f><v>#VALUE!</v></c>, a rich value of structure _error with errorType 13",
+    "=1/0": "<c r=\"E1\" t=\"e\"><f>1/0</f><v>#DIV/0!</v></c>"
+  }
+}
