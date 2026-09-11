@@ -365,9 +365,15 @@ function applyColumn(
   if (span === undefined) return;
   for (let index = span.first; index <= span.last; index++) {
     const column = sheet.getColumn(index);
-    // The stored width is taken whether or not the file marks it user-set, matching the XML reader:
-    // a `<col>`/`BrtColInfo` exists only for a column that differs from the sheet default in *some*
-    // way, and it always states the width that column actually has.
+    // The stored width is taken whether or not the file marks it user-set: a `<col>`/`BrtColInfo`
+    // exists only for a column that differs from the sheet default in *some* way, and it always
+    // states the width that column actually has. The XML reader's rule is not literally this one. It
+    // keeps a width unless `customWidth` is explicitly false, and the early return above skips a run
+    // carrying nothing but an unmarked width, so the two differ on exactly those two shapes. Excel
+    // writes neither: it marks every width a user set in both forms, and writes a style- or
+    // outline-only column with the default width unmarked in both. An autofit, a width set back to
+    // the default, an unhidden, ungrouped or cleared column and a changed default width all read the
+    // same from both of its files (Excel 16.0 build 20326).
     column.width = width / COLUMN_WIDTH_UNITS;
     if ((flags & COLUMN_HIDDEN) !== 0) column.hidden = true;
     if (outlineLevel > 0) column.outlineLevel = outlineLevel;
