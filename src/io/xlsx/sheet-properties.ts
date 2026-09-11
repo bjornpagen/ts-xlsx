@@ -6,7 +6,7 @@
 // row/cell body `worksheet-xml.ts` orchestrates them alongside. The reading half sits below it and
 // says why it is here rather than in the reader.
 
-import {encodeAddress} from '../../core/address.ts';
+import {encodeAddress, MAX_COLUMN, MAX_ROW} from '../../core/address.ts';
 import {
   type AutoFilter,
   type FilterColumn,
@@ -32,6 +32,7 @@ import {
   type SheetProtectionFlags,
 } from '../../core/protection.ts';
 import type {OutlineProperties, SheetView, Worksheet} from '../../core/worksheet.ts';
+import {assertWritableNumber, AuthoringError} from '../../errors.ts';
 import {numFinite, numInteger} from '../../xml/xml-attrs.ts';
 import {boolStrict, boolTristate, type XmlAttributes} from '../../xml/xml-scan.ts';
 import {
@@ -59,11 +60,11 @@ export function sheetViewsXml(view: SheetView, active: boolean): string {
   // Excel defaults the grid on, so only an explicit `false` is worth an attribute; leaving it unset
   // keeps a sheet that never asked about gridlines byte-clean through a round-trip.
   const gridLines = view.showGridLines === false ? ' showGridLines="0"' : '';
-  const xSplit = view.xSplit ?? 0;
-  const ySplit = view.ySplit ?? 0;
-  if (view.state !== 'frozen' || (xSplit === 0 && ySplit === 0)) {
-    return `<sheetViews><sheetView${gridLines}${selected} workbookViewId="0"/></sheetViews>`;
-  }
+  const normal = `<sheetViews><sheetView${gridLines}${selected} workbookViewId="0"/></sheetViews>`;
+  if (view.state !== 'frozen') return normal;
+  const xSplit = frozenSplit('xSplit', view.xSplit, MAX_COLUMN);
+  const ySplit = frozenSplit('ySplit', view.ySplit, MAX_ROW);
+  if (xSplit === 0 && ySplit === 0) return normal;
   const topLeftCell = view.topLeftCell ?? encodeAddress(xSplit + 1, ySplit + 1);
   const activePane =
     xSplit > 0 && ySplit > 0 ? 'bottomRight' : xSplit > 0 ? 'topRight' : 'bottomLeft';
@@ -74,6 +75,22 @@ export function sheetViewsXml(view: SheetView, active: boolean): string {
     ` topLeftCell="${escapeAttr(topLeftCell)}" activePane="${activePane}" state="frozen"/>`;
   const selection = `<selection pane="${activePane}" activeCell="${escapeAttr(topLeftCell)}" sqref="${escapeAttr(topLeftCell)}"/>`;
   return `<sheetViews><sheetView${gridLines}${selected} workbookViewId="0">${pane}${selection}</sheetView></sheetViews>`;
+}
+
+// A frozen split counts whole columns or rows, so it is checked before it is compared with zero. The
+// view is a plain object that `freeze()` does not stand in front of, and a `> 0` test read `NaN` and a
+// negative count as "no split", wrote a normal view without a word, and wrote a fraction into the
+// attribute as it was. A split must also leave one line to scroll: the pane's top-left cell is the
+// first line past it.
+function frozenSplit(name: 'xSplit' | 'ySplit', value: number | undefined, lines: number): number {
+  if (value === undefined) return 0;
+  assertWritableNumber(value);
+  if (!Number.isInteger(value) || value < 0 || value >= lines) {
+    throw new AuthoringError(
+      `cannot write ${name}="${value}": a frozen split is a whole count from 0 to ${lines - 1}`,
+    );
+  }
+  return value;
 }
 
 // `<sheetPr>` carries the sheet's appearance properties: the tab colour, the outline
@@ -414,10 +431,11 @@ export function applySheetProperties(local: string, attrs: XmlAttributes, sheet:
         // A split that is not a non-negative integer is dropped, not stored: `Worksheet.freeze()`
         // refuses the same value, and storing it here only defers the failure to the writer, which
         // adds the split to a cell ordinal and throws about a column the caller never named.
+        // One that leaves no line to scroll is dropped for the same reason.
         const xSplit = numInteger(attrs.xSplit, 0);
         const ySplit = numInteger(attrs.ySplit, 0);
-        if (xSplit !== undefined) sheet.view.xSplit = xSplit;
-        if (ySplit !== undefined) sheet.view.ySplit = ySplit;
+        if (xSplit !== undefined && xSplit < MAX_COLUMN) sheet.view.xSplit = xSplit;
+        if (ySplit !== undefined && ySplit < MAX_ROW) sheet.view.ySplit = ySplit;
         if (attrs.topLeftCell !== undefined) sheet.view.topLeftCell = attrs.topLeftCell;
       }
       break;

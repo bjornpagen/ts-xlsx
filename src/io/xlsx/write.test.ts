@@ -447,6 +447,33 @@ test('a frozen sheet carries tabSelected alongside its pane', () => {
   assert.match(xml, /<sheetView tabSelected="1" workbookViewId="0"><pane ySplit="1"/);
 });
 
+test('a frozen split that is not a whole count of lines is refused, not dropped or written', () => {
+  // `view` is a plain object, so an assignment reaches the writer without passing `freeze()`'s check.
+  // A `> 0` test read NaN and a negative count as "no split" and wrote a normal view, and wrote a
+  // fraction into the attribute as it was.
+  for (const split of [Number.NaN, Number.POSITIVE_INFINITY, 1.5, -1, 1048576]) {
+    const wb = new Workbook();
+    const s = wb.addWorksheet('S');
+    s.getCell('A1').value = 'header';
+    s.view.state = 'frozen';
+    s.view.ySplit = split;
+    assert.throws(() => writeXlsx(wb), AuthoringError, `ySplit ${split}`);
+  }
+  const wb = new Workbook();
+  const s = wb.addWorksheet('S');
+  s.view.state = 'frozen';
+  s.view.xSplit = 16384;
+  assert.throws(() => writeXlsx(wb), /xSplit/, 'a split must leave a column to scroll');
+});
+
+test('the largest frozen split that leaves a line to scroll is written', () => {
+  const wb = new Workbook();
+  const s = wb.addWorksheet('S');
+  s.freeze(1048575, 16383);
+  const xml = partIn(partsOf(wb), 'xl/worksheets/sheet1.xml');
+  assert.match(xml, /<pane xSplit="16383" ySplit="1048575" topLeftCell="XFD1048576"/);
+});
+
 test('title and company are written to their two different parts, and round-trip', () => {
   const wb = new Workbook();
   wb.addWorksheet('S').getCell('A1').value = 'x';

@@ -168,10 +168,16 @@ test('a cell in a `<row>` past the last row is dropped even when its own `r` is 
   assert.equal(worksheet.getCell('A5').value, null);
 });
 
-test('a `<pane>` split that is not a non-negative integer is dropped, not carried to the writer', () => {
+test('a `<pane>` split the writer could not write back is dropped, not carried to it', () => {
   // Each of these used to land in `view` verbatim and surface later out of the serializer, as a
   // RangeError naming a column the file never mentioned.
-  for (const attrs of ['xSplit="abc"', 'xSplit="1.5" ySplit="2"', 'ySplit="-3"']) {
+  for (const attrs of [
+    'xSplit="abc"',
+    'xSplit="1.5" ySplit="2"',
+    'ySplit="-3"',
+    'xSplit="16384"',
+    'ySplit="1048576"',
+  ]) {
     const worksheet = sheet(
       `<sheetViews><sheetView workbookViewId="0"><pane ${attrs} topLeftCell="B2" state="frozen"/></sheetView></sheetViews>`,
     );
