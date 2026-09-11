@@ -5,7 +5,7 @@ import type {Fill, Font} from '../../core/style.ts';
 import {Workbook} from '../../core/workbook.ts';
 import {AuthoringError, XlsxError} from '../../errors.ts';
 import {partText, patchParts, roundtrip} from './package.test-support.ts';
-import {parseIndexedColors} from './read-styles.ts';
+import {parseStyleTable} from './read-styles.ts';
 import {readXlsx} from './read.ts';
 import {StyleRegistry} from './styles.ts';
 import {writeXlsx} from './write.ts';
@@ -41,17 +41,20 @@ test('an authored table style replaces a preserved one of the same name, however
 
 const solid = (argb: string): Fill => ({type: 'pattern', pattern: 'solid', fgColor: {argb}});
 
-test('parseIndexedColors extracts each rgbColor verbatim, or nothing when the palette is default', () => {
+test('the style table keeps each indexed rgbColor verbatim, or nothing when the palette is default', () => {
   const styles =
     '<styleSheet><colors><indexedColors>' +
     '<rgbColor rgb="ff000000"/><rgbColor rgb="ff3f6797"/><rgbColor rgb="ffaaaaaa"/>' +
     '</indexedColors></colors></styleSheet>';
-  assert.deepEqual(parseIndexedColors(styles), [
+  assert.deepEqual(parseStyleTable(styles).preserved.indexedColors, [
     '<rgbColor rgb="ff000000"/>',
     '<rgbColor rgb="ff3f6797"/>',
     '<rgbColor rgb="ffaaaaaa"/>',
   ]);
-  assert.deepEqual(parseIndexedColors('<styleSheet><dxfs count="0"/></styleSheet>'), []);
+  assert.deepEqual(
+    parseStyleTable('<styleSheet><dxfs count="0"/></styleSheet>').preserved.indexedColors,
+    [],
+  );
 });
 
 test('a seeded indexed-color palette re-emits as a <colors> block; an unseeded one emits none', () => {
@@ -273,7 +276,7 @@ test('an ARGB that is neither 6 nor 8 hex digits is rejected at the API surface'
   // later re-wrap reddens the suite rather than quietly changing what a caller catches.
   assert.throws(() => styles.styleId({fill: solid('12345')}), {
     name: 'SyntaxError',
-    message: /Invalid ARGB colour "12345"/,
+    message: /invalid ARGB colour "12345"/,
   });
   assert.throws(() => styles.styleId({fill: solid('GGGGGGGG')}), {name: 'SyntaxError'});
   assert.throws(() => styles.styleId({fill: solid('red')}), {name: 'SyntaxError'});

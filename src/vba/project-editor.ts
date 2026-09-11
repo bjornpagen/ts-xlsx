@@ -274,10 +274,9 @@ function insertReferenceDirRecords(dir: Uint8Array, records: Uint8Array): Uint8A
 }
 
 // Remove one module's MODULE record block from a decompressed `dir` stream, and decrement MODULES_COUNT.
-// A block runs from its MODULE_NAME record (which always opens the block, mirroring buildModuleDirRecord's
-// emission order) through its own MODULE_TERMINATOR, identified by matching MODULE_STREAMNAME against
-// `streamName`. Every other record (PROJECTREFERENCES, other modules, project-level fields) is carried
-// through untouched.
+// A block runs from its MODULE_NAME record, which [MS-OVBA] puts first in every MODULE record, through
+// its own MODULE_TERMINATOR, identified by matching MODULE_STREAMNAME against `streamName`. Every other
+// record (PROJECTREFERENCES, other modules, project-level fields) is carried through untouched.
 function removeModuleDirRecord(dir: Uint8Array, streamName: string, decoder: Decoder): Uint8Array {
   let countAt = -1;
   let blockStart = -1;
@@ -381,8 +380,8 @@ function projectLines(stream: Uint8Array, decoder: Decoder): ProjectLine[] {
   return lines;
 }
 
-// Remove a module's (MBCS name, UTF-16 name) pair from the binary PROJECTwm stream: the inverse of
-// insertProjectwmRecord. `existingModuleCount` (from the already fail-closed-parsed project, before
+// Remove a module's (MBCS name, UTF-16 name) pair from the binary PROJECTwm stream.
+// `existingModuleCount` (from the already fail-closed-parsed project, before
 // removal) bounds the walk to the module records, so it never mistakes the terminator for a record.
 function removeProjectwmRecord(
   wm: Uint8Array,

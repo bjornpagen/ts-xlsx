@@ -47,6 +47,8 @@ export class WorksheetPictures {
   // A copy would leave the sheet's images behind the grid they sit on.
   readonly #anchors: AnchoredImage[] = [];
 
+  // A sheet background is a single workbook image tiled behind the grid, distinct from an anchored
+  // drawing: it has no anchor and rides its own worksheet relationship, not a drawing part.
   #backgroundImageId: number | undefined;
 
   constructor(metrics: AnchorMetrics) {

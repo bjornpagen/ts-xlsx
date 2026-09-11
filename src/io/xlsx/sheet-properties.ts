@@ -457,36 +457,23 @@ function applyMargins(margins: PageMargins, attrs: XmlAttributes): void {
   }
 }
 
-// Read the `<pageSetup>` print-scaling attributes back onto the model, setting only those the
-// source carried so a re-write stays byte-clean. Each of the four is a count or an enumeration id,
-// so a fractional or negative one carries no meaning and is dropped; the enumerated string
-// attributes are trusted verbatim (an unexpected token round-trips harmlessly as an unknown string).
+// Read the `<pageSetup>` attributes back onto the model, setting only those the source carried so a
+// re-write stays byte-clean. A count attribute is a page count, a percentage or a paper-size id, so a
+// fractional or negative one carries no meaning and is dropped; an enumerated one is kept only when
+// its facet's guard accepts it, and an unknown token is dropped rather than carried as a string the
+// writer would refuse.
 function applyPageSetup(pageSetup: PageSetup, attrs: XmlAttributes): void {
   for (const facet of PAGE_SETUP_FACETS) {
     const raw = attrs[facet.key];
-    switch (facet.kind) {
-      case 'count': {
-        const value = numInteger(raw, 0);
-        if (value !== undefined) pageSetup[facet.key] = value;
-        break;
-      }
-      case 'token':
-        if (raw !== undefined && facet.isValid(raw))
-          assignPageSetupToken(pageSetup, facet.key, raw);
-        break;
+    if (facet.kind === 'count') {
+      const value = numInteger(raw, 0);
+      if (value !== undefined) pageSetup[facet.key] = value;
+    } else if (raw === undefined) {
+      continue;
+    } else if (facet.key === 'pageOrder') {
+      if (facet.isValid(raw)) pageSetup.pageOrder = raw;
+    } else if (facet.isValid(raw)) {
+      pageSetup.orientation = raw;
     }
   }
-}
-
-// One token attribute at a time, so the write's key type is a single member rather than the whole
-// union and `pageSetup[key] = value` typechecks: the correlated-key access TypeScript cannot verify
-// when the key is a union, the same shape `assignAlignmentToken` takes in read-styles.ts. The cast
-// restates the guard's own proof: `isValid` has already accepted `raw` for this facet's
-// enumeration, which the table cannot say in a type because both token entries share one shape.
-function assignPageSetupToken<K extends 'pageOrder' | 'orientation'>(
-  pageSetup: PageSetup,
-  key: K,
-  raw: string,
-): void {
-  pageSetup[key] = raw as PageSetup[K];
 }

@@ -26,8 +26,9 @@ import {
   SHEET1,
   sheetXml,
 } from './package.test-support.ts';
+import {workbookViewPass} from './read-workbook-xml.ts';
 import {worksheetPass} from './read-worksheet.ts';
-import {readXlsx, workbookViewPass} from './read.ts';
+import {readXlsx} from './read.ts';
 import {writeXlsx} from './write.ts';
 
 // Drive the one pass under test over a fragment. The reader is a pass rather than a function over the

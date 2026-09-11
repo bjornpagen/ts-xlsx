@@ -151,7 +151,7 @@ export function quoted(name: string): string {
  */
 export function invalidToken(kind: string, value: string): AuthoringError {
   return new AuthoringError(
-    `Invalid ${kind} ${quoted(value)}: not a value the OOXML enumeration allows`,
+    `invalid ${kind} ${quoted(value)}: not a value the OOXML enumeration allows`,
   );
 }
 

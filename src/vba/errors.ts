@@ -14,10 +14,10 @@ export class VbaParseError extends XlsxError {
 }
 
 /**
- * Thrown when authoring a VBA project (synthesizing a `vbaProject.bin` from module source) is asked to
- * produce something that cannot be encoded to a well-formed container: a stream name longer than the
- * [MS-CFB] 31-character limit, a duplicate stream name, or a project so large it would exceed the
- * writer's single-header DIFAT bound. This is a caller-side contract violation, distinct from
+ * Thrown when a structural edit of a VBA project (removing a module, adding a library reference) is
+ * asked to produce something that cannot be encoded to a well-formed container: a stream name longer
+ * than the [MS-CFB] 31-character limit, a duplicate stream name, or a project so large it would exceed
+ * the writer's single-header DIFAT bound. This is a caller-side contract violation, distinct from
  * {@link VbaParseError} (which reports a malformed blob *read* from an untrusted file).
  *
  * It shares `code: 'authoring'` with `AuthoringError` rather than being one, and it is the only

@@ -218,12 +218,7 @@ class Worksheet {
       readonly ext: {readonly width: number; readonly height: number};
     },
   ): void;
-  addImage(
-    imageId: number,
-    anchor:
-      | {readonly tl: AnchorPoint; readonly br: AnchorPoint; readonly editAs?: ImageEditAs}
-      | {readonly tl: AnchorPoint; readonly ext: {readonly width: number; readonly height: number}},
-  ): void;
+  addImage(imageId: number, anchor: PixelAnchor): void;
   addImageAnchor(imageId: number, anchor: ImageAnchor): void;
   removeImage(imageId: number): void;
   get images(): readonly AnchoredImage[];

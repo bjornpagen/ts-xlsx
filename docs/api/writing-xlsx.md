@@ -11,10 +11,10 @@ Options controlling how [`writeXlsx`](./writing-xlsx.md#writexlsx) serialises a 
 ```ts
 interface WriteOptions {
   /**
-   * Pool plain string cell values into a shared-strings table (`xl/sharedStrings.xml`) that cells
-   * reference by index, rather than storing each string inline in its cell. Deduplicates repeated
-   * text and matches Excel's own storage; off by default, which keeps strings inline and omits the
-   * part. Rich-text values stay inline regardless, so their run formatting is unaffected.
+   * Pool string and rich-text cell values into a shared-strings table (`xl/sharedStrings.xml`) that
+   * cells reference by index, rather than storing each inline in its cell. Deduplicates repeated text
+   * and matches Excel's own storage; a rich value is pooled as a `<si>` of its runs, so its formatting
+   * survives. Off by default, which keeps strings inline and omits the part.
    */
   readonly useSharedStrings?: boolean;
 }

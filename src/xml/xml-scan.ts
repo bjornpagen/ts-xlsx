@@ -49,7 +49,7 @@ export type XmlEvent =
 
 // A Map, not an object literal, because the key comes straight out of the file: an object would
 // answer `constructor`, `toString` and a dozen other attacker-chosen names out of Object.prototype,
-
+// and a function stringified into the decoded text is engine source in the model.
 const PREDEFINED_ENTITIES: ReadonlyMap<string, string> = new Map([
   ['amp', '&'],
   ['lt', '<'],

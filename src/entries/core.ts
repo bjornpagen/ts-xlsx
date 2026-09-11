@@ -101,6 +101,9 @@ export {
 // without importing the XML codec, and because a container bound is a fact about the package rather
 // than about either serialisation inside it.
 export type {ReadPackageOptions} from '../io/opc/read-options.ts';
+// The pixel-unit anchor `Worksheet.addImage` takes, so a caller building one ahead of the call can
+// write its type.
+export type {PixelAnchor} from '../core/worksheet-pictures.ts';
 export {
   INVALID_SHEET_NAME_CHARS,
   MAX_COLUMN_WIDTH,

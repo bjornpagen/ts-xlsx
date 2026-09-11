@@ -450,7 +450,7 @@ export function parseXml(source: string, handlers: SaxHandlers, options?: ParseX
  * The other thing the open-coded versions disagreed on is what an unrelated element opening
  * mid-capture should do. Ending the capture is never what a caller wants: the text belongs to the
  * element that opened it, and a nested or sibling element is not that element. So an open that is
- * not for a captured name leaves an capture in progress alone, and {@link close} answers only for
+ * not for a captured name leaves a capture in progress alone, and {@link close} answers only for
  * the element that started it.
  *
  * Decoding stays outside. A `<t>` needs `decodeSpreadsheetText` over the whole element and never

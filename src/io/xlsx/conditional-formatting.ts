@@ -32,12 +32,7 @@ import {decodeSqrefRects} from '../../core/merge.ts';
 import type {Color} from '../../core/style.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
 import {coerceNumericLiteral, enumToken, numInteger} from '../../xml/xml-attrs.ts';
-import {
-  type CollectingPass,
-  elementSubtrees,
-  type SaxHandlers,
-  TextCapture,
-} from '../../xml/xml-read.ts';
+import {type CollectingPass, type SaxHandlers, TextCapture} from '../../xml/xml-read.ts';
 import {boolPresent, boolStrict, boolTristate, localName} from '../../xml/xml-scan.ts';
 import {
   boolAttr,
@@ -515,17 +510,6 @@ export function applyConditionalFormattings(
 
 function emptyExt(): DataBarExt {
   return {gradient: undefined, negativeFillColor: undefined, axisColor: undefined};
-}
-
-/**
- * Extract the differential-style (`<dxf>`) fragments from styles.xml, each verbatim. Preserving the
- * raw XML, rather than reparsing and re-serialising, is what keeps a foreign dxf's number format a
- * real format code on re-write instead of a coerced `"[object Object]"`, and keeps every conditional
- * formatting's `dxfId` index pointing at the same style it did in the source file.
- */
-export function parseDxfs(stylesXml: string): string[] {
-  const {fragments} = elementSubtrees(stylesXml, new Map([['dxfs', 'dxf']]));
-  return [...(fragments.get('dxfs') ?? [])];
 }
 
 function newDraft(attrs: Record<string, string>): RuleDraft {

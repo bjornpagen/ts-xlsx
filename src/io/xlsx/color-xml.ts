@@ -25,7 +25,7 @@ function normalizeArgb(argb: string): string {
   const rgb = parseArgb(argb);
   if (rgb === undefined) {
     throw new SyntaxError(
-      `Invalid ARGB colour ${quoted(argb)}: expected 6 or 8 hexadecimal digits`,
+      `invalid ARGB colour ${quoted(argb)}: expected 6 or 8 hexadecimal digits`,
     );
   }
   return rgb;

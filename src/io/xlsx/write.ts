@@ -1,18 +1,11 @@
 // The buffered `.xlsx` writer: a Workbook model in, an OPC zip package out.
 //
-// It serialises the part of the model that exists today (worksheets; cells holding a
-// number, string, boolean, or formula; column/row formatting; page margins and
-// header/footer; merged ranges; and worksheet tables) into a valid package (content
-// types, relationships, workbook, per-sheet XML, table parts, the default theme and
-// stylesheet, and core/app properties). Styles, images, and the richer value kinds land
-// as the model grows; until then the writer refuses a value it cannot represent
-// faithfully rather than emitting a lossy or corrupt package.
+// A value the writer cannot represent faithfully is refused rather than emitted as a lossy or corrupt
+// package, and content the model does not interpret is carried through verbatim.
 //
 // This module is the orchestrator: it plans the package graph (via `package-plan.ts`) and
 // stitches the serialised parts (from `workbook-xml.ts` and `worksheet-xml.ts`) into the
-// part map. The row/cell renderer and the sheet's public render types live in
-// `worksheet-xml.ts` and are re-exported here so the streaming writer's import surface is
-// unchanged.
+// part map. The row/cell renderer the streaming writer shares lives in `row-xml.ts`.
 
 import {strToU8, zip, zipSync} from 'fflate';
 
@@ -85,10 +78,10 @@ import {type SheetReferences, worksheetXml} from './worksheet-xml.ts';
 /** Options controlling how {@link writeXlsx} serialises a workbook. */
 export interface WriteOptions {
   /**
-   * Pool plain string cell values into a shared-strings table (`xl/sharedStrings.xml`) that cells
-   * reference by index, rather than storing each string inline in its cell. Deduplicates repeated
-   * text and matches Excel's own storage; off by default, which keeps strings inline and omits the
-   * part. Rich-text values stay inline regardless, so their run formatting is unaffected.
+   * Pool string and rich-text cell values into a shared-strings table (`xl/sharedStrings.xml`) that
+   * cells reference by index, rather than storing each inline in its cell. Deduplicates repeated text
+   * and matches Excel's own storage; a rich value is pooled as a `<si>` of its runs, so its formatting
+   * survives. Off by default, which keeps strings inline and omits the part.
    */
   readonly useSharedStrings?: boolean;
 }

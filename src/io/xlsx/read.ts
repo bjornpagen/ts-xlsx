@@ -1,12 +1,8 @@
 // The buffered `.xlsx` reader: an OPC zip package in, a Workbook model out.
 //
-// It reconstructs the part of the model the writer emits today: sheet names and order,
-// cells holding a number, string, boolean, or formula, per-column width/visibility,
-// per-row height/visibility, merged ranges, page margins, and cell styles (pattern fills,
-// number formats, fonts, borders, alignment, and protection, per cell or inherited from a
-// formatted row/column). Shared-formula slaves and the richer value kinds land as the model
-// grows; an unrecognised construct is skipped rather than guessed, so a foreign file reads
-// without crashing even where a facet is not yet materialised.
+// An unrecognised construct is skipped rather than guessed, and content the model does not interpret
+// is carried verbatim as preserved parts, so a foreign file reads without crashing and writes back
+// with what it held.
 //
 // This module is the orchestrator, and now only that. It wires the parsed package parts together (the
 // OPC/rel resolution in `../opc/read-opc.ts`, the style table in `./read-styles.ts`, each worksheet
@@ -77,21 +73,6 @@ import {
   workbookViewPass,
 } from './read-workbook-xml.ts';
 import {worksheetPass} from './read-worksheet.ts';
-
-// The read option bag is shared with the `.xlsb` reader and the row streamer, so it is declared apart
-// from all three; it stays reachable here because this is the entry point callers reach for. The
-// bound's default is not re-exported: `openSpreadsheetPackage` applies it, and no caller names it.
-export type {ReadPackageOptions} from '../opc/read-options.ts';
-export type {StyleTable, XfStyle} from '../style/xf-style.ts';
-export {parseStyleTable} from './read-styles.ts';
-// Re-exported rather than moved out of reach: the row streamer and this module read the same workbook
-// part, and `read.ts` is the entry a caller already has in hand.
-export {
-  type SheetEntry,
-  workbookPropertiesPass,
-  workbookSheetsPass,
-  workbookViewPass,
-} from './read-workbook-xml.ts';
 
 /**
  * Read a spreadsheet package into a {@link Workbook}.
@@ -240,14 +221,11 @@ export function readXlsx(data: Uint8Array, options: ReadPackageOptions = {}): Wo
 }
 
 /**
- * Everything a single sheet needs from the package around it, gathered once for the whole sheet loop
- * so {@link readSheet} takes a context rather than seven positional arguments. `imageIdByMediaPath`
- * is the one mutable member, and is deliberately shared across sheets: that sharing is what makes a
- * picture used on two of them resolve to one workbook image rather than two copies of the bytes.
+ * Everything a single sheet needs from the package around it: the package-wide read state, plus the
+ * two tables only a *sheet* body decodes against. A cell's `t="s"` indexes the pool and its `s=`
+ * indexes the xfs. Both are resolved before the workbook part is even scanned, so the whole read
+ * shares one object, and {@link readSheet} takes it rather than a run of positional arguments.
  */
-// The package-wide read state, plus the two tables only a *sheet* body decodes against: a cell's
-// `t="s"` indexes the pool and its `s=` indexes the xfs. Both are resolved before the workbook part
-// is even scanned, so the whole read shares one object.
 interface SheetReadContext extends PackageReadContext {
   readonly sharedStrings: readonly SharedString[];
   readonly xfStyles: readonly XfStyle[];

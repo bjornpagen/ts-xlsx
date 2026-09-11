@@ -1,7 +1,7 @@
 // Writer for the OLE2 / Compound File Binary format ([MS-CFB]): the encode counterpart to cfb.ts.
 //
-// Produces a v3 (512-byte sector) container from a hierarchy of storages and streams, the substrate a
-// synthesized vbaProject.bin is built on (its modules live inside a `VBA` storage, with `PROJECT` and
+// Produces a v3 (512-byte sector) container from a hierarchy of storages and streams, which is how an
+// edited vbaProject.bin is written back (its modules live inside a `VBA` storage, with `PROJECT` and
 // `PROJECTwm` at the root). Streams below the 4096-byte mini cutoff are packed into the mini stream and
 // chained through the mini-FAT; larger streams take whole regular sectors. Each storage's children are
 // emitted as a name-ordered balanced binary tree ([MS-CFB] 2.6.4), so a host that *navigates* the tree

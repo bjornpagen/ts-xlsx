@@ -1,8 +1,7 @@
 // Minimal XML serialisation helpers for the write path.
 //
-// Writing OOXML needs only correct escaping and well-formed structure; parsing (the
-// reader's concern) is a separate, later decision, so no XML library is on the write
-// path. Escaping is the one hard, security-relevant requirement, since an unescaped `<`,
+// Writing OOXML needs only correct escaping and well-formed structure, so no XML library is on the
+// write path; the reader's own scanner is `xml-scan.ts` (ADR 0004). Escaping is the one hard, security-relevant requirement, since an unescaped `<`,
 // `&`, or `"` produces a malformed package a consumer rejects, so it lives here,
 // audited once, rather than sprinkled through the part emitters.
 //
@@ -138,7 +137,7 @@ export function escapeFormatCode(code: string): string {
  * `escapeText` runs last and sees no unrepresentable character left, so its guard is a
  * standing proof that the escape was complete rather than a second check of the same thing.
  *
- * Reversed by `decodeSpreadsheetText` in `./xml-scan.ts`, whose single left-to-right pass is what
+ * Reversed by `decodeSpreadsheetText` in `./xml-attrs.ts`, whose single left-to-right pass is what
  * makes the `_x005F_` step above reversible. Change either and read its comment first.
  */
 export function escapeSpreadsheetText(value: string): string {

@@ -313,7 +313,7 @@ export class CellAccumulator {
         ...(boolStrict(this.#dataTable.dtr) ? {dataTableRow: true} : {}),
         ...(this.#dataTable.r1 !== undefined ? {r1: this.#dataTable.r1} : {}),
         ...(this.#dataTable.r2 !== undefined ? {r2: this.#dataTable.r2} : {}),
-        ...this.cachedResult(style),
+        ...this.#cachedResult(style),
       };
     }
     if (this.#hasFormula && this.#formulaShared && this.#formulaSi >= 0) {
@@ -330,7 +330,7 @@ export class CellAccumulator {
           sharedFormula: encodeAddress(master.col, master.row),
           formula: unmangleFunctions(translated),
           // A clone's cached result honours the cell's date format the same way a plain formula's does.
-          ...this.cachedResult(style),
+          ...this.#cachedResult(style),
         };
       }
     }
@@ -341,7 +341,7 @@ export class CellAccumulator {
   // read is no cached result, so the key is omitted rather than set to `undefined`: the value is
   // then indistinguishable from a formula cell that carried no `<v>` at all, which is what the
   // writer will emit for it either way.
-  private cachedResult(style: XfStyle | undefined): {result?: FormulaResult} {
+  #cachedResult(style: XfStyle | undefined): {result?: FormulaResult} {
     if (!this.#hasValue) return {};
     const result = decodeFormulaResult(this.#type, this.#valueText, style?.numFmt, this.#dateEpoch);
     return result === undefined ? {} : {result};

@@ -27,24 +27,20 @@ import {numInteger} from '../../xml/xml-attrs.ts';
 import {closeEmptyElements, parseXmlPasses} from '../../xml/xml-read.ts';
 import {boolStrict, localName, type XmlAttributes, xmlEvents} from '../../xml/xml-scan.ts';
 import {openSpreadsheetPackage, readPartRelationships} from '../opc/read-opc.ts';
+import type {ReadPackageOptions} from '../opc/read-options.ts';
 import {unsupportedWorkbookPart} from '../opc/sniff-format.ts';
 import {ColumnRecordBudget} from '../read-policy/column-budget.ts';
 import {admitting, repairedSheetNames} from '../read-policy/read-repair.ts';
 import {CellStyleResolver} from '../style/cell-style-resolution.ts';
+import type {XfStyle} from '../style/xf-style.ts';
 import {CellAccumulator, WORKSHEET_BODY_EMPTY_CLOSES} from './cell-accumulator.ts';
 import type {SharedString} from './cell-value.ts';
 import {takeColumnSpan} from './column-span.ts';
 import {XlsxParseError} from './errors.ts';
 import {SHARED_STRINGS_PART, STYLES_PART} from './part-names.ts';
 import {parseSharedStrings} from './read-shared-strings.ts';
-import {
-  workbookPropertiesPass,
-  parseStyleTable,
-  workbookSheetsPass,
-  type ReadPackageOptions,
-  type SheetEntry,
-  type XfStyle,
-} from './read.ts';
+import {parseStyleTable} from './read-styles.ts';
+import {type SheetEntry, workbookPropertiesPass, workbookSheetsPass} from './read-workbook-xml.ts';
 import {RowPositionTracker} from './row-position.ts';
 
 export interface ReadSheetRowsOptions extends ReadPackageOptions {

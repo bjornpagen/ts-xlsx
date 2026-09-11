@@ -75,13 +75,20 @@ export type PageSetupFacet =
       /** A non-negative integer: a page count, a percentage, or a paper-size id. */
       readonly kind: 'count';
     }
-  | {
-      readonly key: 'pageOrder' | 'orientation';
-      readonly kind: 'token';
-      /** The enumeration guard, and what to call it in the error when a value fails it. */
-      readonly isValid: (value: string) => boolean;
-      readonly label: string;
-    };
+  | PageSetupTokenFacet<'pageOrder', PageOrder>
+  | PageSetupTokenFacet<'orientation', PageOrientation>;
+
+/**
+ * An enumerated `<pageSetup>` attribute. One entry per key, each with a guard that narrows to that
+ * key's own union, so a reader holding the entry can assign what the guard accepted without a cast.
+ */
+interface PageSetupTokenFacet<K extends keyof PageSetup, T extends string> {
+  readonly key: K;
+  readonly kind: 'token';
+  /** The enumeration guard, and what to call it in the error when a value fails it. */
+  readonly isValid: (value: string) => value is T;
+  readonly label: string;
+}
 
 /**
  * The six `<pageSetup>` attributes, declared once, in CT_PageSetup order. Both directions key off

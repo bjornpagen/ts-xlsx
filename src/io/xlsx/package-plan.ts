@@ -158,7 +158,8 @@ export interface PreservedReferencePlan extends ResolvedPreservedReference {
 // A preserved workbook reference resolved for serialisation: its relationship Type, the new path of
 // the entry part, and, for a pivot cache, the `cacheId` its `<pivotCaches>` registration carries.
 // The workbook relationship id is recorded at emit time (it follows the modeled workbook rels, whose
-// number depends on whether a shared-strings part is emitted), so it is not fixed here.
+// number depends on whether a shared-strings part and a person registry are emitted), so it is not
+// fixed here.
 export interface PreservedWorkbookReferencePlan {
   readonly relType: string;
   readonly entryPath: string;

@@ -272,8 +272,8 @@ function identity(attrs: XmlAttributes): {
 
 // Build the element tree from the SAX event stream with an explicit stack (no recursion), capping depth
 // so a hostile part cannot force the later recursive walk to overflow. Text and comments carry no ribbon
-// meaning and are ignored. Throws CustomUiParseError on unbalanced markup; a lower-level SyntaxError from
-// the scanner is caught and re-wrapped by the caller.
+// meaning and are ignored. Throws CustomUiParseError on unbalanced markup; an XmlParseError from the
+// scanner is caught and re-wrapped by the caller.
 function buildTree(xml: string): RawElement {
   const root: RawElement = {name: '#root', local: '#root', attrs: {}, children: []};
   const stack: RawElement[] = [root];

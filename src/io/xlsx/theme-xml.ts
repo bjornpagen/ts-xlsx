@@ -71,7 +71,7 @@ function readThemeScheme(themeXml: string): ThemeScheme {
   let fontSlot: 'major' | 'minor' | undefined;
 
   parseXml(themeXml, {
-    onOpen(name, attrs, _selfClosing, scope) {
+    onOpen(name, attrs) {
       const local = localName(name);
       if (local === 'theme') {
         const colon = name.indexOf(':');
@@ -105,7 +105,6 @@ function readThemeScheme(themeXml: string): ThemeScheme {
           fonts[fontSlot] ??= attrs.typeface;
         }
       }
-      void scope;
     },
     onClose(name) {
       const local = localName(name);
@@ -128,7 +127,8 @@ function readThemeScheme(themeXml: string): ThemeScheme {
 }
 
 // Re-render an empty element from its parsed name and attributes. Attribute order is the scanner's,
-// which is the source's, so for the single-element colour children this captures it is the source text.
+// which is the source's, so for the single-element colour children this captures it is the source
+// text, and an override merged over a `<latin>` keeps its attributes where they were.
 function emptyElement(name: string, attrs: XmlAttributes): string {
   let out = `<${name}`;
   for (const key in attrs) out += ` ${key}="${escapeAttr(attrs[key] ?? '')}"`;
@@ -151,6 +151,16 @@ export function parseThemeColorScheme(themeXml: string): ThemeColorScheme {
 /** Extract the major/minor latin typefaces from a theme part's `<fontScheme>`. */
 export function parseThemeFontScheme(themeXml: string): ThemeFontScheme {
   return readThemeScheme(themeXml).fonts;
+}
+
+/** {@link parseThemeColorScheme} and {@link parseThemeFontScheme} from one scan of the part, for the
+ * reader, which wants both. */
+export function parseThemeSchemes(themeXml: string): {
+  readonly colors: ThemeColorScheme;
+  readonly fonts: ThemeFontScheme;
+} {
+  const {colors, fonts} = readThemeScheme(themeXml);
+  return {colors, fonts};
 }
 
 // The `<a:clrScheme>` child order: dk1, lt1, dk2, lt2, accent1..6, hlink, folHlink. Not the order
@@ -241,10 +251,11 @@ export function applyThemeOverrides(baseXml: string, overrides: ThemeOverrides):
     // them, which is what keeps the `panose` metric beside it. The old regex captured everything
     // after the element name and re-emitted only the typeface, so the claim in this file that panose
     // survived an override was false for as long as it was written down.
-    const attrs: Record<string, string> = {...found.attrs, typeface};
-    let rendered = `<${found.name}`;
-    for (const key in attrs) rendered += ` ${key}="${escapeAttr(attrs[key] ?? '')}"`;
-    edits.push({start: found.start, end: found.end, text: `${rendered}/>`});
+    edits.push({
+      start: found.start,
+      end: found.end,
+      text: emptyElement(found.name, {...found.attrs, typeface}),
+    });
   };
   if (major !== undefined) latin('majorFont', major);
   if (minor !== undefined) latin('minorFont', minor);

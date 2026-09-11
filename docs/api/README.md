@@ -47,6 +47,7 @@ its TypeScript declaration, so the types are the contract.
 - **[Vba Project](./vba-project.md)**: [`parseVbaProject`](./vba-project.md#parsevbaproject), [`VbaModule`](./vba-project.md#vbamodule), [`VbaModuleKind`](./vba-project.md#vbamodulekind), [`VbaProject`](./vba-project.md#vbaproject), [`VbaProjectSignature`](./vba-project.md#vbaprojectsignature), [`VbaProjectSignatureKind`](./vba-project.md#vbaprojectsignaturekind)
 - **[Vba Project Editor](./vba-project-editor.md)**: [`addVbaReference`](./vba-project-editor.md#addvbareference), [`removeVbaModule`](./vba-project-editor.md#removevbamodule), [`VbaLibraryReference`](./vba-project-editor.md#vbalibraryreference)
 - **[Workbook Styles](./workbook-styles.md)**: [`DifferentialStyle`](./workbook-styles.md#differentialstyle), [`NamedCellStyle`](./workbook-styles.md#namedcellstyle), [`TableStyleDefinition`](./workbook-styles.md#tablestyledefinition), [`TableStyleNamespace`](./workbook-styles.md#tablestylenamespace), [`TableStyleTable`](./workbook-styles.md#tablestyletable)
+- **[Worksheet Pictures](./worksheet-pictures.md)**: [`PixelAnchor`](./worksheet-pictures.md#pixelanchor)
 - **[Xlsb Errors](./xlsb-errors.md)**: [`XlsbParseError`](./xlsb-errors.md#xlsbparseerror)
 - **[Xlsb Read](./xlsb-read.md)**: [`readXlsb`](./xlsb-read.md#readxlsb)
 - **[Xlsx Edit Vba](./xlsx-edit-vba.md)**: [`editXlsxVbaAddReference`](./xlsx-edit-vba.md#editxlsxvbaaddreference), [`editXlsxVbaRemoveModule`](./xlsx-edit-vba.md#editxlsxvbaremovemodule)

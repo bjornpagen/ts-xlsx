@@ -354,13 +354,6 @@ interface RowOutline {
   readonly maxLevel: number;
 }
 
-// A collapsed outline group is two coordinated facts: its detail rows carry outlineLevel and are
-// hidden, AND the summary row that terminates the group carries `collapsed`. Authors typically set
-// only outlineLevel + hidden on the detail rows, so the summary flag is derived here rather than
-// demanded of the caller: a row is a collapsed summary iff its adjacent detail run, the contiguous
-// higher-outline-level rows on the summary side, is non-empty and every row in it is hidden.
-// Placement follows the sheet's summaryBelow flag (Excel's default is summary below the detail); the
-// walk stops at the first row of level <= the summary's own, so a gap or a boundary ends the group.
 /**
  * Add `collapsed="1"` to a flushed summary row whose whole detail group turned out to be hidden.
  *
@@ -394,6 +387,13 @@ function completeCollapsed(
   };
 }
 
+// A collapsed outline group is two coordinated facts: its detail rows carry outlineLevel and are
+// hidden, AND the summary row that terminates the group carries `collapsed`. Authors typically set
+// only outlineLevel + hidden on the detail rows, so the summary flag is derived here rather than
+// demanded of the caller: a row is a collapsed summary iff its adjacent detail run, the contiguous
+// higher-outline-level rows on the summary side, is non-empty and every row in it is hidden.
+// Placement follows the sheet's summaryBelow flag (Excel's default is summary below the detail); the
+// walk stops at the first row of level <= the summary's own, so a gap or a boundary ends the group.
 function scanRowOutline(sheet: Worksheet, flushed: FlushedSheet | undefined): RowOutline {
   const level = new Map<number, number>();
   const hidden = new Map<number, boolean>();

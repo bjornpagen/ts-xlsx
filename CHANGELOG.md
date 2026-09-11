@@ -26,7 +26,15 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 - **`CsvParseError`** on `/errors`, code `malformed-input`, for CSV text that does not fit a worksheet.
 
+- **`PixelAnchor`** on `/core`: the pixel-unit anchor `Worksheet.addImage` takes, so an anchor built
+  ahead of the call can be typed.
+
 ### Changed
+
+- **`AuthoringError` messages for a value outside an OOXML enumeration, or a malformed ARGB colour,
+  start lowercase**, as every other message does: `invalid page orientation "…"` rather than
+  `Invalid page orientation "…"`. Code matching the message text case-sensitively needs updating;
+  `code` is unchanged.
 
 - **BREAKING: `readCsv` keeps a number with more than 15 significant digits as text.** The reader
   promised no digit is lost, but checked only magnitude, so `3.14159265358979323846` read as

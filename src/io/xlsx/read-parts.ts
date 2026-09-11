@@ -29,7 +29,7 @@ import {parseDrawing} from './images.ts';
 import {type ParsedComment, parseComments} from './read-comments.ts';
 import {parsePivotTable} from './read-pivot.ts';
 import {parseTable} from './tables.ts';
-import {parseThemeColorScheme, parseThemeFontScheme} from './theme-xml.ts';
+import {parseThemeSchemes} from './theme-xml.ts';
 import {buildCommentThreads, parsePersons, parseThreadedComments} from './threaded-comments.ts';
 
 /**
@@ -94,10 +94,7 @@ export function readWorkbookTheme(
   // The schemes are decoded here rather than on demand from the model: the part rides through the
   // model as opaque bytes, and only the codec knows how to read one.
   const xml = pkg.partText(entryPath) ?? '';
-  workbook[INTERNAL].restoreThemePart(
-    {entryPath, parts},
-    {colors: parseThemeColorScheme(xml), fonts: parseThemeFontScheme(xml)},
-  );
+  workbook[INTERNAL].restoreThemePart({entryPath, parts}, parseThemeSchemes(xml));
 }
 
 // A sheet's threaded conversations live in a `xl/threadedComments/threadedComment{n}.xml` part reached
@@ -328,8 +325,6 @@ function isPreservedWorkbookRelType(type: string): boolean {
   return isAnyRelType(type, 'pivotCacheDefinition', 'slicerCache', 'vbaProject', 'externalLink');
 }
 
-// Map each `<pivotCache>` registration in the workbook's `<pivotCaches>` to the relationship id that
-// reaches its cache definition, so a preserved cache carries the `cacheId` a pivot table refers to.
 /** The two `<pivotCaches>`/`<externalReferences>` registries a preserved reference is wired by,
  * gathered from the workbook part's own scan rather than from two more of it. */
 export interface WorkbookRegistrations {
@@ -337,6 +332,8 @@ export interface WorkbookRegistrations {
   readonly externalIndexByRelId: ReadonlyMap<string, number>;
 }
 
+// Map each `<pivotCache>` registration in the workbook's `<pivotCaches>` to the relationship id that
+// reaches its cache definition, so a preserved cache carries the `cacheId` a pivot table refers to.
 export function pivotCacheRegistrationsPass(): CollectingPass<ReadonlyMap<string, string>> {
   const byRelId = new Map<string, string>();
   return {

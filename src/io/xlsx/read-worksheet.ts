@@ -159,8 +159,8 @@ class AutoFilterAccumulator {
  * merges, the autofilter, page breaks, and the view and print layout. It commits as it goes rather
  * than gathering, so it has nothing to hand back once the parse ends.
  *
- * Offered as a pass because the worksheet is the largest part in a package and four other readers
- * want the same events, so the five share one parse of it rather than scanning it once each.
+ * Offered as a pass because the worksheet is the largest part in a package and other readers want
+ * the same events, so they all share one parse of it rather than scanning it once each.
  */
 export function worksheetPass(
   sheet: Worksheet,
@@ -171,7 +171,6 @@ export function worksheetPass(
   // The one `<c>` currently being read: its address/type/style, formula, value, inline text, rich
   // runs, and the sheet-spanning shared-formula master map. Each `<c>` resets it and commits it.
   const cell = new CellAccumulator({dateEpoch});
-  // A row with customFormat="1" supplies a default style for its cells that carry no `s`.
   const autoFilter = new AutoFilterAccumulator();
   const pageBreaks = new PageBreakAccumulator();
   const styleResolution = new CellStyleResolver();

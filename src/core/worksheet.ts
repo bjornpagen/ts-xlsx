@@ -4,7 +4,6 @@
 // materialise on first access and only occupied positions cost memory. Column and
 // row metadata (widths, heights, visibility, outline grouping) are stored apart from
 // the cell grid, because a column or row can carry formatting while holding no cells.
-// Merges and views layer on in later slices.
 
 import {AuthoringError, quoted} from '../errors.ts';
 import {tokenSet} from '../token-set.ts';
@@ -40,7 +39,7 @@ import type {CellValue} from './value.ts';
 import {WorksheetComments} from './worksheet-comments.ts';
 import {WorksheetMerges} from './worksheet-merges.ts';
 import {WORKSHEET_MODEL_FACETS} from './worksheet-model.ts';
-import {WorksheetPictures} from './worksheet-pictures.ts';
+import {type PixelAnchor, WorksheetPictures} from './worksheet-pictures.ts';
 
 /**
  * Whether a thing Excel can hide is showing: a sheet's tab, or the document window itself.
@@ -286,7 +285,7 @@ export class Worksheet {
   // (a hidden column, a tall header row with no data yet) costs no phantom cells.
   readonly #columns = new Map<number, ColumnProperties>();
   readonly #rowProperties = new Map<number, RowProperties>();
-  // Tables, merged ranges, and anchored images are sheet-level overlays on the grid, not cell storage.
+  // Tables and authored pivot tables are sheet-level overlays on the grid, not cell storage.
   readonly #tables: Table[] = [];
   readonly #pivotTables: PivotTable[] = [];
   // Pivot tables reconstructed from a loaded package (see io/xlsx/read-pivot.ts): a read-only,
@@ -308,8 +307,6 @@ export class Worksheet {
     rowHeight: (row) =>
       this.#rowProperties.get(row + 1)?.height ?? this.properties.defaultRowHeight,
   });
-  // A sheet background is a single workbook image tiled behind the grid, distinct from an anchored
-  // drawing (it has no anchor and rides its own worksheet relationship, not a drawing part).
   // Worksheet-level references to package content the model does not interpret (a vector-shape
   // drawing, a header/footer image), captured verbatim on read so a round-trip re-emits them rather
   // than dropping them. Empty for a sheet authored from scratch.
@@ -556,9 +553,9 @@ export class Worksheet {
    */
   addTable(options: TableOptions): Table {
     const table = new Table(options, {
-      // The guard the materialiser reads through must not create the cell it asks about, so it goes
-      // through `hasCell` rather than `#cellAt`.
-      holdsValue: (row, col) => this.hasCell(row, col) && this.#cellAt(row, col).value != null,
+      // The guard the materialiser reads through must not create the cell it asks about, or touch the
+      // extent, so it reads the grid directly rather than through `#cellAt`.
+      holdsValue: (row, col) => this.#rows.get(row)?.get(col)?.value != null,
       writeCell: (row, col, value, style) => {
         const cell = this.#cellAt(row, col);
         cell.value = value;
@@ -680,12 +677,7 @@ export class Worksheet {
       readonly ext: {readonly width: number; readonly height: number};
     },
   ): void;
-  addImage(
-    imageId: number,
-    anchor:
-      | {readonly tl: AnchorPoint; readonly br: AnchorPoint; readonly editAs?: ImageEditAs}
-      | {readonly tl: AnchorPoint; readonly ext: {readonly width: number; readonly height: number}},
-  ): void {
+  addImage(imageId: number, anchor: PixelAnchor): void {
     refuseImagesBesideKeptDrawing(this);
     this.#images.add(imageId, anchor);
   }

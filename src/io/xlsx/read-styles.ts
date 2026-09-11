@@ -558,58 +558,17 @@ function parseProtection(attrs: XmlAttributes): Protection | undefined {
 // ---------------------------------------------------------------------------------------------
 // The preserved sub-tables.
 //
-// `<indexedColors>`, `<mruColors>` and `<tableStyles>` are read out of styles.xml verbatim rather
-// than modelled, because the workbook needs them re-emitted unchanged and has no use for their
-// contents. They read styles.xml, so they belong here; they lived in the write-side style table
-// only because that is where the first caller happened to be, which left the reader importing the
-// writer to parse a palette.
+// `<dxfs>`, `<indexedColors>`, `<mruColors>` and `<tableStyles>` are read out of styles.xml verbatim
+// rather than modelled, because the workbook needs them re-emitted unchanged and has no use for their
+// contents: the exact entries (count, order, casing) a source file declared survive a round trip, so
+// every `indexed="…"` reference keeps its RGB and every `dxfId` its differential style.
 // ---------------------------------------------------------------------------------------------
 
-/**
- * Extract the custom indexed-color palette (`<colors><indexedColors>`) from styles.xml as verbatim
- * `<rgbColor rgb="…"/>` fragments, or an empty list when the file rides the default palette. Kept raw
- * rather than parsed into RGB and re-serialised, so the exact entries (count, order, casing) a
- * source file declared survive a round-trip and every `indexed="…"` reference keeps its RGB.
- */
-export function parseIndexedColors(stylesXml: string): string[] {
-  return capturedFragments(stylesXml, 'indexedColors');
-}
-
-/**
- * Extract the most-recently-used colour swatches (`<colors><mruColors>`) from styles.xml as verbatim
- * `<color .../>` fragments, or an empty list when the file declares none. Kept raw for the same reason
- * the indexed palette is: the list is the author's own working set of colours and the model has no
- * use for its contents, only for not losing them.
- */
-export function parseMruColors(stylesXml: string): string[] {
-  return capturedFragments(stylesXml, 'mruColors');
-}
-
-/**
- * Extract the `<tableStyles>` block from styles.xml: each `<tableStyle>` definition verbatim, plus the
- * container's nominated `defaultTableStyle`/`defaultPivotStyle`. See {@link TableStyleTable} for why
- * the definitions stay raw while the two names are decoded.
- *
- * A file with no such block, or with the self-closing `count="0"` container Excel writes when it has
- * only defaults to state, yields an empty {@link TableStyleTable.styles} and whichever names it did
- * carry.
- */
-export function parseTableStyles(stylesXml: string): TableStyleTable {
-  const {fragments, attributes} = elementSubtrees(
-    stylesXml,
-    new Map([['tableStyles', 'tableStyle']]),
-  );
-  return buildTableStyleTable(
-    stylesXml,
-    fragments.get('tableStyles') ?? [],
-    attributes.get('tableStyles'),
-  );
-}
-
-// Assemble the table from what a capture of `<tableStyles>` yielded: the definitions verbatim, the
-// container's two nominated default names, and the namespace declarations the definitions depend on.
-// Separate from the capture so the whole-stylesheet pass and the standalone extractor build it the
-// same way from the same three inputs.
+// Assemble the table from what a capture of `<tableStyles>` yielded: the definitions verbatim (see
+// {@link TableStyleTable} for why they stay raw while the two names are decoded), the container's two
+// nominated default names, and the namespace declarations the definitions depend on. A file with no
+// such block, or with the self-closing `count="0"` container Excel writes when it has only defaults to
+// state, yields no definitions and whichever names it did carry.
 function buildTableStyleTable(
   stylesXml: string,
   styles: readonly string[],
@@ -682,19 +641,10 @@ function fragmentNamespaces(
 }
 
 // Every preserved styles sub-table is the verbatim children of one container, so the four of them
-// are named once here and captured in a single scan. {@link parseStyleTable} takes all four that way;
-// the four exported extractors below capture only their own, for a caller reading one in isolation.
+// are named once here and {@link parseStyleTable} captures them in a single scan.
 const PRESERVED_SUBTREES: SubtreeSelection = new Map([
   ['dxfs', 'dxf'],
   ['indexedColors', 'rgbColor'],
   ['mruColors', 'color'],
   ['tableStyles', 'tableStyle'],
 ]);
-
-// One container's verbatim children, over a scan of its own.
-function capturedFragments(xml: string, container: string): string[] {
-  const child = PRESERVED_SUBTREES.get(container);
-  if (child === undefined) return [];
-  const {fragments} = elementSubtrees(xml, new Map([[container, child]]));
-  return [...(fragments.get(container) ?? [])];
-}
