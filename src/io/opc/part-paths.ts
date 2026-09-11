@@ -57,12 +57,15 @@ export function relativePartPath(fromPath: string, toPath: string): string {
 // absolute from the package root) into a package part path, collapsing `.`/`..` segments. Unlike
 // {@link relativePartPath}, whose inputs the writer produced, this one reads a Target that came
 // verbatim out of an untrusted package, so every OPC-legal shape a well-formed writer never emits
-// still has to land on a bounded path.
+// still has to land on a bounded path. An absolute target goes through the same segment walk as a
+// relative one: `/xl/../xl/worksheets/sheet1.xml` and `//xl/styles.xml` name real parts, and stripping
+// only the leading slash left a key no part answers to.
 export function resolveRelativePart(basePart: string, target: string): string {
-  if (target.startsWith('/')) return target.slice(1);
-  const baseDir = basePart.slice(0, basePart.lastIndexOf('/') + 1);
+  const joined = target.startsWith('/')
+    ? target
+    : `${basePart.slice(0, basePart.lastIndexOf('/') + 1)}${target}`;
   const out: string[] = [];
-  for (const segment of `${baseDir}${target}`.split('/')) {
+  for (const segment of joined.split('/')) {
     if (segment === '' || segment === '.') continue;
     if (segment === '..') out.pop();
     else out.push(segment);

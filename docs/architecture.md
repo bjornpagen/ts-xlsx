@@ -582,7 +582,10 @@ offsets, so everything outside the range it names is spliced through byte for by
 the comments, the attribute order, the prefix the source chose -- which is a guarantee no
 re-serialisation can make. It replaced three `<container>[\s\S]*?</container>` regular expressions
 in `theme-xml.ts`, the one file whose own header condemns that pattern, on a path a preserved source
-theme's bytes reach.
+theme's bytes reach. The package-level VBA edit (`edit-vba.ts`) removes a stale signature's
+relationship and content-type override the same way, matching each element by its decoded attributes,
+so a single-quoted `Id` or a differently cased `PartName` is not left naming a deleted part. It finds
+parts through the reader's case-folding accessors and writes back under the package's own spelling.
 
 A **reference** is a foreign scalar like any other, and has its own tolerant pair in
 `core/address.ts`: `tryDecodeCellRef` and `tryDecodeRange`, returning `undefined` where
@@ -662,7 +665,8 @@ recognisable as a change to a property somebody checked rather than to an implem
   entities by name, leaves an unknown one verbatim, and skips a `<!DOCTYPE>` by balancing brackets.
   There is nothing to expand.
 - **Path traversal in a relationship target is clamped.** `resolveRelativePart` pops `..` without
-  going below the root, and a part is a key in a map, never a filesystem path.
+  going below the root, for an absolute target as for a relative one, and a part is a key in a map,
+  never a filesystem path.
 - **The inflate bound consults no declared size.** The counter aborts on bytes actually produced, so
   a header that lies about its uncompressed length buys nothing.
 - **`<dimension ref>` and `<row spans>` drive no preallocation.** Both are hints a file chooses, and

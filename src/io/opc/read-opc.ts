@@ -22,6 +22,10 @@ export interface PackageAccessors {
   partText: (path: string) => string | undefined;
   /** A part's raw bytes, or undefined when the package holds no such part. */
   partBytes: (path: string) => Uint8Array | undefined;
+  /** The package's own spelling of the part the other two would answer for `path`, or undefined when
+   * there is none: the key an editor replaces or deletes, so it acts on the entry a read found rather
+   * than adding a second one beside it. */
+  partKey: (path: string) => string | undefined;
 }
 
 /** A spreadsheet package opened for reading: inflated under the read bound, its parts bound to
@@ -91,8 +95,8 @@ function conventionalDocument(pkg: PackageAccessors): string {
 
 // Bind the part-lookup accessors over an inflated package (a part-path → bytes map).
 //
-// Both members are declared as function-typed properties rather than with method syntax, and both
-// are written as arrows here, because every reader destructures them off the returned object:
+// Every member is declared as a function-typed property rather than with method syntax, and each
+// is written as an arrow here, because every reader destructures them off the returned object:
 // `const {partText, partBytes} = packageAccessors(files)`. Method syntax would say these values
 // may read `this`, which they never do (they close over `files`), and would make each of those
 // fifteen destructurings report as an unbound method. Property syntax is also the stricter
@@ -105,19 +109,24 @@ export function packageAccessors(files: Record<string, Uint8Array>): PackageAcce
   // ordinary path a single map read and keeps two entries differing only in case resolving to the one
   // actually asked for; the folded map holds the first of them in package order, which is a choice
   // only a package no OPC writer can produce ever notices.
-  const folded = new Map<string, Uint8Array>();
-  for (const [path, bytes] of Object.entries(files)) {
+  const folded = new Map<string, string>();
+  for (const path of Object.keys(files)) {
     const key = path.toLowerCase();
-    if (!folded.has(key)) folded.set(key, bytes);
+    if (!folded.has(key)) folded.set(key, path);
   }
-  const lookup = (path: string): Uint8Array | undefined =>
-    files[path] ?? folded.get(path.toLowerCase());
+  const partKey = (path: string): string | undefined =>
+    files[path] === undefined ? folded.get(path.toLowerCase()) : path;
+  const lookup = (path: string): Uint8Array | undefined => {
+    const key = partKey(path);
+    return key === undefined ? undefined : files[key];
+  };
   return {
     partText: (path: string): string | undefined => {
       const bytes = lookup(path);
       return bytes === undefined ? undefined : strFromU8(bytes);
     },
     partBytes: lookup,
+    partKey,
   };
 }
 

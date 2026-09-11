@@ -98,6 +98,18 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Fixed
 
+- **An absolute relationship target with `..` or a doubled slash named no part.** A target such as
+  `/xl/../xl/worksheets/sheet1.xml` or `//xl/styles.xml` had only its leading slash removed, so the
+  sheet, string pool or stylesheet it names read as missing. Absolute targets are now normalised the
+  way relative ones are.
+
+- **`editXlsxVbaRemoveModule` and `editXlsxVbaAddReference` refused packages `readXlsx` opens.** A
+  package whose entry names were cased unlike its relationship targets (`xl/VbaProject.bin` under a
+  target `vbaProject.bin`) threw `VbaAuthorError` as having no VBA project. The edits now find parts the
+  way the reader does and write back under the package's own names. A stale signature's relationship
+  and content-type override are also removed when written with single quotes or a differently cased
+  part name, which used to leave them naming the deleted signature part.
+
 - **A double quote inside an unquoted CSV field swallowed the rows after it.** Any `"` opened a quoted
   field, so `John,5'10",tall` followed by `Jane,5'2",short` read as one row whose second field ran to
   the next quote. A quote now opens a quoted field only as the field's first character, as in Excel;

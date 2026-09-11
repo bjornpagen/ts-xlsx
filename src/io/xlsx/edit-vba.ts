@@ -14,7 +14,7 @@
 // so that needs the offline `tools/vba-compiler` (VBIDE), which can produce a whole edited `.xlsm`
 // directly (ADR 0019).
 
-import {strFromU8, strToU8, zipSync} from 'fflate';
+import {strToU8, zipSync} from 'fflate';
 
 import {VbaAuthorError} from '../../vba/errors.ts';
 import {
@@ -22,8 +22,15 @@ import {
   removeVbaModule,
   type VbaLibraryReference,
 } from '../../vba/project-editor.ts';
+import {elementRange} from '../../xml/xml-read.ts';
+import type {XmlAttributes} from '../../xml/xml-scan.ts';
 import {relsPathFor, resolveRelativePart} from '../opc/part-paths.ts';
-import {parseRelationshipRecords, readPartRelationships} from '../opc/read-opc.ts';
+import {
+  type PackageAccessors,
+  packageAccessors,
+  parseRelationshipRecords,
+  readPartRelationships,
+} from '../opc/read-opc.ts';
 import {DEFAULT_MAX_UNCOMPRESSED, type ReadPackageOptions} from '../opc/read-options.ts';
 import {inflateSpreadsheetPackage} from '../opc/sniff-format.ts';
 import {FIXED_ENTRY_MTIME} from '../opc/zip-mtime.ts';
@@ -93,14 +100,20 @@ function applyToVbaProjectPart(
     options.maxUncompressedBytes ?? DEFAULT_MAX_UNCOMPRESSED,
   );
 
-  const binPath = locateVbaProjectPart(files);
-  const bin = binPath === undefined ? undefined : files[binPath];
-  if (binPath === undefined || bin === undefined) {
+  // Every part is found the way `readXlsx` finds it, case folded, and then replaced or deleted under
+  // the package's own spelling of it. An exact-key lookup refused a package the reader opens (an entry
+  // `xl/VbaProject.bin` under a target `vbaProject.bin`) as having no project, and a delete by the
+  // resolved spelling left the real entry beside a new one.
+  const pkg = packageAccessors(files);
+  const binPath = locateVbaProjectPart(pkg);
+  const binKey = binPath === undefined ? undefined : pkg.partKey(binPath);
+  const bin = binKey === undefined ? undefined : files[binKey];
+  if (binPath === undefined || binKey === undefined || bin === undefined) {
     throw new VbaAuthorError('package has no VBA project to edit');
   }
 
-  files[binPath] = apply(bin);
-  dropStaleSignature(files, binPath);
+  files[binKey] = apply(bin);
+  dropStaleSignature(files, pkg, binPath);
 
   // Re-stamped rather than preserved: `unzipSync` hands back bytes and drops each entry's original
   // timestamp, so there is nothing to carry through: the choice is a pinned stamp or the clock, and
@@ -111,62 +124,76 @@ function applyToVbaProjectPart(
 // Resolve the package's `xl/vbaProject.bin` part the way the reader does: `_rels/.rels` → the
 // officeDocument (workbook) part → its `.rels` → the `vbaProject` relationship, each target resolved
 // relative to its referrer. undefined when the package declares no such relationship (a macro-free book).
-function locateVbaProjectPart(files: Record<string, Uint8Array>): string | undefined {
-  const partText = (path: string): string | undefined => textPart(files, path);
-  const workbookPath = readPartRelationships('', partText).targetPath(OFFICE_DOCUMENT_REL);
+function locateVbaProjectPart(pkg: PackageAccessors): string | undefined {
+  const workbookPath = readPartRelationships('', pkg.partText).targetPath(OFFICE_DOCUMENT_REL);
   if (workbookPath === undefined) return undefined;
-  return readPartRelationships(workbookPath, partText).targetPath(VBA_PROJECT_REL);
+  return readPartRelationships(workbookPath, pkg.partText).targetPath(VBA_PROJECT_REL);
 }
 
 // Editing the project invalidates any signature over it, so remove every signature part the project's
 // `.rels` reaches, the relationships that point at them, and their content-type overrides, leaving a
 // package that advertises no signature rather than a broken one (mirrors Workbook.vbaProjectBytes).
-function dropStaleSignature(files: Record<string, Uint8Array>, binPath: string): void {
-  const binRelsPath = relsPathFor(binPath);
-  const binRels = textPart(files, binRelsPath);
-  if (binRels === undefined) return;
+//
+// `pkg` was bound before the project was replaced and still answers for the edited package: it reads
+// bytes out of `files` when asked, and replacing the project kept the entry's key.
+function dropStaleSignature(
+  files: Record<string, Uint8Array>,
+  pkg: PackageAccessors,
+  binPath: string,
+): void {
+  const binRelsKey = pkg.partKey(relsPathFor(binPath));
+  const binRels = binRelsKey === undefined ? undefined : pkg.partText(binRelsKey);
+  if (binRelsKey === undefined || binRels === undefined) return;
 
   const signatureRels = parseRelationshipRecords(binRels).filter(
     (rel) => !rel.external && rel.type.includes(VBA_SIGNATURE_REL_INFIX),
   );
   if (signatureRels.length === 0) return;
 
-  let contentTypes = textPart(files, '[Content_Types].xml');
+  const contentTypesKey = pkg.partKey(CONTENT_TYPES_PART);
+  let contentTypes = contentTypesKey === undefined ? undefined : pkg.partText(contentTypesKey);
   let rels = binRels;
   for (const rel of signatureRels) {
     const partPath = resolveRelativePart(binPath, rel.target);
-    delete files[partPath];
-    rels = removeRelationshipById(rels, rel.id);
-    if (contentTypes !== undefined)
-      contentTypes = removeContentTypeOverride(contentTypes, partPath);
+    const partKey = pkg.partKey(partPath);
+    if (partKey !== undefined) delete files[partKey];
+    const partName = `/${partPath}`.toLowerCase();
+    rels = removeElements(rels, 'Relationship', (attrs) => attrs.Id === rel.id);
+    if (contentTypes !== undefined) {
+      contentTypes = removeElements(
+        contentTypes,
+        'Override',
+        (attrs) => attrs.PartName?.toLowerCase() === partName,
+      );
+    }
   }
 
-  if (parseRelationshipRecords(rels).length === 0) delete files[binRelsPath];
-  else files[binRelsPath] = strToU8(rels);
-  if (contentTypes !== undefined) files['[Content_Types].xml'] = strToU8(contentTypes);
+  if (parseRelationshipRecords(rels).length === 0) delete files[binRelsKey];
+  else files[binRelsKey] = strToU8(rels);
+  if (contentTypesKey !== undefined && contentTypes !== undefined) {
+    files[contentTypesKey] = strToU8(contentTypes);
+  }
 }
 
-function textPart(files: Record<string, Uint8Array>, path: string): string | undefined {
-  const bytes = files[path];
-  return bytes === undefined ? undefined : strFromU8(bytes);
-}
+const CONTENT_TYPES_PART = '[Content_Types].xml';
 
-// Drop the `<Relationship>` element carrying a given Id, matching the element as a whole (self-closing
-// or paired) so attribute order does not matter.
-function removeRelationshipById(xml: string, id: string): string {
-  return xml.replace(
-    /<Relationship\b[^>]*?\/>|<Relationship\b[\s\S]*?<\/Relationship>/g,
-    (element) => (new RegExp(`\\bId="${escapeRegExp(id)}"`).test(element) ? '' : element),
-  );
-}
-
-// Drop the `<Override>` naming a given part path; PartName is the full, unambiguous package path.
-function removeContentTypeOverride(xml: string, partPath: string): string {
-  return xml.replace(/<Override\b[^>]*?\/>/g, (element) =>
-    element.includes(`PartName="/${partPath}"`) ? '' : element,
-  );
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Drop every `local` element whose decoded attributes satisfy `drop`, splicing at the offsets the
+// scanner reports so everything else passes through byte for byte. A pattern over the raw text could
+// only see one quoting style and one spelling of an attribute, and left a single-quoted `Id` or
+// `PartName` pointing at a part the edit had just deleted. Each scan starts where the previous element
+// ended, so the whole pass is one walk of the part however many elements it drops.
+function removeElements(
+  xml: string,
+  local: string,
+  drop: (attrs: XmlAttributes) => boolean,
+): string {
+  let kept = '';
+  let rest = xml;
+  let range = elementRange(rest, [local]);
+  while (range !== undefined) {
+    kept += rest.slice(0, drop(range.attrs) ? range.start : range.end);
+    rest = rest.slice(range.end);
+    range = elementRange(rest, [local]);
+  }
+  return kept + rest;
 }

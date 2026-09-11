@@ -4,6 +4,8 @@
 import {strict as assert} from 'node:assert';
 import {test} from 'node:test';
 
+import {strFromU8, strToU8, unzipSync, zipSync} from 'fflate';
+
 import {Workbook} from '../../core/workbook.ts';
 import {CompoundFile} from '../../vba/cfb.ts';
 import {VbaAuthorError} from '../../vba/errors.ts';
@@ -21,7 +23,7 @@ import {
 } from '../../vba/vba.test-support.ts';
 import {PackageReadError} from '../opc/errors.ts';
 import {editXlsxVbaAddReference, editXlsxVbaRemoveModule} from './edit-vba.ts';
-import {optionalPartText, partBytes, partsOf} from './package.test-support.ts';
+import {optionalPartText, partBytes, partsOf, partText} from './package.test-support.ts';
 import {writeXlsx} from './write.ts';
 
 test('the package-level edits enforce the same inflate ceiling every other reader does', () => {
@@ -117,6 +119,93 @@ test('editXlsxVbaRemoveModule drops a stale signature part', () => {
     'the signature part is dropped',
   );
 });
+
+/** A signed package's parts after `rewrite`, re-zipped: for a shape `xlsmPackage` does not spell. */
+function reshapedSignedPackage(
+  rewrite: (files: Record<string, Uint8Array>) => Record<string, Uint8Array>,
+): Uint8Array {
+  const pkg = xlsmPackage(buildNavigableProjectBin(CODE_PAGE, MODULES), {
+    signatures: [legacySignature(Uint8Array.from([1, 2, 3]))],
+  });
+  return zipSync(rewrite(unzipSync(pkg)));
+}
+
+test('a package whose entry names are cased unlike their targets is edited, not refused', () => {
+  // OPC part names compare case-insensitively and `readXlsx` folds them, so this package reads fine.
+  // The edit looked the project up by exact key, called it a package with no project, and would have
+  // deleted a signature under a spelling the package does not use.
+  const pkg = reshapedSignedPackage((files) => {
+    const renamed: Record<string, Uint8Array> = {};
+    for (const [path, bytes] of Object.entries(files)) {
+      renamed[path.replace('vbaProject', 'VbaProject')] = bytes;
+    }
+    return renamed;
+  });
+  assert.deepEqual(
+    Object.keys(partsOf(pkg))
+      .filter((name) => name.includes('VbaProject'))
+      .sort(),
+    ['xl/VbaProject.bin', 'xl/VbaProjectSignature.bin', 'xl/_rels/VbaProject.bin.rels'],
+    'precondition: the project, its rels and its signature are all cased unlike their targets',
+  );
+
+  const edited = editXlsxVbaRemoveModule(pkg, 'Module1');
+  const names = Object.keys(partsOf(edited));
+
+  assert.deepEqual(
+    parseVbaProject(partBytes(edited, 'xl/VbaProject.bin')).modules.map((m) => m.name),
+    ['ThisWorkbook', 'Class1'],
+    'the project is replaced under the package spelling',
+  );
+  assert.ok(!names.includes('xl/vbaProject.bin'), 'no second project entry appears beside it');
+  assert.deepEqual(
+    names.filter((name) => /signature|_rels\/vbaProject/i.test(name)),
+    [],
+    'the signature part and the rels part that held only it are gone under their own spelling',
+  );
+  assert.doesNotMatch(partText(edited, '[Content_Types].xml'), /signature/i);
+});
+
+test('a single-quoted signature relationship and override are removed with the signature', () => {
+  // The removal was a pattern that required `Id="…"` and `PartName="/…"`, so either written with single
+  // quotes, or the override with a differently cased name, was left pointing at the deleted part.
+  const pkg = reshapedSignedPackage((files) => {
+    const quoted = (path: string): Uint8Array =>
+      strToU8(partTextOf(files, path).replaceAll('"', "'"));
+    return {
+      ...files,
+      'xl/_rels/vbaProject.bin.rels': quoted('xl/_rels/vbaProject.bin.rels'),
+      '[Content_Types].xml': strToU8(
+        partTextOf(files, '[Content_Types].xml').replace(
+          '<Override PartName="/xl/vbaProjectSignature.bin"',
+          "<Override PartName='/XL/vbaProjectSignature.bin'",
+        ),
+      ),
+    };
+  });
+  assert.match(partText(pkg, '[Content_Types].xml'), /PartName='\/XL\/vbaProjectSignature\.bin'/);
+
+  const edited = editXlsxVbaRemoveModule(pkg, 'Module1');
+
+  assert.equal(optionalPartText(edited, 'xl/vbaProjectSignature.bin'), undefined);
+  assert.equal(
+    optionalPartText(edited, 'xl/_rels/vbaProject.bin.rels'),
+    undefined,
+    'the project rels part held only the signature relationship, so it goes with it',
+  );
+  assert.doesNotMatch(partText(edited, '[Content_Types].xml'), /signature/i);
+  assert.match(
+    partText(edited, '[Content_Types].xml'),
+    /<Override PartName="\/xl\/vbaProject\.bin"/,
+    'the overrides around the removed one are spliced through untouched',
+  );
+});
+
+function partTextOf(files: Record<string, Uint8Array>, path: string): string {
+  const bytes = files[path];
+  assert.ok(bytes !== undefined, `expected part ${path}`);
+  return strFromU8(bytes);
+}
 
 test('editXlsxVbaRemoveModule finds a project whose workbook is not at xl/workbook.xml', () => {
   // OPC fixes nothing but `_rels/.rels`, so a producer other than Excel may put the office document

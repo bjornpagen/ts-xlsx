@@ -140,7 +140,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Half a kilobyte over.
   //
   // Raised again, from 557, by the same pivot role refusals as `/core`, eight tenths over.
-  './xlsx': 558,
+  //
+  // Raised again, from 558, when the package-level VBA edit began finding parts through the reader's
+  // case-folding accessors and removing a stale signature's references at scanner-found offsets rather
+  // than by pattern, three tenths over.
+  './xlsx': 559,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which

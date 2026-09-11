@@ -28,6 +28,21 @@ test('resolveRelativePart treats a leading slash as package-root-absolute', () =
   );
 });
 
+test('resolveRelativePart collapses `..` and doubled slashes in an absolute target too', () => {
+  // An absolute target used to return with only its leading slash stripped, so both of these came back
+  // as keys no part answers to, and the sheet or stylesheet they name read as missing.
+  assert.strictEqual(
+    resolveRelativePart('xl/workbook.xml', '/xl/../xl/worksheets/sheet1.xml'),
+    'xl/worksheets/sheet1.xml',
+  );
+  assert.strictEqual(resolveRelativePart('xl/workbook.xml', '//xl/styles.xml'), 'xl/styles.xml');
+  assert.strictEqual(
+    resolveRelativePart('xl/workbook.xml', '/../../xl/styles.xml'),
+    'xl/styles.xml',
+    'a `..` at the root stays at the root',
+  );
+});
+
 test('resolveRelativePart collapses `.` and `..` segments against the base directory', () => {
   assert.strictEqual(
     resolveRelativePart('xl/worksheets/sheet1.xml', '../media/./image1.png'),

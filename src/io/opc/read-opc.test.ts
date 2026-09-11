@@ -50,6 +50,25 @@ test('capturePartClosure retains an external relationship verbatim without walki
   );
 });
 
+test('packageAccessors answers a differently cased path with the package entry it found', () => {
+  // OPC part names compare case-insensitively. `partKey` is what an editor uses to replace or delete
+  // the part a read found, so it has to name the package's own entry, not the spelling it was asked for.
+  const files = {
+    'xl/VbaProject.bin': Uint8Array.of(1),
+    'xl/workbook.xml': strToU8('<workbook/>'),
+  };
+  const {partBytes, partKey} = packageAccessors(files);
+  assert.deepStrictEqual(partBytes('xl/vbaProject.bin'), Uint8Array.of(1));
+  assert.strictEqual(partKey('xl/vbaProject.bin'), 'xl/VbaProject.bin');
+  assert.strictEqual(partKey('XL/WORKBOOK.XML'), 'xl/workbook.xml');
+  assert.strictEqual(
+    partKey('xl/workbook.xml'),
+    'xl/workbook.xml',
+    'an exact spelling is its own key',
+  );
+  assert.strictEqual(partKey('xl/styles.xml'), undefined);
+});
+
 // `readPartRelationships` is the single parse of a part's rels every sheet-part lookup goes through, so
 // the four queries it answers are pinned here rather than through eight readers that each used to
 // re-parse the XML for themselves.
