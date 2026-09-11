@@ -93,10 +93,11 @@ export const xlsb = {
 
   // Every formula cell of the binary reading, compared against the same cell of its XML twin, where
   // the formula is *text* rather than a token stream. Reports each disagreement, so a failure names
-  // the token class that broke rather than a count.
-  xlsbFormulaTextMatchesXlsxTwin() {
-    const binary = formulaTexts(readXlsb(fixtureBytes(`${FORMULAS}/source.xlsb`)));
-    const xml = formulaTexts(readXlsx(fixtureBytes(`${FORMULAS}/source.xlsx`)));
+  // the token class that broke rather than a count. `dir` names the fixture pair, the grammar tour by
+  // default.
+  xlsbFormulaTextMatchesXlsxTwin(dir: string = FORMULAS) {
+    const binary = formulaTexts(readXlsb(fixtureBytes(`${dir}/source.xlsb`)));
+    const xml = formulaTexts(readXlsx(fixtureBytes(`${dir}/source.xlsx`)));
     const addresses = [...new Set([...binary.keys(), ...xml.keys()])].sort();
     return {
       compared: xml.size,

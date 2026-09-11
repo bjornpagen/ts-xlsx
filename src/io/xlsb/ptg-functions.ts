@@ -1,14 +1,21 @@
-// The `Ftab` built-in function table ([MS-XLS] 2.5.198.17, shared verbatim by BIFF12): the index a
-// `PtgFunc`/`PtgFuncVar` token carries, mapped to the function name that index means.
+// The `Ftab` built-in function table: the index a `PtgFunc`/`PtgFuncVar` token carries, mapped to the
+// function name that index means.
 //
 // A binary formula names no function; it cites one by number, so this table is the whole difference
-// between `SUM(A1:A5)` and an unreadable stream. It is transcribed from the normative table rather
-// than assembled from Excel's UI, which matters at both ends: the low indices include the XLM macro
-// functions (`GOTO`, `ADD.BAR`, …) that no modern sheet uses but a legacy file may still carry, and
-// the table simply stops at `RTD`. Everything Microsoft added after that (the whole modern library,
-// `TEXTJOIN` through `LAMBDA`) is *not* here and never will be: a post-2007 function is called
-// through index 255 ("user defined") with an `_xlfn.`-prefixed name as its first operand, which is
-// the same indirection the XML form spells out in the function name itself.
+// between `SUM(A1:A5)` and an unreadable stream. Up to `RTD` (0x017B) it is transcribed from the
+// normative [MS-XLS] 2.5.198.17 table rather than assembled from Excel's UI, which matters at the low
+// end: those indices include the XLM macro functions (`GOTO`, `ADD.BAR`, …) that no modern sheet uses
+// but a legacy file may still carry.
+//
+// [MS-XLS] stops at `RTD`, and BIFF12 does not. Excel 2007 took the Analysis ToolPak and the CUBE
+// functions into the calculation engine and added `IFERROR` and the `*IFS` family, and an `.xlsb`
+// cites all 105 of them by index, `CUBEVALUE` at 0x017C through `AVERAGEIFS` at 0x01E4. That run is
+// Excel 16.0 (build 20326)'s own answer: each function was saved in a formula and its index and token
+// form read back out of the part, a fixed-arity call as `PtgFunc` and one with optional arguments as
+// `PtgFuncVar`. Everything Microsoft added after 2007 (`TEXTJOIN` through `LAMBDA`) is *not* here and
+// never will be: such a function is called through index 255 ("user defined") with an
+// `_xlfn.`-prefixed name as its first operand, which is the same indirection the XML form spells out
+// in the function name itself.
 //
 // The four gaps (0x00CA–CB, 0x00D9–DA, 0x00F9–FA, 0x014D) are gaps in the specification: those
 // indices name no function, so a formula citing one is not decodable rather than decodable as
@@ -435,6 +442,116 @@ const RUNS: ReadonlyArray<readonly [number, readonly FunctionEntry[]]> = [
       ['ROUNDBAHTUP', 1],
       ['THAIYEAR', 1],
       ['RTD', 'variadic'],
+    ],
+  ],
+  [
+    0x017c,
+    [
+      ['CUBEVALUE', 'variadic'],
+      ['CUBEMEMBER', 'variadic'],
+      ['CUBEMEMBERPROPERTY', 3],
+      ['CUBERANKEDMEMBER', 'variadic'],
+      ['HEX2BIN', 'variadic'],
+      ['HEX2DEC', 1],
+      ['HEX2OCT', 'variadic'],
+      ['DEC2BIN', 'variadic'],
+      ['DEC2HEX', 'variadic'],
+      ['DEC2OCT', 'variadic'],
+      ['OCT2BIN', 'variadic'],
+      ['OCT2HEX', 'variadic'],
+      ['OCT2DEC', 1],
+      ['BIN2DEC', 1],
+      ['BIN2OCT', 'variadic'],
+      ['BIN2HEX', 'variadic'],
+      ['IMSUB', 2],
+      ['IMDIV', 2],
+      ['IMPOWER', 2],
+      ['IMABS', 1],
+      ['IMSQRT', 1],
+      ['IMLN', 1],
+      ['IMLOG2', 1],
+      ['IMLOG10', 1],
+      ['IMSIN', 1],
+      ['IMCOS', 1],
+      ['IMEXP', 1],
+      ['IMARGUMENT', 1],
+      ['IMCONJUGATE', 1],
+      ['IMAGINARY', 1],
+      ['IMREAL', 1],
+      ['COMPLEX', 'variadic'],
+      ['IMSUM', 'variadic'],
+      ['IMPRODUCT', 'variadic'],
+      ['SERIESSUM', 4],
+      ['FACTDOUBLE', 1],
+      ['SQRTPI', 1],
+      ['QUOTIENT', 2],
+      ['DELTA', 'variadic'],
+      ['GESTEP', 'variadic'],
+      ['ISEVEN', 1],
+      ['ISODD', 1],
+      ['MROUND', 2],
+      ['ERF', 'variadic'],
+      ['ERFC', 1],
+      ['BESSELJ', 2],
+      ['BESSELK', 2],
+      ['BESSELY', 2],
+      ['BESSELI', 2],
+      ['XIRR', 'variadic'],
+      ['XNPV', 3],
+      ['PRICEMAT', 'variadic'],
+      ['YIELDMAT', 'variadic'],
+      ['INTRATE', 'variadic'],
+      ['RECEIVED', 'variadic'],
+      ['DISC', 'variadic'],
+      ['PRICEDISC', 'variadic'],
+      ['YIELDDISC', 'variadic'],
+      ['TBILLEQ', 3],
+      ['TBILLPRICE', 3],
+      ['TBILLYIELD', 3],
+      ['PRICE', 'variadic'],
+      ['YIELD', 'variadic'],
+      ['DOLLARDE', 2],
+      ['DOLLARFR', 2],
+      ['NOMINAL', 2],
+      ['EFFECT', 2],
+      ['CUMPRINC', 6],
+      ['CUMIPMT', 6],
+      ['EDATE', 2],
+      ['EOMONTH', 2],
+      ['YEARFRAC', 'variadic'],
+      ['COUPDAYBS', 'variadic'],
+      ['COUPDAYS', 'variadic'],
+      ['COUPDAYSNC', 'variadic'],
+      ['COUPNCD', 'variadic'],
+      ['COUPNUM', 'variadic'],
+      ['COUPPCD', 'variadic'],
+      ['DURATION', 'variadic'],
+      ['MDURATION', 'variadic'],
+      ['ODDLPRICE', 'variadic'],
+      ['ODDLYIELD', 'variadic'],
+      ['ODDFPRICE', 'variadic'],
+      ['ODDFYIELD', 'variadic'],
+      ['RANDBETWEEN', 2],
+      ['WEEKNUM', 'variadic'],
+      ['AMORDEGRC', 'variadic'],
+      ['AMORLINC', 'variadic'],
+      ['CONVERT', 3],
+      ['ACCRINT', 'variadic'],
+      ['ACCRINTM', 'variadic'],
+      ['WORKDAY', 'variadic'],
+      ['NETWORKDAYS', 'variadic'],
+      ['GCD', 'variadic'],
+      ['MULTINOMIAL', 'variadic'],
+      ['LCM', 'variadic'],
+      ['FVSCHEDULE', 2],
+      ['CUBEKPIMEMBER', 'variadic'],
+      ['CUBESET', 'variadic'],
+      ['CUBESETCOUNT', 1],
+      ['IFERROR', 2],
+      ['COUNTIFS', 'variadic'],
+      ['SUMIFS', 'variadic'],
+      ['AVERAGEIF', 'variadic'],
+      ['AVERAGEIFS', 'variadic'],
     ],
   ],
 ];

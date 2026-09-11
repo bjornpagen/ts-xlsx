@@ -186,6 +186,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Fixed
 
+- **An `.xlsb` formula calling `IFERROR`, `SUMIFS`, `COUNTIFS`, `AVERAGEIF(S)`, `EOMONTH`,
+  `NETWORKDAYS` or any other Analysis ToolPak or CUBE function lost its formula on read.** A binary
+  workbook cites these by function-table indices past `RTD`, where the [MS-XLS] table ends, and the
+  reader knew no name for them, so the cell read as its cached value alone. The 105 indices Excel 2007
+  added are now read, as Excel 16.0 saves them.
+
 - **A Strict workbook's charts, drawings and theme were written back in Strict.** A package saved as
   ISO/IEC 29500 Strict is written back as Transitional, but the parts carried through as bytes kept
   their `purl.oclc.org` namespaces, their Strict relationship types and their `60%` percentages,

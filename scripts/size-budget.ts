@@ -81,7 +81,10 @@ const DIST = join(ROOT, 'dist');
 // Raised again, from 625, when a function a formula passes as a value began taking the `_xleta.`
 // prefix Excel stores it under: `core/function-values.ts`, the 528 names Excel prefixes, and the pass
 // in `core/formula.ts` that weighs each against the defined names in scope. 5.5 KB over.
-const TOTAL_BUDGET_BYTES = 632 * 1024;
+//
+// Raised again, from 632, when the BIFF12 function table took the 105 functions Excel 2007 added past
+// `RTD`, 1.9 KB over.
+const TOTAL_BUDGET_BYTES = 634 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -185,7 +188,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 614, when a function a formula passes as a value began taking the `_xleta.`
   // prefix: the list of the functions Excel prefixes and the pass that decides it, 5.0 KB over.
-  '.': 620,
+  //
+  // Raised again, from 620, by the same BIFF12 function table as `/xlsb`, 2.4 KB over.
+  '.': 623,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -262,7 +267,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // XML machinery a binary workbook, which has no Strict form, never uses.
   //
   // Raised again, from 596, by the same function-value prefix as `.`, 4.7 KB over.
-  './xlsx': 602,
+  //
+  // Raised again, from 602, by the same BIFF12 function table as `/xlsb`, which `readXlsx` reaches for
+  // an `.xlsb` package, 2.1 KB over.
+  './xlsx': 605,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -308,7 +316,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 327, by the same function-value prefix as `.`, 5.3 KB over. This entry only
   // reads the prefix, which needs the defined names and not the list, but `core/formula.ts` keeps both
   // directions of the mangling in one module and the list comes with it.
-  './xlsb': 333,
+  //
+  // Raised again, from 333, when the function table took the 105 functions Excel 2007 added past `RTD`,
+  // which an `.xlsb` cites by index, 2.8 KB over.
+  './xlsb': 336,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never

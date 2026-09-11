@@ -14,11 +14,16 @@ import {test} from 'node:test';
 
 import {FTAB, FTAB_USER_DEFINED, functionNameFor} from './ptg-functions.ts';
 
-test('the function table runs from COUNT to RTD, where the specification stops', () => {
+test('the function table runs from COUNT past RTD, where [MS-XLS] stops, to AVERAGEIFS', () => {
   assert.equal(functionNameFor(0x0000), 'COUNT', 'index 0 is COUNT');
-  assert.equal(functionNameFor(0x017b), 'RTD', 'and the table ends at RTD');
-  assert.equal(FTAB.length, 0x017c, 'so the table is exactly that many slots long');
-  assert.equal(functionNameFor(0x017c), undefined, 'nothing past it decodes');
+  assert.equal(functionNameFor(0x017b), 'RTD', 'RTD ends the [MS-XLS] table');
+  // As Excel 16.0 (build 20326) cited them in an `.xlsb` it saved.
+  assert.equal(functionNameFor(0x017c), 'CUBEVALUE', 'and BIFF12 carries on at CUBEVALUE');
+  assert.equal(functionNameFor(0x01d0), 'RANDBETWEEN');
+  assert.equal(functionNameFor(0x01e0), 'IFERROR');
+  assert.equal(functionNameFor(0x01e4), 'AVERAGEIFS', 'to AVERAGEIFS');
+  assert.equal(FTAB.length, 0x01e5, 'so the table is exactly that many slots long');
+  assert.equal(functionNameFor(0x01e5), undefined, 'nothing past it decodes');
 });
 
 test('the table has exactly the seven undefined indices the specification leaves undefined', () => {

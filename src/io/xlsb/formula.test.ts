@@ -195,8 +195,10 @@ test('the function table matches the specification at every run boundary', () =>
   assert.equal(functionNameFor(0x014c), 'TINV');
   assert.equal(functionNameFor(0x014e), 'MOVIE.COMMAND');
   assert.equal(functionNameFor(0x017b), 'RTD');
+  assert.equal(functionNameFor(0x017c), 'CUBEVALUE');
+  assert.equal(functionNameFor(0x01e4), 'AVERAGEIFS');
 
-  for (const gap of [0x00ca, 0x00cb, 0x00d9, 0x00da, 0x00f9, 0x00fa, 0x014d, 0x017c]) {
+  for (const gap of [0x00ca, 0x00cb, 0x00d9, 0x00da, 0x00f9, 0x00fa, 0x014d, 0x01e5]) {
     assert.equal(functionNameFor(gap), undefined);
   }
 });
@@ -219,4 +221,22 @@ test('a fixed-arity call with no arity to go on is not decoded', () => {
   assert.equal(decodeFormula(bytes(...ref(0, 0), 0x41, 0x04, 0x00), NONE, SCOPE), undefined);
   // PtgFunc citing ABS, which takes exactly one.
   assert.equal(decodeFormula(bytes(...ref(0, 0), 0x41, 0x18, 0x00), NONE, SCOPE), 'ABS(A1)');
+});
+
+// Both arrived with Excel 2007 and sit past RTD, where the [MS-XLS] table ends. Excel 16.0 (build
+// 20326) saves `=IFERROR(1,0)` as 1, an ifError attribute, 0, a goto attribute and a PtgFunc citing
+// 0x01E0, and a SUMIFS as a PtgFuncVar citing 0x01E2 with its count.
+test('a function the BIFF12 table adds past RTD decodes by its index', () => {
+  assert.equal(
+    decodeFormula(
+      bytes(0x1e, 1, 0, 0x19, 0x80, 3, 0, 0x1e, 0, 0, 0x19, 0x08, 2, 0, 0x41, 0xe0, 0x01),
+      NONE,
+      SCOPE,
+    ),
+    'IFERROR(1,0)',
+  );
+  assert.equal(
+    decodeFormula(bytes(...ref(0, 0), ...ref(1, 0), 0x1e, 1, 0, 0x42, 3, 0xe2, 0x01), NONE, SCOPE),
+    'SUMIFS(A1,A2,1)',
+  );
 });
