@@ -48,7 +48,8 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   cuts into; whole columns ignore a row edit, and 3-D spans, external references, structured references
   and strings are left alone. A shared-formula clone the edit sets apart from its master, or whose
   master it deletes, becomes a plain formula. What an insert brings in is not rewritten. Table
-  formulas, hyperlink locations and pivot sources still do not move.
+  formulas and pivot sources still do not move. A hyperlink's in-workbook location does not move
+  either, and neither does Excel's.
 
 - **BREAKING: `duplicateRow` copies formulas as Excel copies a row.** A copy used to carry the source's
   formula text and cached result, so a line-item row `=B5*C5` duplicated down showed the first line's

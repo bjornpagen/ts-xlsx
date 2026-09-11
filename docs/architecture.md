@@ -264,8 +264,9 @@ given at creation, which passes it to every other sheet and to the defined names
 matters twice: what an insert brings in was written against the grid after the edit and must not move
 again, and a shared-formula clone is recovered from its master at the offset they have now. A clone the
 rewritten master no longer describes becomes a formula of its own, and the writer groups what is still
-shared. Table formulas, hyperlink locations, pivot sources and preserved parts (charts among them) are
-not rewritten.
+shared. Table formulas, pivot sources and preserved parts (charts among them) are not rewritten yet,
+though Excel moves them. A hyperlink's in-workbook location (`S1!B5`) is left as written on purpose:
+Excel 16.0 leaves it too, even when rows are inserted above the cell it names.
 
 The row and column axes are deliberately not mirror images, and where they diverge is a decision
 rather than a gap someone forgot to close. A row takes either input shape, a positional array or an
