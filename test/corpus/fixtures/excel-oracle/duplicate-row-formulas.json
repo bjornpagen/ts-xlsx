@@ -1,0 +1,21 @@
+{
+  "invariant": "duplicate-row-formulas",
+  "description": "What a copy of a row says in its formulas. A fresh workbook: B1 =A1*2, C1 =$A$1+A$1+$A1, D1 =A2, then Rows(\"1:1\").Copy(Rows(\"2:3\")), once straight over rows 2 and 3 and once after Rows(\"2:3\").Insert(); every formula read back through Range.Formula. Each copy is the source with its relative references moved down by its distance from the source, absolute ones kept; after an insert the copy is taken from the source as the insert left it (D1 is =A4 by then).",
+  "probe": "a one-off COM script: Workbooks.Add, Range.Formula, Rows().Insert(), Rows().Copy(Destination), no clipboard",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-11",
+  "openClass": "headless COM (DisplayAlerts off), a workbook created in the session, never saved",
+  "insertThenCopy": {
+    "B1": "=A1*2", "C1": "=$A$1+A$1+$A1", "D1": "=A4",
+    "B2": "=A2*2", "C2": "=$A$1+A$1+$A2", "D2": "=A5",
+    "B3": "=A3*2", "C3": "=$A$1+A$1+$A3", "D3": "=A6"
+  },
+  "copyOver": {
+    "B1": "=A1*2", "C1": "=$A$1+A$1+$A1", "D1": "=A2",
+    "B2": "=A2*2", "C2": "=$A$1+A$1+$A2", "D2": "=A3",
+    "B3": "=A3*2", "C3": "=$A$1+A$1+$A3", "D3": "=A4"
+  }
+}

@@ -50,6 +50,13 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   master it deletes, becomes a plain formula. What an insert brings in is not rewritten. Table
   formulas, hyperlink locations and pivot sources still do not move.
 
+- **BREAKING: `duplicateRow` copies formulas as Excel copies a row.** A copy used to carry the source's
+  formula text and cached result, so a line-item row `=B5*C5` duplicated down showed the first line's
+  amount on every line. Each copy's relative references now move down by its distance from the source,
+  absolute ones stay, and its cached result is dropped, since it was computed over the source's cells.
+  An inserted copy is taken from the source after the insert, so the two agree about a reference into
+  the inserted rows.
+
 - **`AuthoringError` messages for a value outside an OOXML enumeration, or a malformed ARGB colour,
   start lowercase**, as every other message does: `invalid page orientation "…"` rather than
   `Invalid page orientation "…"`. Code matching the message text case-sensitively needs updating;

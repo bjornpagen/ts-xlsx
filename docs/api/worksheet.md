@@ -953,7 +953,9 @@ in a column the source leaves empty is dropped, exactly as it would be with a sh
 
 Each copy is a faithful duplicate of the source: its cell values, its per-cell styles, and its
 row properties (height, hidden, outline level, row fill). It carries no merge of its own, so a
-range can be merged onto a duplicated row afterwards.
+range can be merged onto a duplicated row afterwards. A formula is copied as Excel copies a row,
+its relative references moved down with it and its cached result dropped, since that was computed
+over the source's cells; an inserted copy is taken from the source as the insert left it.
 
 **Throws:** `RangeError` if `start` is not a positive integer or `count` is negative, or if a copy
 would land past the last row. The sheet is left untouched.

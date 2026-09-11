@@ -16,7 +16,7 @@ import {ConditionalFormattingOverlay} from './conditional-formatting-overlay.ts'
 import type {ConditionalFormatting} from './conditional-formatting.ts';
 import {DataValidationOverlay} from './data-validation-overlay.ts';
 import type {DataValidation, DataValidationEntry} from './data-validation.ts';
-import type {SheetSplice} from './formula-references.ts';
+import {type SheetSplice, translateFormula} from './formula-references.ts';
 import {GridEdits} from './grid-edits.ts';
 import type {
   AnchoredImage,
@@ -42,7 +42,7 @@ import {Row} from './row.ts';
 import type {CellContent, CellStyle, Color, Fill} from './style.ts';
 import {Table, type TableOptions} from './table.ts';
 import {UsedExtent} from './used-extent.ts';
-import type {CellValue} from './value.ts';
+import {type CellValue, isFormulaValue, isSharedFormulaValue} from './value.ts';
 import {WorksheetComments} from './worksheet-comments.ts';
 import {WorksheetMerges} from './worksheet-merges.ts';
 import {WORKSHEET_MODEL_FACETS} from './worksheet-model.ts';
@@ -983,7 +983,9 @@ export class Worksheet {
    *
    * Each copy is a faithful duplicate of the source: its cell values, its per-cell styles, and its
    * row properties (height, hidden, outline level, row fill). It carries no merge of its own, so a
-   * range can be merged onto a duplicated row afterwards.
+   * range can be merged onto a duplicated row afterwards. A formula is copied as Excel copies a row,
+   * its relative references moved down with it and its cached result dropped, since that was computed
+   * over the source's cells; an inserted copy is taken from the source as the insert left it.
    *
    * @throws {RangeError} if `start` is not a positive integer or `count` is negative, or if a copy
    *   would land past the last row. The sheet is left untouched.
@@ -992,16 +994,14 @@ export class Worksheet {
     const {count = 1, insert = true} = options;
     assertStartAndCount('duplicate', 'row', start, count);
     assertSpliceFits('row', start + 1, count);
-    const source = this.#rows.get(start);
     const sourceProperties = this.#rowProperties.get(start);
     const snapshot = (destRow: number): Map<number, Cell> => {
       const row = new Map<number, Cell>();
-      if (source) {
-        for (const [col, cell] of source) {
-          const copy = new Cell(destRow, col);
-          copyCellContent(cell, copy);
-          row.set(col, copy);
-        }
+      for (const [col, cell] of this.#rows.get(start) ?? []) {
+        const copy = new Cell(destRow, col);
+        copyCellContent(cell, copy);
+        copy.value = filledDown(cell.value, destRow - start);
+        row.set(col, copy);
       }
       return row;
     };
@@ -1014,12 +1014,13 @@ export class Worksheet {
       // `Fill`, so the copies share no mutable state with the source.
       else this.#rowProperties.set(destRow, {...sourceProperties});
     };
+    // Blank rows go in first and the copies are taken after, so a source formula the insert moved (one
+    // reading the rows below it) is copied as it now reads, which is what Excel does.
     if (insert) {
-      const copies = Array.from({length: count}, () => snapshot(start));
-      this.#edits.spliceRows(start + 1, 0, copies);
-    } else {
-      for (let i = 1; i <= count; i++) this.#rows.set(start + i, snapshot(start + i));
+      const blanks = Array.from({length: count}, () => new Map<number, Cell>());
+      this.#edits.spliceRows(start + 1, 0, blanks);
     }
+    for (let i = 1; i <= count; i++) this.#rows.set(start + i, snapshot(start + i));
     for (let i = 1; i <= count; i++) copyProperties(start + i);
     this.#afterStructuralEdit();
   }
@@ -1304,6 +1305,20 @@ export function refuseImagesBesideKeptDrawing(sheet: Worksheet): void {
 // The bounds contract every splice-shaped edit shares: a 1-based start and a non-negative count.
 // The three call sites used to spell it out, so the messages differed only by interpolation, which
 // is how messages drift. `verb` names the operation the caller offered, `axis` the line it edits.
+// A cell value copied `offset` rows below its source: a formula's relative references move with it, and
+// its cached result, computed over the source's cells, goes. A shared-formula clone stays a clone of the
+// same master, which describes it at the new position as well; only the text a read resolved onto it
+// moves.
+function filledDown(value: CellValue, offset: number): CellValue {
+  if (isFormulaValue(value)) return {formula: translateFormula(value.formula, 0, offset)};
+  if (isSharedFormulaValue(value)) {
+    return value.formula === undefined
+      ? {sharedFormula: value.sharedFormula}
+      : {sharedFormula: value.sharedFormula, formula: translateFormula(value.formula, 0, offset)};
+  }
+  return value;
+}
+
 function assertStartAndCount(
   verb: string,
   axis: 'row' | 'column',

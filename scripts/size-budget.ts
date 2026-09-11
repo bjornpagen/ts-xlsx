@@ -147,7 +147,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 581, by the same picture properties as `/xlsx`, 4.3 KB over.
   //
   // Raised again, from 586, by the same formula reference moves as `/core`, 10.9 KB over.
-  '.': 597,
+  //
+  // Raised again, from 597, when `duplicateRow` began copying a formula filled down rather than as written, three tenths over.
+  '.': 598,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -204,7 +206,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // relationship, with the checks that keep each writable. 4.0 KB over.
   //
   // Raised again, from 568, by the same formula reference moves as `/core`, 10.6 KB over.
-  './xlsx': 579,
+  //
+  // Raised again, from 579, when `duplicateRow` began copying a formula filled down rather than as written, which left this entry sitting on its budget.
+  './xlsx': 580,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -237,7 +241,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // over.
   //
   // Raised again, from 311, by the same formula reference moves as `/core`, 10.7 KB over.
-  './xlsb': 322,
+  //
+  // Raised again, from 322, when `duplicateRow` began copying a formula filled down rather than as written, a tenth over.
+  './xlsb': 323,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
@@ -267,7 +273,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 227, by the same reference-name rule as `/core`, a kilobyte over.
   //
   // Raised again, from 229, by the same formula reference moves as `/core`, 14.8 KB over.
-  './csv': 244,
+  //
+  // Raised again, from 244, when `duplicateRow` began copying a formula filled down rather than as written, two tenths over.
+  './csv': 245,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //

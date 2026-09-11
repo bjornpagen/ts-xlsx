@@ -599,6 +599,30 @@ test('duplicateRow onto a formatted row clears properties the source does not ha
   assert.equal(sheet.getRow(2).height, undefined);
 });
 
+test('a duplicated row is the source filled down: its relative references follow each copy', () => {
+  for (const insert of [true, false]) {
+    const sheet = new Worksheet('S', 1);
+    sheet.getCell('B1').value = {formula: 'A1*2', result: 2};
+    sheet.getCell('C1').value = {formula: '$A$1+A$1+$A1'};
+    sheet.duplicateRow(1, {count: 2, insert});
+    assert.deepEqual(sheet.getCell('B1').value, {formula: 'A1*2', result: 2}, `insert:${insert}`);
+    // The copy's cached result was the source's, over cells the copy no longer reads.
+    assert.deepEqual(sheet.getCell('B2').value, {formula: 'A2*2'}, `insert:${insert}`);
+    assert.deepEqual(sheet.getCell('B3').value, {formula: 'A3*2'}, `insert:${insert}`);
+    assert.deepEqual(sheet.getCell('C3').value, {formula: '$A$1+A$1+$A3'}, `insert:${insert}`);
+  }
+});
+
+test('an inserted duplicate copies the source as the insert left it, so the two keep agreeing', () => {
+  const sheet = new Worksheet('S', 1);
+  // C1 reads the row the copy is inserted at: the insert moves that reference to A3, and the copy one
+  // row down reads one row further, A4.
+  sheet.getCell('C1').value = {formula: 'A2'};
+  sheet.duplicateRow(1);
+  assert.deepEqual(sheet.getCell('C1').value, {formula: 'A3'});
+  assert.deepEqual(sheet.getCell('C2').value, {formula: 'A4'});
+});
+
 test('duplicating rows above a merged range shifts the merge down by the number inserted', () => {
   const sheet = new Worksheet('S', 1);
   sheet.getCell('A1').value = 'a';
