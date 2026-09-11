@@ -27,7 +27,7 @@ same generic mechanism as charts and shapes and the same reasoning applies.
 
 ADR-0005 already set precedent for a closely related question, whether to carry
 attached-part byte closures on `WorksheetModel`, and declined it while deferring the
-*authoring* question generally: "a faithful whole-sheet/package copy primitive is
+_authoring_ question generally: "a faithful whole-sheet/package copy primitive is
 deferred pending a consumer... it waits for a real use-case to force its shape." This ADR
 extends that same reasoning from the model-copy API to the public authoring API.
 
@@ -65,7 +65,7 @@ extends that same reasoning from the model-copy API to the public authoring API.
   someone has to reverse-engineer from a missing method; the backlog specs are affirmed
   as live design documents rather than orphaned notes; no speculative chart/shape API
   ships ahead of a real consumer.
-- **Negative / deferred:** a caller who needs to *create* a chart, shape, slicer, or form
+- **Negative / deferred:** a caller who needs to _create_ a chart, shape, slicer, or form
   control cannot do so with this library at 1.0, because round-trip preservation is the
   ceiling. This is a real capability gap against desktop Excel and against what some ExcelJS
   users relied on ([exceljs/exceljs#141](https://github.com/exceljs/exceljs/issues/141), "Chart

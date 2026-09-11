@@ -22,7 +22,7 @@ import {
 } from './address.ts';
 import {type ClonePlan, cloneWith} from './clone.ts';
 import {type AxisSplice, isDeletedSpan, shiftIndex} from './grid-shift.ts';
-import type {AssertNever} from './internal.ts';
+import {type AssertNever, INTERNAL} from './internal.ts';
 import {MAX_TABLE_NAME_LENGTH, TABLE_NAME_PATTERN} from './limits.ts';
 import {structuredColumnReference} from './structured-reference.ts';
 import type {CellStyle} from './style.ts';
@@ -302,7 +302,6 @@ export type TableRegion = GridRect;
 
 export class Table {
   readonly name: string;
-  readonly columns: readonly TableColumn[];
   readonly headerRow: boolean;
   readonly totalsRow: boolean;
   readonly totalsRowShown: boolean | undefined;
@@ -310,12 +309,31 @@ export class Table {
   readonly style: TableStyleInfo | undefined;
 
   // The anchor and data-row count move when a row/column splice shifts or resizes the table, so
-  // they are mutable behind the class's controlled `shiftRows`/`shiftColumns` methods.
+  // they are mutable behind the class's controlled `shiftRows`/`shiftColumns` methods. The columns'
+  // formulas move with a splice too, through the internal channel.
   #anchorCol: number;
   #anchorRow: number;
   #dataRowCount: number;
+  #columns: readonly TableColumn[];
 
   readonly #grid: TableGrid | undefined;
+
+  /** What a splice does to the table's formulas; see `core/internal.ts`. */
+  readonly [INTERNAL]: TableInternals = {
+    rewriteFormulas: (rewrite) => {
+      this.#columns = this.#columns.map((column) => {
+        const {calculatedColumnFormula: calculated, totalsRowFormula: totals} = column;
+        const nextCalculated = calculated === undefined ? undefined : rewrite(calculated);
+        const nextTotals = totals === undefined ? undefined : rewrite(totals);
+        if (nextCalculated === calculated && nextTotals === totals) return column;
+        return {
+          ...column,
+          ...(nextCalculated === undefined ? {} : {calculatedColumnFormula: nextCalculated}),
+          ...(nextTotals === undefined ? {} : {totalsRowFormula: nextTotals}),
+        };
+      });
+    },
+  };
 
   constructor(options: TableOptions, grid?: TableGrid) {
     validateTableName(options.name);
@@ -345,7 +363,7 @@ export class Table {
     const {col, row} = anchor;
 
     this.name = options.name;
-    this.columns = disambiguateColumnNames(options.columns);
+    this.#columns = disambiguateColumnNames(options.columns);
     this.headerRow = options.headerRow ?? true;
     this.totalsRow = options.totalsRow ?? false;
     this.totalsRowShown = options.totalsRowShown;
@@ -382,6 +400,11 @@ export class Table {
     }
 
     if (grid !== undefined) this.#materializeFrame(grid);
+  }
+
+  /** The table's columns, left to right. */
+  get columns(): readonly TableColumn[] {
+    return this.#columns;
   }
 
   get columnCount(): number {
@@ -621,4 +644,14 @@ export class Table {
   get #bottom(): number {
     return this.#anchorRow + this.#rowSpan - 1;
   }
+}
+
+/** What the library's own machinery may do to a {@link Table}; reached as `table[INTERNAL]`. */
+export interface TableInternals {
+  /**
+   * Replace each column's calculated column formula and totals row formula with what `rewrite` makes
+   * of it, which is how a row or column splice moves the references they make. A column whose formulas
+   * come back unchanged stays the same object.
+   */
+  rewriteFormulas(rewrite: (formula: string) => string): void;
 }

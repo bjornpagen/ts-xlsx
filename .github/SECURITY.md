@@ -14,7 +14,7 @@ advisory thread is private until a fix ships, and it can mint a CVE and credit y
 publication.
 
 Include the reproduction the way the [agent report
-form](ISSUE_TEMPLATE/agent-report.yml) asks for it — a self-contained script that *builds*
+form](ISSUE_TEMPLATE/agent-report.yml) asks for it — a self-contained script that _builds_
 its malicious input rather than attaching one. A proof-of-concept we can regenerate becomes a
 permanent regression case; an attached binary usually cannot be committed.
 
@@ -50,9 +50,9 @@ path is forward.
 
 ## Out of scope
 
-- Formula injection into cells *you* write. If you place untrusted text in a cell and Excel
+- Formula injection into cells _you_ write. If you place untrusted text in a cell and Excel
   later evaluates it as a formula, that is your application's trust boundary; this library
-  writes what you tell it to. A documented escape hatch that fails to escape *is* in scope.
+  writes what you tell it to. A documented escape hatch that fails to escape _is_ in scope.
 - Vulnerabilities in Excel, LibreOffice, or any viewer that opens what we emit — report those
   to their vendors. We do want to know if we can be made to emit the trigger.
 - Anything requiring an attacker who already executes code in your process.

@@ -34,10 +34,10 @@ of these.
 
 ## How it shipped
 
-- **The public shape.** Resolution is a *method*, not a field: `Workbook.resolveColor(color)` returns
+- **The public shape.** Resolution is a _method_, not a field: `Workbook.resolveColor(color)` returns
   an 8-hex ARGB or `undefined`. `Color` is untouched, so "resolved ARGB" and "original encoding" cannot
   drift apart and there is no union for a caller to narrow. Choosing a method over a `.argb` getter on
-  `Color` also keeps the resolution *context*, meaning which workbook's theme and palette, explicit,
+  `Color` also keeps the resolution _context_, meaning which workbook's theme and palette, explicit,
   since the same `Color` value resolves differently in two workbooks.
 - **A custom palette replaces the built-in one wholesale**, rather than overlaying it. That is what
   `<indexedColors>` means, and Excel writes all 64 entries whenever it writes any. An index past the

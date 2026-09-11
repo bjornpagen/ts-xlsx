@@ -16,7 +16,7 @@ A TypeScript-first library for reading and writing spreadsheet documents
 > and has been rebuilt from the ground up into a modern, strict-TypeScript library.
 > **It carries no backwards-compatibility guarantee with ExcelJS** — the API below is
 > its own, not a drop-in. From 1.0.0 onward it follows
-> [SemVer](https://semver.org/) against *itself*; see the [changelog](CHANGELOG.md).
+> [SemVer](https://semver.org/) against _itself_; see the [changelog](CHANGELOG.md).
 > See [`CLAUDE.md`](CLAUDE.md) for the goals and [`docs/architecture.md`](docs/architecture.md)
 > for the design, and [migrating from ExcelJS](docs/migrating-from-exceljs.md) if you are coming across.
 
@@ -32,7 +32,7 @@ shim. It is a different, better library that happens to share ancestry.
 What that buys you today:
 
 - **Strict, precise types are the contract.** `strict` + `noUncheckedIndexedAccess` +
-  `exactOptionalPropertyTypes`. The published `.d.ts` *is* the documentation, and the
+  `exactOptionalPropertyTypes`. The published `.d.ts` _is_ the documentation, and the
   [API reference](docs/api/README.md) is generated straight from it.
 - **Synchronous, buffer-native I/O.** `readXlsx`/`writeXlsx` take and return a
   `Uint8Array` — no streams to await for the buffered path, no Node `Buffer` assumption,
@@ -112,7 +112,7 @@ for (const row of sheet.rows()) {
 }
 ```
 
-`Row` and `Column` are *handles*, not snapshots: they read and write straight through to the
+`Row` and `Column` are _handles_, not snapshots: they read and write straight through to the
 sheet, so two handles on the same line always agree, and reading one creates nothing — asking
 about row 500 costs nothing and does not extend the used range. Position is fixed, exactly as a
 `Cell`'s is: after a splice, `getRow(3)` still means row 3, now holding whatever moved there.
@@ -129,11 +129,13 @@ no API to author a new one — see [`docs/api/preserved.md`](docs/api/preserved.
 
 ```ts
 import {
-  readXlsx, writeXlsx,        // buffered .xlsx  (Uint8Array ⇄ Workbook)
-  readSheetRows,              // stream one sheet's rows, bounded memory
-  readWorkbookStream,         // stream every sheet, rows one at a time
-  readCsv, writeCsv,          // CSV as Uint8Array
-  writeCsvText,               // CSV as a string
+  readXlsx,
+  writeXlsx, // buffered .xlsx  (Uint8Array ⇄ Workbook)
+  readSheetRows, // stream one sheet's rows, bounded memory
+  readWorkbookStream, // stream every sheet, rows one at a time
+  readCsv,
+  writeCsv, // CSV as Uint8Array
+  writeCsvText, // CSV as a string
 } from '@shbernal/ts-xlsx';
 // The streaming writer opens files and pipes Node streams, so it is the one Node-only face
 // and lives behind its own subpath — which is what keeps everything above browser-safe:
@@ -141,7 +143,10 @@ import {WorkbookStreamWriter} from '@shbernal/ts-xlsx/node';
 
 // Bounded-memory extraction — the whole workbook is never materialized:
 for (const row of readSheetRows(bytes, {sheet: 'People'})) {
-  console.log(row.number, row.cells.map((c) => c.value));
+  console.log(
+    row.number,
+    row.cells.map((c) => c.value),
+  );
 }
 
 // Bounded-memory generation — commit each row to serialize and free it as you go:
@@ -194,17 +199,17 @@ The bare package name gives you everything, and with a bundler that is the right
 are for when you'd rather the module graph itself said which half of the library you depend
 on — a Lambda with no bundler, a service that only classifies failures:
 
-| Import from | You get | It loads |
-| --- | --- | --- |
-| `@shbernal/ts-xlsx` | everything except the streaming writer | 501 KB |
-| `@shbernal/ts-xlsx/core` | `Workbook`, `Worksheet`, `Cell`, styles, values, addresses | 185 KB |
-| `@shbernal/ts-xlsx/xlsx` | `readXlsx`, `writeXlsx`/`writeXlsxAsync`, the streaming reader, VBA part edits | 490 KB |
-| `@shbernal/ts-xlsx/xlsb` | `readXlsb` | 256 KB |
-| `@shbernal/ts-xlsx/csv` | `readCsv`, `writeCsv`, `writeCsvText` | 191 KB |
-| `@shbernal/ts-xlsx/node` | `WorkbookStreamWriter` and the rest of the streaming writer | 358 KB |
-| `@shbernal/ts-xlsx/vba` | `parseVbaProject`, `addVbaReference`, `removeVbaModule` | 46 KB |
-| `@shbernal/ts-xlsx/customui` | `parseCustomUi` and the ribbon types | 15 KB |
-| `@shbernal/ts-xlsx/errors` | every error class the library throws | 3 KB |
+| Import from                  | You get                                                                        | It loads |
+| ---------------------------- | ------------------------------------------------------------------------------ | -------- |
+| `@shbernal/ts-xlsx`          | everything except the streaming writer                                         | 501 KB   |
+| `@shbernal/ts-xlsx/core`     | `Workbook`, `Worksheet`, `Cell`, styles, values, addresses                     | 185 KB   |
+| `@shbernal/ts-xlsx/xlsx`     | `readXlsx`, `writeXlsx`/`writeXlsxAsync`, the streaming reader, VBA part edits | 490 KB   |
+| `@shbernal/ts-xlsx/xlsb`     | `readXlsb`                                                                     | 256 KB   |
+| `@shbernal/ts-xlsx/csv`      | `readCsv`, `writeCsv`, `writeCsvText`                                          | 191 KB   |
+| `@shbernal/ts-xlsx/node`     | `WorkbookStreamWriter` and the rest of the streaming writer                    | 358 KB   |
+| `@shbernal/ts-xlsx/vba`      | `parseVbaProject`, `addVbaReference`, `removeVbaModule`                        | 46 KB    |
+| `@shbernal/ts-xlsx/customui` | `parseCustomUi` and the ribbon types                                           | 15 KB    |
+| `@shbernal/ts-xlsx/errors`   | every error class the library throws                                           | 3 KB     |
 
 `/node` is the only one the root specifier does not carry, and the reason is its imports
 rather than its size: it reaches `node:fs` and `node:stream`, and every other entry reaches
@@ -234,7 +239,7 @@ pnpm run docs
 Read **[migrating from ExcelJS](docs/migrating-from-exceljs.md)**. The short version: the
 shapes are deliberately different (synchronous `Uint8Array` I/O instead of async
 `Buffer`/stream methods, `readXlsx`/`writeXlsx` free functions instead of
-`workbook.xlsx.*`), because the goal was the *right* API, not the familiar one.
+`workbook.xlsx.*`), because the goal was the _right_ API, not the familiar one.
 
 ## Hit a bug? There is a skill for that
 

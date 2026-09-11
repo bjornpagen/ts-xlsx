@@ -5,7 +5,7 @@
 ## Context
 
 [ADR 0009](./0009-lint-type-gate-tightening.md) audited the lint/type configuration by the
-right method: run every candidate against the tree, sort by *current violation count*, adopt
+right method: run every candidate against the tree, sort by _current violation count_, adopt
 what fires zero times and decline what is a refactor backlog wearing a config toggle. That
 audit predates [ADR 0028](./0028-typescript-7-adoption.md), which replaced the compiler, and it
 asked only "which checks can we turn on?", never "what does the gate not look at?"
@@ -20,7 +20,7 @@ whole artifact turned out to be unread.
 - **`erasableSyntaxOnly: true`**, with zero violations (no enum, namespace, or parameter property
   anywhere in `src/`, `test/`, `scripts/`, `tools/`). This one is not hygiene; it is the flag
   that makes the no-build workflow's central assumption machine-checked. Every gate in this
-  repo runs `.ts` through Node's type-stripping, which *refuses* non-erasable syntax. Without
+  repo runs `.ts` through Node's type-stripping, which _refuses_ non-erasable syntax. Without
   the flag `tsc` accepts all three constructs happily and the failure arrives later, from
   `node --test`, as a parse error pointing at the syntax rather than at the decision. Verified
   by control: an `enum` added to `src/` now fails the gate with TS1294.
@@ -30,7 +30,7 @@ whole artifact turned out to be unread.
   part of a run, and ADR 0028 ended that era: measured cold, **0.451 s with it on, 0.447 s with
   it off**. Free. With one runtime dependency and Renovate opening bumps for CI to review
   ([ADR 0027](./0027-dependencies-are-updated-by-a-bot-and-ci-is-the-reviewer.md)), a dependency
-  shipping broken declarations *should* fail this gate rather than be skipped past.
+  shipping broken declarations _should_ fail this gate rather than be skipped past.
 
 ### Typecheck the emitted `.d.ts` with `tsconfig.dist.json`, run in `build.yml`
 
@@ -43,14 +43,14 @@ part on the claim that inference-based declaration emit "already works." The cla
 true. It was also unverified, and the rejection is the reason nothing else was going to verify it.
 
 `scripts/smoke-dist.ts` turned out to be the whole fixture, already written. It is the only file
-in the tree importing through the package *name*, so typechecking it resolves the published
+in the tree importing through the package _name_, so typechecking it resolves the published
 `exports` map and pulls in the declarations behind every subpath. It was excluded from
 `tsconfig.test.json` for the one reason that does not apply after a build: there, `dist/` does
 not exist yet. So the check is a third project over that one file, run in `build.yml` where
 `dist/` is fresh, rather than a gate in `scripts/verify.ts`, which must stay runnable on a tree
 that has never been built.
 
-`skipLibCheck: false` is load-bearing rather than incidental here: `dist/*.d.ts` *is* the
+`skipLibCheck: false` is load-bearing rather than incidental here: `dist/*.d.ts` _is_ the
 declaration file under test, so skipping lib checks would skip the entire point of the project.
 
 Cost is **0.78 s**, once per CI build, reusing the build that was already there.
@@ -68,7 +68,7 @@ scripts/smoke-dist.ts(30,31): error TS2345:
   Argument of type 'Workbook' is not assignable to parameter of type 'number'.
 ```
 
-So the gate reads declaration *bodies* across the full graph, not just resolves modules.
+So the gate reads declaration _bodies_ across the full graph, not just resolves modules.
 Deleting `dist/index.d.ts` outright fails it too, with TS7016, a weaker control that only
 proves resolution, recorded here so the next agent does not mistake it for sufficient.
 

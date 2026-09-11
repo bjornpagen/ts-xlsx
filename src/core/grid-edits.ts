@@ -23,8 +23,10 @@ import type {DataValidationOverlay} from './data-validation-overlay.ts';
 import {type SheetSplice, spliceFormula, translateFormula} from './formula-references.ts';
 import {type AxisSplice, isDeletedSpan, shiftIndex, shiftPoint, shiftRect} from './grid-shift.ts';
 import {type AnchoredImage, type AnchorPoint, type ImageAnchor, isOneCellAnchor} from './image.ts';
+import {INTERNAL} from './internal.ts';
 import type {MergeRect} from './merge.ts';
 import type {PageBreak} from './page-setup.ts';
+import type {PivotTable} from './pivot-table.ts';
 import {positionalPlacements} from './row-input.ts';
 import type {Table} from './table.ts';
 import {
@@ -55,6 +57,7 @@ interface GridStorage {
   readonly columns: Map<number, ColumnProperties>;
   readonly merges: WorksheetMerges;
   readonly tables: Table[];
+  readonly pivotTables: readonly PivotTable[];
   readonly images: AnchoredImage[];
   readonly dataValidations: DataValidationOverlay;
   readonly conditionalFormattings: ConditionalFormattingOverlay;
@@ -77,6 +80,7 @@ export class GridEdits {
   readonly #columns: Map<number, ColumnProperties>;
   readonly #merges: WorksheetMerges;
   readonly #tables: Table[];
+  readonly #pivotTables: readonly PivotTable[];
   readonly #images: AnchoredImage[];
   readonly #dataValidations: DataValidationOverlay;
   readonly #conditionalFormattings: ConditionalFormattingOverlay;
@@ -93,6 +97,7 @@ export class GridEdits {
     this.#columns = storage.columns;
     this.#merges = storage.merges;
     this.#tables = storage.tables;
+    this.#pivotTables = storage.pivotTables;
     this.#images = storage.images;
     this.#dataValidations = storage.dataValidations;
     this.#conditionalFormattings = storage.conditionalFormattings;
@@ -286,6 +291,8 @@ export class GridEdits {
     }
     this.#dataValidations.mapFormulas(rewrite);
     this.#conditionalFormattings.mapFormulas(rewrite);
+    for (const table of this.#tables) table[INTERNAL].rewriteFormulas(rewrite);
+    for (const pivot of this.#pivotTables) pivot[INTERNAL].spliceSource(edit);
   }
 
   // Everything anchored to the grid besides the cells, moved through one splice. Both axes end here, so

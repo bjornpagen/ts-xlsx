@@ -10,8 +10,8 @@ new file, all **without holding the whole workbook in memory**, using the stream
 input side and the streaming writer on the output side.
 
 Today the streaming APIs are one-directional building blocks: a streaming reader that yields rows,
-and a streaming writer that accepts appended rows. Nothing connects *reading* an existing package to
-*re-emitting* a modified one via streaming. The only workaround is to fall back to the fully-buffered
+and a streaming writer that accepts appended rows. Nothing connects _reading_ an existing package to
+_re-emitting_ a modified one via streaming. The only workaround is to fall back to the fully-buffered
 in-memory path, reading the whole file, mutating, and writing the whole buffer, which defeats the
 purpose and does not scale to the very templates that motivated the request.
 

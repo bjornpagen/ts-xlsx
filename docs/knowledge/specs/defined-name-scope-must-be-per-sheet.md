@@ -19,7 +19,7 @@ Instead both cells are folded into **one workbook-global name with two ranges**
 (`Input1` pointing at `[Sheet1!$A$1, Sheet2!$B$2]`). The consequences reported by users:
 
 - The intended per-sheet scope is lost, and the surviving name is workbook-global.
-- A formula meant to reference the *local* `Input1` becomes ambiguous and can
+- A formula meant to reference the _local_ `Input1` becomes ambiguous and can
   resolve to the wrong sheet's cell.
 - Because there is only one entry, editing or round-tripping can drop one sheet's
   definition, so "only the last instance is recorded" is a real failure mode on the

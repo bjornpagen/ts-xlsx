@@ -8,7 +8,7 @@ ADR-0001's addendum flagged one open item from the Phase 4 build slice: "the
 definitive package **name** remains the one human decision deferred to the rebrand
 slice." `package.json` has said `@shbernal/ts-xlsx` since that slice, and
 `prepublishOnly` (build, full test, `smoke:dist`, `size`) already gates a real
-publish. But nothing had confirmed the name was *final* rather than a placeholder,
+publish. But nothing had confirmed the name was _final_ rather than a placeholder,
 and nothing had stated a versioning policy for the version field, which has sat at
 the placeholder `0.0.0-dev` throughout the rewrite. The library is not being
 published yet; this ADR settles the policy so it is ready the moment it is.
@@ -46,8 +46,8 @@ published yet; this ADR settles the policy so it is ready the moment it is.
    with an `## [Unreleased]` section that accumulates entries as work lands, cut
    into `## [1.0.0]` at publish time. History prior to this ADR is not backfilled
    into it. That history is fully available in `git log`, and the ADR series is the
-   durable record of *why*; the changelog exists to tell a consumer *what changed
-   between releases*, a concern that starts now, not retroactively.
+   durable record of _why_; the changelog exists to tell a consumer _what changed
+   between releases_, a concern that starts now, not retroactively.
 
 ## Consequences
 

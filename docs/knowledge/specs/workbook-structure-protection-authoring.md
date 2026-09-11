@@ -4,16 +4,16 @@ Cluster: security
 
 ## Scenario
 
-A user wants to lock a workbook's *structure* so that recipients cannot add, delete, rename, move,
+A user wants to lock a workbook's _structure_ so that recipients cannot add, delete, rename, move,
 copy, hide, or unhide worksheets, the protection Excel exposes as "Protect Workbook → Structure."
 The library today has no authoring surface for this: a caller can protect individual worksheets
 (locked cells, `sheetProtection`) but cannot set the workbook-level `<workbookProtection
 lockStructure="1">` element that guards the sheet collection itself. The only workbook-wide integrity
 signal available is per-sheet, which does not stop a recipient from deleting or reordering sheets.
 
-A separate, already-locked defect is that structure protection present in a *loaded* file is dropped
+A separate, already-locked defect is that structure protection present in a _loaded_ file is dropped
 on a passthrough save (corpus case `workbook-structure-protection-survives-roundtrip`). This note is
-about the complementary gap: there is no way to *set* it in the first place.
+about the complementary gap: there is no way to _set_ it in the first place.
 
 > Spec note, not a corpus case: round-trip preservation of an existing lock is already a corpus case,
 > and what is missing is an authoring API and its shape, a design decision rather than a
@@ -29,7 +29,7 @@ about the complementary gap: there is no way to *set* it in the first place.
   `workbookPassword`, `algorithmName`, `hashValue`, `saltValue` and `spinCount` attributes using the
   same password-hashing path as sheet protection (`sheet-protection-password-hash-compatibility`),
   rather than a legacy weak hash. Structure protection without a password is also valid, a soft lock.
-- **Honest about strength**: workbook structure protection is an integrity *signal*, not encryption.
+- **Honest about strength**: workbook structure protection is an integrity _signal_, not encryption.
   It is trivially removable and must not be confused with `workbook-password-encryption`. The API and
   its docs make that distinction explicit so callers do not mistake it for confidentiality.
 - **Round-trips**: a workbook the caller protects writes the element, and reloading then re-saving

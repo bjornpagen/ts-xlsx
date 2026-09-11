@@ -27,7 +27,7 @@ file.
 - A defined name that does **not** resolve to a cell reference is preserved
   opaquely, kept as its raw string form on the model, rather than discarded, so a
   subsequent write does not silently drop names the file legitimately declared.
-- The distinction is made by *attempting* the decode and treating a decode failure
+- The distinction is made by _attempting_ the decode and treating a decode failure
   as "this name is not a cell reference", not by trying to pre-classify tokens.
 
 ## Root cause (legacy)

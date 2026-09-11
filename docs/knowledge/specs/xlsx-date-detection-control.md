@@ -32,9 +32,9 @@ wrong path.
 - **A literal string cell stays a string, even when it looks like a date, and classification is
   uniform.** A reported "inconsistency", where the same column returns some cells as `Date` and others
   as strings, is expected rather than a reader bug: a cell is a `Date` **iff** its stored value is a
-  numeric serial *and* its effective number format is a date format, and a cell whose stored content is
+  numeric serial _and_ its effective number format is a date format, and a cell whose stored content is
   a literal inline or shared string remains a string no matter how date-like the text reads. The rule
-  must be applied so that two cells with the *same* underlying representation always decode to the same
+  must be applied so that two cells with the _same_ underlying representation always decode to the same
   value type, and any observed variation must be explainable purely by differences in the source cells
   (number-against-string storage, date-format-against-not) and never by position within the column or
   nondeterminism in the reader. The API should also make a returned value's kind inspectable, genuine

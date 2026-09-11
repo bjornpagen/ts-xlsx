@@ -17,11 +17,11 @@ Three concrete shapes recur in real-world reports:
    may be `<properties:Properties xmlns:properties="…extended-properties">…`. A
    tag-literal reader never enters `<sheets>` or `<Properties>`, so the model is built
    empty and the next access throws (`Cannot read properties of undefined (reading
-   'sheets')`, or an undefined extended-property dereference).
+'sheets')`, or an undefined extended-property dereference).
 
 2. **A leading byte-order mark or preamble.** A part begins with a UTF-8 BOM, or other
    insignificant bytes, before `<?xml`. A strict parser fed the raw bytes reports
-   *"Non-whitespace before first tag"*. Files that traveled over email or chat, or were
+   _"Non-whitespace before first tag"_. Files that traveled over email or chat, or were
    saved by tools that prepend a BOM, hit this, and re-saving in Excel, which normalizes
    the preamble, is the only current workaround.
 
@@ -69,7 +69,7 @@ preamble produces an empty model and a downstream crash.
 - Whether to carry a full namespace-prefix map per part or to canonicalize by
   stripping prefixes bound to known OOXML namespaces at the tokenizer boundary.
 - How strict-mode parsing interacts with this leniency, since a strict or diagnostic mode may
-  want to *report* that a file used a non-canonical shape even while reading it.
+  want to _report_ that a file used a non-canonical shape even while reading it.
 - Interaction with the write side: files we read leniently must still be written back
   in the canonical unprefixed form (see
   [[excel-repair-on-open-structural-constraints]]).

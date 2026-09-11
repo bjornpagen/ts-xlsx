@@ -13,7 +13,7 @@ inverse: reading and decrypting such a file back into the library.
 
 > Spec note, not a corpus case: this is a substantial unbuilt cryptographic feature. The durable
 > value is the format facts (CFB and MS-OFFCRYPTO), the API shape, and the hostile-input constraints,
-> distinct from the much lighter sheet and workbook *protection* flags (see
+> distinct from the much lighter sheet and workbook _protection_ flags (see
 > `sheet-protection-permits-requested-operations`).
 
 ## Desired behavior

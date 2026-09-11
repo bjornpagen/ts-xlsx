@@ -6,17 +6,17 @@ Cluster: formats
 
 A user sets a currency number format whose symbol is a multi-letter code, say `CHF #,##0.00`, and
 reports the resulting file opens with a repair prompt in Excel. In an OOXML number-format code,
-unquoted letters are format *tokens*: in a date or time context `h`, `m`, `s`, `d` and `y` mean hours,
+unquoted letters are format _tokens_: in a date or time context `h`, `m`, `s`, `d` and `y` mean hours,
 minutes, seconds, day and year, `e` means era, and so on. So a bare alphabetic run like `CHF` can be
 interpreted as tokens rather than literal text and make the format code ill-formed for a strict
 consumer. The safe form quotes the literal: `"CHF" #,##0.00`.
 
-> Spec note, not a corpus case: probing shows the library round-trips *both* forms faithfully. It
+> Spec note, not a corpus case: probing shows the library round-trips _both_ forms faithfully. It
 > writes `CHF #,##0.00` verbatim and re-reads it verbatim, and the quoted `"CHF" #,##0.00` likewise,
 > with the quoted-literal round-trip already locked by `custom-numfmt-string-roundtrips-verbatim`,
 > whose format contains quoted currency literals. There is no library round-trip bug to assert; the
 > corruption is a downstream-consumer interpretation of an unquoted literal, and whether the writer
-> should *auto-quote* bare letter runs is an undecided design choice. The durable value is that
+> should _auto-quote_ bare letter runs is an undecided design choice. The durable value is that
 > decision and its constraints.
 
 ## Desired behavior / the decision to make

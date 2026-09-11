@@ -28,7 +28,7 @@ The [regression corpus](../test/corpus/) is what pins this library down. Each ca
 encodes "correct behavior" as implementation-blind assertions that run against any
 implementation through a thin adapter, so a behavior, once captured, can never silently
 regress. This is why the corpus outlived the rewrite. It was written against the
-*behavior* and not the code, so it validated the new implementation the same way it
+_behavior_ and not the code, so it validated the new implementation the same way it
 indicted the old one.
 
 The rule that follows: when in doubt, add a case. A bug without a corpus case is a bug
@@ -38,7 +38,7 @@ and never regresses.
 ## Test topology
 
 Tests live in two places on purpose, because they are two different kinds of test with
-opposite contracts. Where a test goes is decided by *what it is allowed to know*, not by
+opposite contracts. Where a test goes is decided by _what it is allowed to know_, not by
 tidiness:
 
 - **Co-located unit tests, `src/**/*.test.ts`.** White-box. Each sits next to the module
@@ -57,7 +57,7 @@ tidiness:
   `elementIn`, and a patch that changes nothing fails, since both are the same empty
   string arriving by another route.
 - **The regression corpus, `test/corpus/`.** Black-box and implementation-blind (see
-  above): cases reach the implementation *only* through the adapter and must never import a
+  above): cases reach the implementation _only_ through the adapter and must never import a
   src internal, because that blindness is the whole reason the corpus outlived the rewrite.
   It is a behavioral spec, not a test of any module. Run by `corpus`.
 - **External oracle tests, `test/ooxml-validation/`.** These validate emitted packages
@@ -85,7 +85,7 @@ next to the code that answers to it:
   offline, deterministic reference while implementing. Ask it what may go inside an element
   and in what order, what attributes a type takes, and what values those accept, rather
   than hand-joining XSDs:
-  `node .claude/skills/ooxml-lookup/scripts/ooxml.mjs children x:c`. It is *reference*,
+  `node .claude/skills/ooxml-lookup/scripts/ooxml.mjs children x:c`. It is _reference_,
   not a validator. Conformance validation stays with the independent `OpenXmlValidator`
   oracle (ADR-0002). Repo-only; never published.
 - [`docs/knowledge/specs/`](knowledge/specs/) holds hand-authored, implementation-blind
@@ -101,22 +101,22 @@ XSD set it used to be.
 
 The source tree under [`src/`](../src/) is strict-TypeScript, ESM-only, and build-free on
 the dev/test path (Node runs the `.ts` sources directly via type-stripping; `tsc` is the
-type *checker* and, for publishing, the emitter). The domain decomposition, in dependency
+type _checker_ and, for publishing, the emitter). The domain decomposition, in dependency
 order:
 
-| Area | Role |
-| --- | --- |
-| errors | the failure taxonomy every layer throws through (`src/errors.ts`), below all of them |
-| core model | `Workbook` / `Worksheet` / `Row` / `Column` / `Cell`, addresses and styles: the in-memory document |
-| xml | escaping, emission and a hostile-input-safe SAX reader (`src/xml/`), with no spreadsheet knowledge |
-| opc container | ZIP inflation under a bound, magic-byte sniffing, the relationship graph and part paths (`src/io/opc/`) |
-| resolved format | `XfStyle`, what applying an xf to a cell means, and which xf a cell resolves to, shared by both codecs (`src/io/style/`) |
-| read policy | the rules every reader obeys about a foreign file and no codec owns: read repair and the column budget (`src/io/read-policy/`) |
-| xlsx read/write | OOXML parse and serialize; the hardest, highest-value code in the tree |
-| xlsb read | the binary BIFF12 serialisation of the same model, read-only so far (`src/io/xlsb/`) |
-| streaming | bounded-memory row streaming, both reads and an incremental workbook writer |
-| csv | a thin, optional entry point, never coupled to the xlsx core |
-| vba | native read/author/edit of a macro-enabled workbook's `vbaProject.bin` (`src/vba/`) |
+| Area            | Role                                                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| errors          | the failure taxonomy every layer throws through (`src/errors.ts`), below all of them                                           |
+| core model      | `Workbook` / `Worksheet` / `Row` / `Column` / `Cell`, addresses and styles: the in-memory document                             |
+| xml             | escaping, emission and a hostile-input-safe SAX reader (`src/xml/`), with no spreadsheet knowledge                             |
+| opc container   | ZIP inflation under a bound, magic-byte sniffing, the relationship graph and part paths (`src/io/opc/`)                        |
+| resolved format | `XfStyle`, what applying an xf to a cell means, and which xf a cell resolves to, shared by both codecs (`src/io/style/`)       |
+| read policy     | the rules every reader obeys about a foreign file and no codec owns: read repair and the column budget (`src/io/read-policy/`) |
+| xlsx read/write | OOXML parse and serialize; the hardest, highest-value code in the tree                                                         |
+| xlsb read       | the binary BIFF12 serialisation of the same model, read-only so far (`src/io/xlsb/`)                                           |
+| streaming       | bounded-memory row streaming, both reads and an incremental workbook writer                                                    |
+| csv             | a thin, optional entry point, never coupled to the xlsx core                                                                   |
+| vba             | native read/author/edit of a macro-enabled workbook's `vbaProject.bin` (`src/vba/`)                                            |
 
 That order is a real constraint, not a description: `scripts/check-layering.ts` (a gate in
 `verify --full`) fails the build on an import that runs up it. The rules it carries are that
@@ -134,7 +134,7 @@ repair and without a column budget for as long as both lived in `src/io/xlsx/`.
 `Worksheet` and `Workbook` are the two classes everything else hangs off, so both would grow
 without bound if every feature simply added a private field beside the getter that reads it. Past
 about a thousand lines that is no longer a class you can read: the fields are scattered through the
-file, and there is no point at which you can see what the object *is*.
+file, and there is no point at which you can see what the object _is_.
 
 Both push cohesive slices of state into their own objects and keep the public accessors in front of
 them. `Worksheet` holds `DataValidationOverlay`, `ConditionalFormattingOverlay`, `GridEdits`,
@@ -157,22 +157,22 @@ handed back to the writer, each the target of an index held elsewhere in the fil
 The theme reaches one, and it is instructive: resolving a colour needs the workbook's custom indexed
 palette as well as the theme scheme, but that palette is also the writer's source for
 `<indexedColors>` and is filled in by the reader, so it belongs with the style tables rather than
-with the theme. It is passed in as a narrow accessor over that slice. Had the palette moved *into*
+with the theme. It is passed in as a narrow accessor over that slice. Had the palette moved _into_
 the theme, the rest of the styles-table state would have followed it and the result would be a
 colour-and-styles overlay, which is not a slice of anything. When a candidate slice has more than one
 or two such edges, that is the signal it is not one.
 
 The media block is the case where that test cut a candidate in half rather than rejecting it. The
-*registry* (the images, and the content index that makes re-registering an identical picture a hash
+_registry_ (the images, and the content index that makes re-registering an identical picture a hash
 rather than a walk) reaches nothing, and is `WorkbookMedia`. `exportImages`/`importImages` reach five
 different things on `Worksheet` and stayed on `Workbook`, reading through the slice: moving them would
 have relocated that coupling rather than removed it. The same cut runs through `WorksheetMerges`,
 which owns the regions and hands back the rectangle a new merge covers, while the two things a merge
-does to the *grid* (collapsing the values it covers, widening the used extent) stay on the class that
+does to the _grid_ (collapsing the values it covers, widening the used extent) stay on the class that
 owns the grid. A slice that had to be handed the row storage to buy one line at the call site would
 have been paying two edges for it.
 
-A collection accessor on either class hands back the *live* array, not a copy, and that is a
+A collection accessor on either class hands back the _live_ array, not a copy, and that is a
 decision rather than an omission. These are views onto a document that is still being edited: a
 caller holding `workbook.worksheets` across an `addWorksheet` should see the sheet that was just
 added, exactly as it would from a re-read, and a copy would quietly turn every such reference into a
@@ -183,7 +183,7 @@ the list no longer says. That is the same class of hazard as reaching into any o
 the library does not defend against it here.
 
 `StreamedSheetReader.merges` (`io/xlsx/read-rows.ts`) does copy, and the reason is not that one is
-more careful than the other. Its array is *reassigned* on each pass over the part, so a caller
+more careful than the other. Its array is _reassigned_ on each pass over the part, so a caller
 holding the live one across a second iteration would be holding a detached snapshot without ever
 having been told - the very thing the model's live array is not. Copying is what makes the detachment
 explicit at the one place it can happen. The rule, then, is about lifetime rather than about trust:
@@ -195,14 +195,14 @@ it is the grid and the things that reach into the grid constantly: tables and pi
 header and totals rows and re-pin themselves through `GridEdits` on every splice, so lifting them
 would produce a tables-and-grid overlay, which is the theme example above with a different name.
 
-What that materialising *is*, though, belongs to the table, and lives there. `Worksheet.addTable`
+What that materialising _is_, though, belongs to the table, and lives there. `Worksheet.addTable`
 hands the new table a `TableGrid`, the three-call channel a registered table holds into the grid
 (does this cell hold a value, write this cell, open a row here), and the table fills its own header
 and totals cells as the last act of construction. The knowledge that an empty header row is
 corruption Excel repairs on open, that a totals aggregate is a `SUBTOTAL` under a code from
 `TOTALS_ROW_SUBTOTAL_CODE`, and that a `custom` total is the column's own stored formula, is the
 table's, not the sheet's. The round-trip guard is the load-bearing part: reading a workbook
-re-registers every table after its cells are loaded, so only an *empty* cell may be filled. A cell
+re-registers every table after its cells are loaded, so only an _empty_ cell may be filled. A cell
 holding rich text, a style, or text that drifted from the column name is authoritative, and
 clobbering it would be silent data loss on every file that has a table, with no schema error to
 catch it. That is why the channel asks whether a cell holds a value rather than handing over the
@@ -219,7 +219,7 @@ by scanning every cell is what made appending quadratic, since each of the three
 the answer is not available: a caller holding a `Cell` styles or clears it without the sheet hearing
 about it, so a remembered extent goes stale invisibly, and a wrong used range is worse than a slow
 one because it is what lets an append land on a row someone had prepared. What the extent keeps
-instead is the *structure*, which the sheet does observe: the highest row key, the highest
+instead is the _structure_, which the sheet does observe: the highest row key, the highest
 materialised column, and the highest line declared by a row height, a column width or a merge. Those
 bound the extent from above, the top line is the one that was just appended in the case that matters,
 and confirming it against the live grid costs a single row. A bound may overstate, which costs a
@@ -232,13 +232,13 @@ ask for. Overlap-checking a new merged region against every existing one made lo
 `<mergeCell>` in the part, so that scan sat on an untrusted path. The obvious index, a bucket per row
 holding every region covering it, is the one that cannot ship: a sheet of whole-column merges is
 legal, disjoint and cheap to write, and would claim a bucket entry per row per region. So the index
-buckets a region under its *top* row alone, in bands, and keeps the height of the tallest region on
+buckets a region under its _top_ row alone, in bands, and keeps the height of the tallest region on
 the sheet; a region overlapping a query must begin within that height above it, which bounds the
 bands worth visiting. Memory is one entry per region, and the price is that a sheet of tall regions
 widens the window until the query is the scan it replaced, never worse. Resolving a covered address
 to its region's master rides the same index, which takes that scan off `getCell` as well.
 
-`GridEdits` owns that splice arithmetic for *everything* anchored to the grid, which is a wider set
+`GridEdits` owns that splice arithmetic for _everything_ anchored to the grid, which is a wider set
 than the cell rows: line metadata, merges, tables, anchored images and the coordinates a cell's value
 carries (a shared-formula master, a hyperlink's clickable range, a data table's ranges) move with the
 cells, and so do the four things bound to a range that live outside the cell grid entirely:
@@ -264,14 +264,16 @@ given at creation, which passes it to every other sheet and to the defined names
 matters twice: what an insert brings in was written against the grid after the edit and must not move
 again, and a shared-formula clone is recovered from its master at the offset they have now. A clone the
 rewritten master no longer describes becomes a formula of its own, and the writer groups what is still
-shared. Table formulas, pivot sources and preserved parts (charts among them) are not rewritten yet,
-though Excel moves them. A hyperlink's in-workbook location (`S1!B5`) is left as written on purpose:
+shared. A table's column formulas are formula text too and move in the same pass, and so does an
+authored pivot's source range, the one reference Excel never turns into `#REF!`: a delete that takes
+all of it leaves it as written. A loaded pivot's cache and the other preserved parts (charts among
+them) are not rewritten yet, though Excel moves them. A hyperlink's in-workbook location (`S1!B5`) is left as written on purpose:
 Excel 16.0 leaves it too, even when rows are inserted above the cell it names.
 
 The row and column axes are deliberately not mirror images, and where they diverge is a decision
 rather than a gap someone forgot to close. A row takes either input shape, a positional array or an
 object keyed by `ColumnProperties.key`; a column takes only the positional one, because a column's
-values are indexed by *row* and a row carries no key for the other shape to name. `duplicateRow` has
+values are indexed by _row_ and a row carries no key for the other shape to name. `duplicateRow` has
 no column counterpart for a mechanical reason rather than a matter of taste: a row insert carries
 pre-built `Cell`s, so a duplicate keeps the source's per-cell styles, while a column insert carries
 raw `CellValue`s that materialise fresh cells, so the same verb on that axis would silently drop the
@@ -302,7 +304,7 @@ kinds, and the split would cut across the most cohesive of them:
   write-side services (`styles.ts`'s interning registry, `shared-strings.ts`, `package-plan.ts`).
 
 The invariant worth having is that the read pipeline never reaches into the write pipeline. It
-holds, and `color-xml.ts` is why it took work: `parseColor` sat in the write-side style *table*, so
+holds, and `color-xml.ts` is why it took work: `parseColor` sat in the write-side style _table_, so
 the style reader and the worksheet reader both imported the writer to decode a `<color>`. Reading
 and writing that element are one concern with two directions, and they now live together in a module
 either side may use.
@@ -310,7 +312,7 @@ either side may use.
 That invariant is documented rather than gated, because a gate for it cannot be honest.
 `check-layering.ts` matches directories, and a rule derived from reachability defeats itself: the
 moment a read module imports a write module, that module becomes reachable from the read roots and
-so classifies as *shared*, which is precisely the label that makes the check pass. A declared list
+so classifies as _shared_, which is precisely the label that makes the check pass. A declared list
 of write-pipeline modules would work but goes stale in silence, which is the failure these checkers
 exist to prevent. See ADR 0030.
 
@@ -355,7 +357,7 @@ are now thin `node scripts/…` wrappers, the shape `format` and `build` already
 
 ### A table is only a single source of truth if the other copy is derived from it
 
-An exhaustiveness proof covers omission from *the table*. It says nothing about a consumer that
+An exhaustiveness proof covers omission from _the table_. It says nothing about a consumer that
 re-enumerates the same set beside it, and that is where these tables have actually drifted. Three
 rules follow from the cases fixed so far.
 
@@ -364,14 +366,14 @@ rules follow from the cases fixed so far.
 facets; the BIFF12 reader restated all seven and their default-omission rules by hand, so an eighth
 facet would have compiled, lit up in XML both ways, and silently vanished from every `.xlsb`. The
 codec now walks the shared list and supplies only its own bit layout, as a `Record` keyed by
-`Alignment` so the compiler asks for the eighth entry too. What stays in `core/` is the *set*;
+`Alignment` so the compiler asks for the eighth entry too. What stays in `core/` is the _set_;
 each format brings its own reading of it. Masks and shifts do not go in the model.
 
 **A closed enumeration a binary format indexes needs the ordered list, not a second table.**
 `ST_PatternType` was written out three times: the union, the guard's lookup table, and the BIFF12
 index array. Only the first two were checked against each other. `FILL_PATTERNS_IN_SCHEMA_ORDER` is
 now the list; the guard derives from it (`tokenSetOf`) and the codec indexes it. A list can name
-*fewer* members than its union where the `Record<T, true>` shape cannot, so it carries an
+_fewer_ members than its union where the `Record<T, true>` shape cannot, so it carries an
 `AssertNever` proof of the other direction explicitly. That is the price of needing an order.
 
 **Two things a file must agree on must be computed once, not twice identically.** The classic
@@ -383,7 +385,7 @@ matching entry in an end table, because a mistyped pairing across two maps reins
 beside its function name rather than in a map keyed by name, so "no arity recorded" stops being
 representable at all. It used to read as "variadic", which made a `PtgFunc` pop the wrong operands.
 
-The same reasoning applies to a *predicate* several layers share. `isRelType` in `rel-type.ts` is a
+The same reasoning applies to a _predicate_ several layers share. `isRelType` in `rel-type.ts` is a
 leaf importing nothing, because the reader and the writer both ask whether a relationship Type names
 a part class, and putting the answer beside the reader pulled the whole read path (the bounded
 inflater included) into the writer's module closure. The per-entry size budget is what noticed.
@@ -403,7 +405,7 @@ back into a `Workbook`, restoring a loaded sheet's hashed protection credential,
 exact position without resolving merges, evicting a row the streaming writer has already serialised:
 about fifteen operations exist for a codec's benefit and put the model in states no authoring path
 can produce. They were public members. They shipped in the `.d.ts`, they appeared in the generated
-reference, and the model class *was* the codec's mutation interface. They now hang off one symbol key
+reference, and the model class _was_ the codec's mutation interface. They now hang off one symbol key
 in `core/internal.ts` (`sheet[INTERNAL].restoreProtection(…)`), which no entry barrel exports, so the
 boundary is the module graph rather than a naming convention. No layering rule guards who may import
 that module: `package.json` maps only the eight subpaths, so the symbol is already unreachable from
@@ -422,10 +424,10 @@ through `StreamedRow[INTERNAL].create`, for a sharper reason than tidiness: a ro
 writer hands out, and a caller-built one could commit a number the writer had not, evicting that row
 from the model with nothing written for it.
 
-The channel takes two shapes on purpose. `Workbook` and `Worksheet` carry a symbol-keyed *object* of
+The channel takes two shapes on purpose. `Workbook` and `Worksheet` carry a symbol-keyed _object_ of
 operations, one allocation per book or sheet, which is nothing. `Cell` gets a symbol-keyed accessor
-*pair* instead, because a per-instance channel object on the one class allocated in the millions is a
-real cost for state most cells never carry. Despite the origin it is not the *codec* channel: the
+_pair_ instead, because a per-instance channel object on the one class allocated in the millions is a
+real cost for state most cells never carry. Despite the origin it is not the _codec_ channel: the
 model's own `dst.model = src.model` setter reaches through it for exact-position cell placement, and
 `Row`/`Column` reach through it for the per-line stores. It is the internal channel, and core is
 allowed to use it.
@@ -450,7 +452,7 @@ would read and write it, and the public handle would simply never mention it.
 
 Those sixteen pairs are spelled out rather than generated from a facet list, and the decision was
 taken deliberately once the list-driven form was costed. The facet lists elsewhere in `core/`
-(`CELL_STYLE_FACETS`, `WORKSHEET_MODEL_FACETS`) drive *loops* over state a caller never names;
+(`CELL_STYLE_FACETS`, `WORKSHEET_MODEL_FACETS`) drive _loops_ over state a caller never names;
 generating accessors is a different thing, and its price is paid twice. `gen-docs.ts` reads class
 members, so each property would still need a declared member carrying its doc comment, leaving only
 the four-line body to save. And the members would have to be installed at runtime rather than
@@ -458,13 +460,13 @@ declared, which trades a surface the compiler checks for one it merely believes.
 `AssertNever` proof above spending its own guarantee. A slice that is not one costs more than the
 lines it removes, and so does an abstraction.
 
-The plumbing *underneath* those accessors was costed separately, and the answer split. Four members
+The plumbing _underneath_ those accessors was costed separately, and the answer split. Four members
 were byte-identical between the two handles modulo which coordinate they name: the private read and
 write helpers, and the `values` getter and setter. The first pair moved; the second did not.
 
 The read and write pair is `AxisHandle` (`core/axis-handle.ts`), which `Row` and `Column` both
 extend. What made it worth having is not the lines it saves but the rule it states: writing
-`undefined` clears the field, and clearing the *last* field takes the record with it, because the
+`undefined` clears the field, and clearing the _last_ field takes the record with it, because the
 used extent derives its bounds from which lines have a record. That rule is subtle enough that
 stating it twice is how it drifts, and it did: an emptied record used to pin `rowCount` at a row
 nothing formatted any more. A base class is also the allocation-free shape, which the free-function
@@ -514,7 +516,7 @@ monolith, split along the OOXML package's own divisions so a change touches one 
   constructor argument, since that is the only thing that differs between them, and keeping a
   phonetic run's `<t>` out of the text in all three; `cell-accumulator.ts` owns
   the per-cell gathering state machine the buffered and streaming readers both drive (ADR-0004).
-  Both are *machines*, not bags of state calls, and for one reason: a grammar two readers spell out
+  Both are _machines_, not bags of state calls, and for one reason: a grammar two readers spell out
   separately is kept in step by convention rather than by mechanism, and the drift it admits reads
   the same content two ways depending on which encoding the producer happened to choose. Every other
   parser that gathers an element's text across open/text/close events does it through `TextCapture`
@@ -522,7 +524,7 @@ monolith, split along the OOXML package's own divisions so a change touches one 
   self-closing `<x/>` fires no close and a latch nothing closes is a latch that eats the next
   element's text. `capturedText` is its pull shape, for a parser whose whole job is reading a handful
   of text elements out of a part; a parser that interleaves capture with per-element state of its own
-  stays bespoke. The same rule reaches past the grammar to the *decisions* the two readers make about
+  stays bespoke. The same rule reaches past the grammar to the _decisions_ the two readers make about
   a row and a column: `row-position.ts` owns where a `<row>` sits when it declares no `r`, and
   `takeColumnSpan` (`column-span.ts`, in front of `clampColumnSpan` and `ColumnRecordBudget` in
   `src/io/read-policy/column-budget.ts`) owns which columns a `<col min max>` reaches. Both
@@ -534,7 +536,7 @@ monolith, split along the OOXML package's own divisions so a change touches one 
   and `worksheet-xml.ts` (the serialisers), `relationships.ts` (the SpreadsheetML relationship-type
   vocabulary), with `write.ts` keeping `writeXlsx` and the `buildPackageParts` orchestrator.
 
-Neither cluster owns the container it rides in. `src/io/opc/` holds what is true of *any* OOXML
+Neither cluster owns the container it rides in. `src/io/opc/` holds what is true of _any_ OOXML
 package: `inflate.ts` (the bounded inflater), `sniff-format.ts` (the magic-byte probe and the
 typed rejection), `read-opc.ts` (resolving relationships and walking a part closure), `rels.ts`
 (emitting a `.rels` part, escaping its own attributes rather than asking each caller to),
@@ -556,7 +558,7 @@ at the single point where the value becomes bytes, and `src/xml/xml.ts` states a
   produces as readily as the XML one. Every numeric attribute in OOXML is `xsd:double`,
   `xsd:unsignedInt` or a bounded flavour, and no lexical space has a form for a NaN or an infinity,
   so writing one produces a package Excel reports as damaged. The refusal is also exported on its own
-  because a value can be unwritable and still be *read* on the way to the bytes: the collapsed-row
+  because a value can be unwritable and still be _read_ on the way to the bytes: the collapsed-row
   scan compares outline levels to walk a group, and against `-Infinity` every comparison holds and
   the walk never ends.
 - **A date is refused if `dcterms:W3CDTF` cannot spell it.** `assertWritableDate`, for the same
@@ -573,7 +575,7 @@ at the single point where the value becomes bytes, and `src/xml/xml.ts` states a
   sheet named `Sheet_x0001_A` is a different name rather than a rendering of the one asked for.
 
 The read side is the same grammar with one asymmetry, and stating it is what makes the pair
-trustworthy. `enumToken`, `numFinite`, `numInteger` and the `bool*` family in `xml-scan.ts` *drop*
+trustworthy. `enumToken`, `numFinite`, `numInteger` and the `bool*` family in `xml-scan.ts` _drop_
 what they cannot read, where the writer throws. A file the library did not write is allowed to be
 wrong, and losing one attribute beats losing the sheet; a value an author supplied is a mistake at
 the call. Both halves lean on one guard per enumeration, so what the reader accepts is always
@@ -581,7 +583,7 @@ something the writer can write back. Where that leaves a model fragment unwritab
 reader drops the fragment: a `<cfRule>` whose type is not in `ST_CfType` is dropped whole rather than
 half-read, because `type` is the attribute every other field is read relative to.
 
-Two rules bind the *emitter* rather than the value it is handed, and both were learned the same way.
+Two rules bind the _emitter_ rather than the value it is handed, and both were learned the same way.
 **Content never decides how its container is serialised.** The one row attribute that cannot be known
 when a streamed row is rendered, `collapsed="1"`, is patched in afterwards; the patcher used to ask
 the rendered markup whether the attribute was already there, and that markup also carries cell text
@@ -610,10 +612,10 @@ unreadable: `A:A` is a legitimate reference, and a caller needing a bounded rect
 corners itself.
 
 That leaves each feature to decide what "drop" means for it, and both readings are in the tree.
-A table is dropped *whole* when its `ref` is unreadable, for the `<cfRule>` reason: the anchor is
+A table is dropped _whole_ when its `ref` is unreadable, for the `<cfRule>` reason: the anchor is
 the coordinate every other field is read relative to. It is dropped whole too when its column count
 differs from the `ref` width, since the model lays columns out one per `<tableColumn>` from the anchor
-and a missing one would shift every column after it. A `sqref` is dropped *per area*, because its
+and a missing one would shift every column after it. A `sqref` is dropped _per area_, because its
 areas are independent and one unreadable area says nothing about its neighbours. Where the
 authoring path shares the code, the guard stays on the authoring side and the reader filters before
 reaching it, so `addDataValidation` still refuses a range naming no cells while a file carrying one
@@ -623,16 +625,16 @@ simply loses that validation.
 
 Every error the library raises deliberately descends from `XlsxError` (`src/errors.ts`), so one
 `catch` clause answers "was that us?" without naming a class. Two levels of branch sit under it,
-chosen so neither is redundant with the other: `code` is the *kind* of failure, `name` (and
+chosen so neither is redundant with the other: `code` is the _kind_ of failure, `name` (and
 `instanceof`) is exactly which one. Several classes share a code on purpose. A code in 1:1
 correspondence with the classes would carry nothing the class did not already carry.
 
-| code | what the caller does about it | classes |
-| --- | --- | --- |
-| `unsupported-format` | try a different reader, or reject the input | `UnsupportedFormatError` (its `format` field says *which* unsupported input) |
-| `malformed-input` | reject the file, which is either broken or hostile | `PackageReadError`, `XmlParseError`, `XlsxParseError`, `XlsbParseError`, `CsvParseError`, `VbaParseError`, `CustomUiParseError` |
-| `authoring` | fix the calling code, which described a document that cannot exist | `AuthoringError`, `VbaAuthorError` |
-| `internal` | report it, because an invariant of ours did not hold | `InternalError` |
+| code                 | what the caller does about it                                      | classes                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `unsupported-format` | try a different reader, or reject the input                        | `UnsupportedFormatError` (its `format` field says _which_ unsupported input)                                                    |
+| `malformed-input`    | reject the file, which is either broken or hostile                 | `PackageReadError`, `XmlParseError`, `XlsxParseError`, `XlsbParseError`, `CsvParseError`, `VbaParseError`, `CustomUiParseError` |
+| `authoring`          | fix the calling code, which described a document that cannot exist | `AuthoringError`, `VbaAuthorError`                                                                                              |
+| `internal`           | report it, because an invariant of ours did not hold               | `InternalError`                                                                                                                 |
 
 Scalar argument validation stays outside the taxonomy: an index out of range, an unparseable
 reference, a value of the wrong type are native `RangeError` / `SyntaxError` / `TypeError`, because
@@ -644,13 +646,13 @@ the lower layer's text is itself the hazard (a zip library's message can name an
 
 The reader is held to the other half of that line: **a file is never allowed to raise an
 `authoring` failure, and never a native one.** A model method validates what it is given, and a
-reader that hands it a file-derived name is asking the model to judge the *file* through a guard
-written about the *caller*. `src/io/read-policy/read-repair.ts` is the single seam where that is
+reader that hands it a file-derived name is asking the model to judge the _file_ through a guard
+written about the _caller_. `src/io/read-policy/read-repair.ts` is the single seam where that is
 resolved, for both codecs,
 and it offers exactly two answers. `repairSheetName` rewrites a name the way Excel repairs it, for
 the case where the rule is a naming rule and dropping the thing would cost more than the name (a
 sheet takes its cells, its position, and every `localSheetId` indexing past it with it). `admitting`
-runs the call and answers `undefined` where the model refuses, for the case where the name *is* the
+runs the call and answers `undefined` where the model refuses, for the case where the name _is_ the
 identity: a table called `1 bad`, a defined name with no name. It catches `AuthoringError`,
 `RangeError` and `SyntaxError` and nothing else, so an `XlsxError` from a layer below and an
 `InternalError` of ours both keep their identity, and it is the only place on the read path that
@@ -663,7 +665,7 @@ of the codec so that neither imports the other; the writer refuses what it names
 declines to decode it. A character reference to an unrepresentable code point is left as the `&#1;`
 the file wrote, on the same grounds as one naming no code point at all; a raw one has no verbatim
 form to keep and is dropped. Without that bound a hostile file read cleanly and threw
-`AuthoringError: cannot write U+0001 at offset 2` on the *next save*, which is the same taxonomy
+`AuthoringError: cannot write U+0001 at offset 2` on the _next save_, which is the same taxonomy
 violation arriving by a longer route.
 
 ### What an audit of the read path has already checked
@@ -721,7 +723,7 @@ the office-document parts are spelled: XML in `.xlsx`, BIFF12 record streams in 
 follows that split exactly, and the directory layout states it. The bounded inflater, magic-byte
 probe and OPC/relationship resolution live in `src/io/opc/`, and the resolved-format table
 (`XfStyle`, its built-in number formats, `applyXfToCell`, and the cell → row → column → xf 0
-resolution every cell reader drives) in `src/io/style/`. Both sit *above*
+resolution every cell reader drives) in `src/io/style/`. Both sit _above_
 the codecs rather than inside either. Only the part parsers live apart in `src/io/xlsb/`:
 `record-stream.ts` (the record framing), `primitives.ts` (RkNumber, length-prefixed strings,
 colours), `formula.ts` and `ptg-functions.ts` (the Ptg token stream a binary formula is stored as,
@@ -729,7 +731,7 @@ decoded to the text `<f>` would have carried), then a per-part parser mirroring 
 
 `readXlsx` detects which serialisation a package holds and dispatches, so a caller never branches on
 format. The property that keeps the two honest is asserted, not assumed: the corpus reads one workbook
-Excel saved in *both* forms and requires the two models to be identical. Anything the binary states
+Excel saved in _both_ forms and requires the two models to be identical. Anything the binary states
 that XML omits must therefore be dropped on the binary side: a bottom vertical alignment, a locked
 cell, a row restating the sheet's default height, a hatch fill's automatic-colour sentinels. That is
 where most of the subtlety in that reader lives.
@@ -767,7 +769,7 @@ That disjointness is load-bearing rather than tidy: `export *` does not report a
 re-export, it silently drops the name, so a symbol exported from two entries would vanish from
 the root specifier with no diagnostic anywhere. `scripts/check-entries.ts` (a gate in
 `verify --full`) fails the build on a duplicate, on an entry `package.json` does not publish, and
-on a published subpath whose module is gone. It is also why the *whole* failure taxonomy is
+on a published subpath whose module is gone. It is also why the _whole_ failure taxonomy is
 exported from `/errors` and nowhere else: a container-level failure belongs to no single codec,
 since `readXlsx` and `readXlsb` both raise `UnsupportedFormatError`, so putting the classes with the
 codecs would have forced exactly the duplication the union cannot survive. That entry costs 3 KB,
@@ -780,7 +782,7 @@ published subpath against its own budget by walking that entry's static imports 
 per-entry numbers are the ones that catch anything: the total cannot see a codec acquiring a value
 import of something it previously needed only as a type, or the model reaching into a parser, since
 neither changes the number of bytes in the tarball. The closure is a lower bound on any bundler's
-answer, because `sideEffects: false` lets a bundler prune *within* those modules and never add to
+answer, because `sideEffects: false` lets a bundler prune _within_ those modules and never add to
 them, which is what makes an over-budget reading a statement about the module graph rather than
 about minification.
 
@@ -794,18 +796,18 @@ surprise. Measuring it needs an emitted artifact, so the gate builds first
 is a few seconds and runs inside the corpus gate's shadow.
 
 Budgets are tripwires, not targets. Raise one deliberately, with the same eyes a dependency addition
-would get, and say in the commit *what* the entry gained. The alternative the `/customui` breach
+would get, and say in the commit _what_ the entry gained. The alternative the `/customui` breach
 actually called for was the module boundary rather than the number: see
 [ADR-0004](decisions/0004-xml-read-path.md)'s 2026-08-30 update.
 
 The barrels are curated, not exhaustive: modelled core-feature types (autofilter, page setup,
 sheet views, defined names, image options) are public, and internal helper functions stay off
-them. `src/vba/index.ts` and `src/customui/index.ts` are *internal* barrels that the model and
+them. `src/vba/index.ts` and `src/customui/index.ts` are _internal_ barrels that the model and
 the codecs import; the public `/vba` and `/customui` faces are deliberately narrower. The two
 halves of the streaming API are symmetric in reach but asymmetric in what needed naming.
-Everything the streaming *writer* exposes is public: its workbook/worksheet/row handles are
+Everything the streaming _writer_ exposes is public: its workbook/worksheet/row handles are
 classes, its options are interfaces, and nothing structural is left un-named. The streaming
-*reader*'s per-row/cell output stays inferred-structural rather than a named commitment.
+_reader_'s per-row/cell output stays inferred-structural rather than a named commitment.
 Streaming is not its own subpath: measured, it reaches every module `/xlsx` does plus three, and
 an entry that costs what the codec costs is an alias rather than a boundary.
 
@@ -820,7 +822,7 @@ that exercises the `exports` map at all, then asserts `/core` reaches no seriali
 
 Those numbers say one thing about the model that is worth stating rather than leaving to be
 rediscovered: roughly half of `/core`'s weight is the VBA codec and the ribbon parser, because
-`core/workbook.ts` imports `parseVbaProject`, `addVbaReference` and `removeVbaModule` at *value*
+`core/workbook.ts` imports `parseVbaProject`, `addVbaReference` and `removeVbaModule` at _value_
 level. The layering rule permits that deliberately, since a workbook models a VBA project and its
 ribbon, so those types are part of the document, and the measurement is what shows the price of
 letting the operations live there too. It is left alone knowingly. Removing it means a split the
@@ -863,7 +865,7 @@ run-length-compressed ([MS-OVBA]) module source and p-code. OOXML treats it as a
 blob referenced by a workbook relationship; the ZIP package is otherwise identical to a plain
 `.xlsx`. `src/vba/` is the self-contained, dependency-free subsystem that reads that blob and
 applies pure-TS structural edits natively, with no `fflate` and no runtime dependency, just bytes.
-Authoring or editing module *source* is not here: it needs genuinely compiled p-code only a real
+Authoring or editing module _source_ is not here: it needs genuinely compiled p-code only a real
 Excel can emit, so it lives in the offline `tools/vba-compiler` (see below, and ADR 0019).
 
 **Preservation is the safety floor, and every VBA feature is additive over it.** Read captures
@@ -871,7 +873,7 @@ Excel can emit, so it lives in the offline `tools/vba-compiler` (see below, and 
 `vbaProjectSignature`) as a `PreservedWorkbookReference`, and the writer re-emits those bytes
 verbatim, so a load/edit/save of an `.xlsm` keeps its macros with no VBA-specific code on the
 common path. Everything below layers onto that guarantee; none of it can desync the two
-representations, because a *read-and-not-re-authored* project is still emitted from the
+representations, because a _read-and-not-re-authored_ project is still emitted from the
 preserved bytes alone.
 
 The subsystem is built as encode/decode pairs over two formats plus a project layer:
@@ -879,13 +881,13 @@ The subsystem is built as encode/decode pairs over two formats plus a project la
 - **CFB container.** `cfb.ts` reads and `cfb-writer.ts` writes. The reader walks the
   header, FAT, directory and mini-FAT, and reconstructs the whole storage/stream tree so the
   edit path can re-emit it with one stream swapped. The writer emits a v3 container whose
-  storages are the name-ordered balanced red-black tree a *navigating* host (Excel) needs, not
+  storages are the name-ordered balanced red-black tree a _navigating_ host (Excel) needs, not
   just the linear scan our own reader would accept. Streams are found and replaced by storage path
   (`VBA/dir`, the root `PROJECT`), never by bare name, because a module and a UserForm's storage can
   each repeat a name another storage already uses.
 - **MS-OVBA compression.** `ms-ovba.ts` (`decompressContainer` / `compressContainer`) is the
   chunked copy-token/literal-run codec Office uses for module source and the `dir` stream. It
-  is *not* deflate. The compressor's contract is that its output re-expands byte-for-byte.
+  is _not_ deflate. The compressor's contract is that its output re-expands byte-for-byte.
 - **Project layer.** `project.ts` decodes the `VBA/dir` and module streams into a typed view;
   `project-editor.ts` splices structural edits (remove module, add reference) into an existing
   project by splicing bytes, never by decoding and re-encoding a stream; `dir-records.ts` holds the
@@ -905,26 +907,26 @@ unbounded allocation, and each guard is pinned by a crafted-malformed fixture.
 
 The authoring side fails closed with `VbaAuthorError` on a contract violation (over-long or
 duplicate stream name, unrepresentable character) rather than emitting a silently broken container.
-It is *not* fed only our own bytes: `removeVbaModule` and `addVbaReference` re-encode a `dir` stream
+It is _not_ fed only our own bytes: `removeVbaModule` and `addVbaReference` re-encode a `dir` stream
 that arrived in the file, so the encoder is bounded in time like a parser, and the invariants the
 editors patch against (MODULES_COUNT preceding every module block, and being non-zero) are checked
 rather than assumed.
 
 The public API layers by fidelity and intent, each slice fail-closed:
 
-- **Read.** `Workbook.vbaProject: VbaProject | undefined` parses the preserved bytes *lazily*
+- **Read.** `Workbook.vbaProject: VbaProject | undefined` parses the preserved bytes _lazily_
   and memoises. Modules expose `name`, `streamName`, `kind` (the full procedural / document /
   class / designer classification), and decompressed `source`. A read never perturbs what the
   writer emits (ADR 0016).
 - **Attach, replace, strip.** `Workbook.vbaProjectBytes` is a get/set accessor pair over the
-  raw blob. A set is validated by `parseVbaProject` *before* any state change, so a bad blob is
+  raw blob. A set is validated by `parseVbaProject` _before_ any state change, so a bad blob is
   rejected whole, and replacing or removing drops the old bytes' now-stale signature. This is also
   how an authored project is installed: the offline `tools/vba-compiler` produces a compiled
   `vbaProject.bin`, and a consumer attaches it here, in pure TS with no Office at runtime.
 - **Structural edits, pure TS.** `removeVbaModule` and `addVbaReference` (with their `Workbook`
   and package-level `editXlsxVba*` wrappers) splice the original `.bin`. They edit only the `dir`
   stream (and, for a removal, `PROJECT`/`PROJECTwm`) and leave every module stream and
-  `_VBA_PROJECT` byte-for-byte. They are safe *precisely because* they never touch a module's
+  `_VBA_PROJECT` byte-for-byte. They are safe _precisely because_ they never touch a module's
   compiled p-code: the `dir` stream, authoritative for the module/reference list, carries the
   change (ADR 0018/0019).
 - **Author or edit module source, offline and not in the shipped library.** This is done by
@@ -936,11 +938,11 @@ The public API layers by fidelity and intent, each slice fail-closed:
 **Why source authoring cannot be pure TS.** Excel does not recompile VBA from source on open. A
 module runs the compiled p-code (PerformanceCache) it ships, and the source is only recompiled
 when a human opens the VBE. A `vbaProject.bin` synthesized from source alone, with no p-code or
-mismatched p-code, either throws "Invalid data format" or *silently runs stale code*, so "opens
+mismatched p-code, either throws "Invalid data format" or _silently runs stale code_, so "opens
 clean" is not proof of correctness. Only a real Excel can produce runnable p-code, hence the
 offline compiler. Authoring artifacts are verified with `execute-verdict.ps1`, which opens with
-macros enabled and *runs* a known authored macro, not merely by an open verdict (ADR 0019).
-*Executing* macros in-process stays out of scope forever. That needs a live host, and this is a
+macros enabled and _runs_ a known authored macro, not merely by an open verdict (ADR 0019).
+_Executing_ macros in-process stays out of scope forever. That needs a live host, and this is a
 document tool, not a VBA interpreter (ADR 0013).
 
 ## Tech decisions
@@ -975,7 +977,7 @@ The stack is deliberately small and each choice is recorded as an ADR under
   inflation is bounded by a running output counter, not any declared size.
 - **Work is bounded by what a file contains, not by what it declares.** The declared-size rule
   above has a CPU twin, and it is the one that keeps being rediscovered: a loop written over a
-  declared *region* costs whatever the region says, and a region is free to be the whole grid. The
+  declared _region_ costs whatever the region says, and a region is free to be the whole grid. The
   shape is always the same. `<col min max>` spans the sheet 16,384 columns at a time and any number
   of elements may do so, which is what `ColumnRecordBudget` bounds; `<mergeCell A1:A1048576>` is a
   few bytes that used to cost thirty milliseconds each, so 16,384 of them (~570 KB of XML, a few KB
@@ -985,28 +987,28 @@ The stack is deliberately small and each choice is recorded as an ADR under
   files too, and needs no number anyone has to justify. Where the work is genuinely proportional to
   a declared count, it gets a named budget with its reasoning attached, and a test that counts the
   work rather than timing it.
-- **A hostile file reaches the encoders too.** "Our own bytes" is a property of a value's *origin*,
+- **A hostile file reaches the encoders too.** "Our own bytes" is a property of a value's _origin_,
   not of the direction it is travelling: an edit reads a foreign file, mutates a structure inside
   it, and writes it back, so every re-encode on an edit path is fed bytes the caller did not write.
   `Workbook.removeVbaModule` recompresses a `dir` stream out of a `.xlsm`, which is why the MS-OVBA
   encoder carries a time bound (a hash chain over three-byte prefixes rather than a rescan of the
-  whole back-window) and why the `dir` editors *check* the record ordering they patch against
+  whole back-window) and why the `dir` editors _check_ the record ordering they patch against
   rather than asserting it in a comment.
 - **A part is found through the relationship that names it, never by its conventional path.**
   `xl/workbook.xml`, `xl/sharedStrings.xml`, `xl/styles.xml` and the rest are where Excel puts those
   parts, not where OPC says they live: the package names its office document in `_rels/.rels` and its
   pool and stylesheet in the workbook's own `.rels`, and a conforming producer may point them
-  anywhere. The conventional path stays as a *fallback* for a package whose rels graph is damaged,
+  anywhere. The conventional path stays as a _fallback_ for a package whose rels graph is damaged,
   never as the first question. What makes this worth a rule rather than a bug report is how the two
   halves fail: a workbook part not found is loud, while a pool not found reads every `t="s"` cell as
   the empty string and a stylesheet not found leaves every cell without a number format, which
-  changes a date cell's *type*, silently, because the date test reads `numFmt` off the resolved style.
+  changes a date cell's _type_, silently, because the date test reads `numFmt` off the resolved style.
 - **Part-name lookups fold ASCII case; the package's own spelling is what gets written back.** OPC
   compares part names case-insensitively, so `/XL/Workbook.XML` and `/xl/workbook.xml` name one part,
   and a package cased differently from the references to it used to read as a package with no
   workbook at all. The fold lives once, at the boundary: `packageAccessors` tries the exact key and
   falls back to a folded map, and `contentTypeResolver` folds its `<Override PartName>` keys the way
-  it already folded `<Default Extension>`. It is a *lookup* rule only. The inflated part map keeps
+  it already folded `<Default Extension>`. It is a _lookup_ rule only. The inflated part map keeps
   the package's own spelling, which is the name a preserved part is re-emitted under, so folding
   never rewrites what a round trip hands back.
 - **A name inside an error message goes through `quoted()`.** `src/errors.ts` exports it, every
@@ -1021,13 +1023,13 @@ The stack is deliberately small and each choice is recorded as an ADR under
   into nine inline calls, two of them in a file that did both and one of those four lines from a
   `quoted()` in the same function. oxlint ships no `no-restricted-syntax`, so the gate is a script:
   every `JSON.stringify` in `src/` is either `quoted`'s own implementation, `core/range.ts`'s
-  replacer form, or a finding. `errors.ts` owns the message *skeletons* for the same reason it owns
+  replacer form, or a finding. `errors.ts` owns the message _skeletons_ for the same reason it owns
   the spelling -- `invalidToken` for the OOXML-enumeration refusal, `unrepresentable` for a character
   the target format cannot encode -- because both of those were being thrown on two sides of a
   layering boundary and the response had been to transcribe the sentence.
 - **A lookup table on a parser path is a `Map`, or an object with no prototype.** A plain object
   literal indexed by a string the file supplies answers about a dozen attacker-chosen keys with a
-  *function*: `constructor`, `toString`, `valueOf`, `hasOwnProperty` and the rest of
+  _function_: `constructor`, `toString`, `valueOf`, `hasOwnProperty` and the rest of
   `Object.prototype`. Every miss check spelled `?? ` or `=== undefined` then reads that as a hit.
   This is not prototype pollution (nothing is written), it is the read side of the same mistake, and
   it lands where the format's own vocabulary is open-ended: an entity name, a media extension, a
@@ -1040,30 +1042,30 @@ The stack is deliberately small and each choice is recorded as an ADR under
   equivalent, and `no-prototype-builtins` catches the `obj.hasOwnProperty(k)` call rather than the
   `obj[k]` read. So this paragraph is the gate, and the corpus's
   `undefined-entity-in-cell-text-stays-verbatim` is the lock on the site that reaches furthest.
-- **On a round-tripping surface, ask whether input is safe to *write back*.** Bounding what a
+- **On a round-tripping surface, ask whether input is safe to _write back_.** Bounding what a
   parser will hold is only half of it. What the reader accepts, the writer re-emits, so a value
-  a foreign part carries can leave *our* output invalid, and one invalid attribute is enough for
+  a foreign part carries can leave _our_ output invalid, and one invalid attribute is enough for
   Excel to offer to repair the feature away. A wire bound therefore lives in the parser, the
-  authoring verb, *and* the serialiser, so the serialiser cannot emit an illegal value however the
+  authoring verb, _and_ the serialiser, so the serialiser cannot emit an illegal value however the
   model was populated (`MENTION_OFFSET_MAX` is the worked example; see
   `knowledge/specs/threaded-comments-and-the-legacy-fallback.md`).
 - **Two parts that are two halves of one representation derive from one variable.** Some features
   are only coherent as a pair. A threaded comment's conversation part and the legacy fallback
-  `<comment>` that binds a cell to it are each *invisible in Excel* without the other, even though
+  `<comment>` that binds a cell to it are each _invisible in Excel_ without the other, even though
   either alone validates clean. The writer computes such a pair from a single source (`write.ts`
   derives both from one `threads` value) so neither can be emitted without the other by
   construction, rather than by a rule someone has to remember.
 - **A part family graduates from preserved to modeled in one change, never both at once.**
   Byte preservation (`core/preserved.ts`) is the sole emission authority for what it covers, so a
-  *read view* over preserved bytes is safely additive (`Workbook.vbaProject`, `Workbook.customUI`,
+  _read view_ over preserved bytes is safely additive (`Workbook.vbaProject`, `Workbook.customUI`,
   `loadedPivotTables`). But the moment a serialiser emits a part from the model, that rel type
   must leave `isPreservedSheetRelType`/`isPreservedWorkbookRelType` in the same commit or the
   package carries it twice.
 - **Narrow foreign tokens; never trust them into the model.** An enumerated attribute
   read from a file is admitted only through a type guard that recognises the known union
   members (the pattern is `isCustomFilterOperator` in `core/autofilter.ts`); an
-  unrecognised token is *dropped*, leaving the facet unset, rather than cast in with `as`.
-  The reader's posture is *skip, never guess*: a malformed token yields absence, not a
+  unrecognised token is _dropped_, leaving the facet unset, rather than cast in with `as`.
+  The reader's posture is _skip, never guess_: a malformed token yields absence, not a
   bogus value the rest of the code will trust. See ADR-0004 for the read path this serves.
   Nothing gates this the way `check-layering.ts` gates the import graph, and the closest
   candidate is declined on the record: `no-unsafe-type-assertion` finds 50 in `src/`, 45 of

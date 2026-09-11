@@ -7,8 +7,8 @@ Cluster: styles
 When writing large spreadsheets, every cell's style must be deduplicated into a shared table of cell
 formats (`xf` records) so the same visual style is written once and referenced by index. A common
 real-world pattern assigns styles inside loops, as per-cell style literals, or combines column, row
-and cell styles, which produces many distinct-but-equal style *objects*. A cache keyed on object
-*identity* then fails to recognize these as equal: it grows unbounded with a near-zero hit rate, and
+and cell styles, which produces many distinct-but-equal style _objects_. A cache keyed on object
+_identity_ then fails to recognize these as equal: it grows unbounded with a near-zero hit rate, and
 write time degrades severely. In one measured case a 200k-row by 7-column workbook took roughly 5×
 longer to write with identity-keyed style caching than with styling disabled entirely, so the cache
 actively hurt. A value-based dedup key, a canonical, order-stable encoding of the style's effective
@@ -22,14 +22,14 @@ or merge a style onto a cell without discarding the column- and row-level styles
 
 ## Desired behavior
 
-- **Value-based dedup is the single default.** Two style *values* that are structurally equal must map
+- **Value-based dedup is the single default.** Two style _values_ that are structurally equal must map
   to the same shared `xf` record regardless of whether they are the same JS object. This makes the
   common patterns, per-cell literals in a loop and column-plus-row-plus-cell combinations, fast and
   memory-bounded with no user tuning. There is **no** user-facing cache-mode knob: an enum choosing
   between correct-and-fast and identity-based caching is exactly the legacy compatibility surface this
   fork rejects, and the canonical value-encoding is the one code path.
 
-- **The dedup key is collision-free.** Two structurally *different* styles must never encode to the
+- **The dedup key is collision-free.** Two structurally _different_ styles must never encode to the
   same key, or cells would silently inherit the wrong formatting. This is a hard correctness invariant,
   independent of any performance concern, and must hold across the full effective style surface:
   number format, font, fill, border, alignment, and protection.
@@ -40,7 +40,7 @@ or merge a style onto a cell without discarding the column- and row-level styles
   wholesale, which drops inheritance. Naming aside, `addStyle` or `mergeStyle`, the semantics are the
   load-bearing part.
 
-- **Styles are values, snapshotted at write.** Value-based dedup encodes each cell's *effective* style
+- **Styles are values, snapshotted at write.** Value-based dedup encodes each cell's _effective_ style
   at write time, so mutating a shared style object after it was assigned to several cells is a separate,
   documented concern: styles should be treated as immutable values.
 
@@ -60,7 +60,7 @@ or merge a style onto a cell without discarding the column- and row-level styles
   total and collision-free, and cover it with type-level and unit tests.
 - How to expose the merge operation, a `cell.addStyle(partial)` method or a merge helper, and how it
   composes with the worksheet-default and named-style layers.
-- Whether the same value-based encoding should back read-time style *interning*, so equal styles read
+- Whether the same value-based encoding should back read-time style _interning_, so equal styles read
   from a file share one model object, not just write-time dedup.
 
 Related: `set-style-over-cell-range`, `cellstylexfs-named-style-fill-roundtrip`,

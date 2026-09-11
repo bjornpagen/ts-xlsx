@@ -10,7 +10,7 @@ where `HHHH` is four hex digits naming a code point. A writer that wants to carr
 in a cell has to use it, and a reader that wants to read Excel's files has to undo it.
 
 That much is widely implemented (POI and openpyxl both do it) and widely repeated. It is still a
-claim about what an *application* does, not what a schema says, and `ST_Xstring` types a sheet name
+claim about what an _application_ does, not what a schema says, and `ST_Xstring` types a sheet name
 exactly as it types a `<t>`, so the schema cannot even tell you where the convention applies. The
 questions that actually decide an implementation are narrower than "does Excel decode it":
 
@@ -35,16 +35,16 @@ parts verbatim rather than being escaped by our own writer; validated clean by `
 before opening. Values read through `Range.Value2` and reported as character codes, so nothing is
 lost to console rendering.
 
-| Cell | On disk | Read back |
-| --- | --- | --- |
-| A1 | `<c t="inlineStr"><is><t>_x0041_</t></is></c>` | `A` |
-| A7 | `t="s"` into `<si><t>_x0041_</t></si>` | `A` |
-| B1 | `<c t="str"><f>A1</f><v>_x0041_</v></c>` | `A` |
-| A2 | `<t>_x005F_x0041_</t>` | `_x0041_` (7 characters) |
-| A3 | `<t>_xZZZZ_</t>` | `_xZZZZ_` |
-| A4 | `<t>_x041_</t>` | `_x041_` |
-| A5 | `<t>_x00041_</t>` | `_x00041_` |
-| A6 | `<t>a_x0009_b</t>` | `a`, U+0009, `b` |
+| Cell | On disk                                        | Read back                |
+| ---- | ---------------------------------------------- | ------------------------ |
+| A1   | `<c t="inlineStr"><is><t>_x0041_</t></is></c>` | `A`                      |
+| A7   | `t="s"` into `<si><t>_x0041_</t></si>`         | `A`                      |
+| B1   | `<c t="str"><f>A1</f><v>_x0041_</v></c>`       | `A`                      |
+| A2   | `<t>_x005F_x0041_</t>`                         | `_x0041_` (7 characters) |
+| A3   | `<t>_xZZZZ_</t>`                               | `_xZZZZ_`                |
+| A4   | `<t>_x041_</t>`                                | `_x041_`                 |
+| A5   | `<t>_x00041_</t>`                              | `_x00041_`               |
+| A6   | `<t>a_x0009_b</t>`                             | `a`, U+0009, `b`         |
 
 Five facts fall out.
 
@@ -72,7 +72,7 @@ would disagree with Excel about files Excel itself wrote.
 
 ## The same convention in a threaded comment's `<text>`
 
-The measurement above says the escape works in *cell text*. It says nothing about the modern threaded
+The measurement above says the escape works in _cell text_. It says nothing about the modern threaded
 comments, whose body is a `<text>` in
 `http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments`: a different element, in a
 Microsoft extension namespace, with no documented escape. That asymmetry was visible to callers: a
@@ -82,19 +82,19 @@ string in a threaded comment was refused. Same probe, same question, second elem
 The probe package this library wrote carries one single-message thread per cell, and was patched so
 each body reached the part verbatim, validated clean by `ooxml-validate`, then opened headless and
 read through `Range.CommentThreaded.Text`, reported as character codes. The legacy fallback
-`<comment>` beside each thread was deliberately left holding the *unpatched* placeholder, so a
+`<comment>` beside each thread was deliberately left holding the _unpatched_ placeholder, so a
 readback that reports the patched text proves Excel read the 2018 part and not the fallback.
 
-| Cell | `<text>` on disk | Read back |
-| --- | --- | --- |
-| A1 | `_x0041_` | `A` |
-| A2 | `_x005F_x0041_` | `_x0041_` (7 characters) |
-| A3 | `_xZZZZ_` | `_xZZZZ_` |
-| A4 | `_x041_` | `_x041_` |
-| A5 | `_x00041_` | `_x00041_` |
-| A6 | `a_x0009_b` | `a`, U+0009, `b` |
-| A7 | `plain` | `plain` |
-| A8 | `_x0001_` | U+0001 |
+| Cell | `<text>` on disk | Read back                |
+| ---- | ---------------- | ------------------------ |
+| A1   | `_x0041_`        | `A`                      |
+| A2   | `_x005F_x0041_`  | `_x0041_` (7 characters) |
+| A3   | `_xZZZZ_`        | `_xZZZZ_`                |
+| A4   | `_x041_`         | `_x041_`                 |
+| A5   | `_x00041_`       | `_x00041_`               |
+| A6   | `a_x0009_b`      | `a`, U+0009, `b`         |
+| A7   | `plain`          | `plain`                  |
+| A8   | `_x0001_`        | U+0001                   |
 
 **It is the same convention, cell for cell.** Every row matches the cell-text table: the escape
 decodes, the near-misses do not, the escaped underscore resolves in one left-to-right pass, and a
@@ -124,16 +124,16 @@ clean by `ooxml-validate`, was opened headless, and every section was read throu
 (`LeftHeader`/`CenterHeader`/`RightHeader`, the footer trio, and `EvenPage.*.Text`), reported as
 character codes.
 
-| Slot | Section on disk | Read back |
-| --- | --- | --- |
-| `<oddHeader>` `&L` | `_x0041_` | `A` |
-| `<oddHeader>` `&C` | `_x005F_x0041_` | `_x0041_` (7 characters) |
-| `<oddHeader>` `&R` | `_xZZZZ_` | `_xZZZZ_` |
-| `<oddFooter>` `&L` | `_x041_` | `_x041_` |
-| `<oddFooter>` `&C` | `_x00041_` | `_x00041_` |
-| `<oddFooter>` `&R` | `a_x0009_b` | `a`, U+0009, `b` |
-| `<evenHeader>` `&L` | `plain` | `plain` |
-| `<evenFooter>` `&L` | `_x0001_` | U+0001 |
+| Slot                | Section on disk | Read back                |
+| ------------------- | --------------- | ------------------------ |
+| `<oddHeader>` `&L`  | `_x0041_`       | `A`                      |
+| `<oddHeader>` `&C`  | `_x005F_x0041_` | `_x0041_` (7 characters) |
+| `<oddHeader>` `&R`  | `_xZZZZ_`       | `_xZZZZ_`                |
+| `<oddFooter>` `&L`  | `_x041_`        | `_x041_`                 |
+| `<oddFooter>` `&C`  | `_x00041_`      | `_x00041_`               |
+| `<oddFooter>` `&R`  | `a_x0009_b`     | `a`, U+0009, `b`         |
+| `<evenHeader>` `&L` | `plain`         | `plain`                  |
+| `<evenFooter>` `&L` | `_x0001_`       | U+0001                   |
 
 **It is the same convention again, row for row.** The escape decodes, the near-misses do not, the
 escaped underscore resolves in one left-to-right pass, and a character XML could have carried is
@@ -157,11 +157,11 @@ fixtures: `escaped-characters-in-cell-text-decode-on-read` for cell text,
 `print-header-text-decodes-xhhhh-escape` for the header/footer definition.
 
 Where the convention applies is a separate decision the writer makes, and no measurement settles it in
-general: they say the escape *works* in these three places, not that it works anywhere else. This
+general: they say the escape _works_ in these three places, not that it works anywhere else. This
 library escapes what a human typed (cell text, a note body, a threaded message, a print header) and
 refuses everything structural. The module header of `src/xml/xml.ts` states the line and why it falls
 there. The pattern across three elements is worth stating, though, because it is now the prior for the
-fourth: every element measured so far that carries *prose a person typed* decodes, whatever namespace
+fourth: every element measured so far that carries _prose a person typed_ decodes, whatever namespace
 it lives in and whatever other syntax its text already carries.
 
 ## Provenance

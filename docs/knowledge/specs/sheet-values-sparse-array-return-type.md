@@ -6,7 +6,7 @@ Reported as "getSheetValues() typescript definition is incorrect".
 
 ## Desired behavior
 
-The worksheet accessor that returns "all rows as a sparse array" must have a return type that precisely matches its runtime output. It does **not** return `Row` objects; it returns each row's *values*.
+The worksheet accessor that returns "all rows as a sparse array" must have a return type that precisely matches its runtime output. It does **not** return `Row` objects; it returns each row's _values_.
 
 Each element is a row's value payload, which in this model can be either:
 
@@ -18,7 +18,7 @@ The outer array is itself sparse: it is 1-indexed by row number, with holes for 
 ## Prior art / prior discussion
 
 - The original declaration typed the result as `Row[]`, which is wrong, because callers would reach for `Row` members that do not exist at runtime.
-- One suggested fix was `Cell[][]`, also wrong, since elements are raw cell *values* rather than `Cell` objects, and a row can be a keyed object rather than an array.
+- One suggested fix was `Cell[][]`, also wrong, since elements are raw cell _values_ rather than `Cell` objects, and a row can be a keyed object rather than an array.
 - Another suggested `any[]`, which is rejected on principle in this project, because `any` erases the contract.
 - The accurate shape mirrors the existing row-values union used elsewhere in the model: `type RowValues = CellValue[] | { [columnKey: string]: CellValue }`, giving a sparse result of `RowValues[]`.
 

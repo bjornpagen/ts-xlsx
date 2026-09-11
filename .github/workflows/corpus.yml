@@ -10,9 +10,9 @@ name: Corpus
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ '**' ]
+    branches: ['**']
 
 jobs:
   corpus:

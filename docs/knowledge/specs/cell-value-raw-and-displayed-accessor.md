@@ -8,9 +8,9 @@ A consumer iterating cells wants "the value" without branching over every value-
 cell's `value` is a discriminated union (a number, a string, a `Date`, a rich-text object, a
 hyperlink object `{text, hyperlink}`, a formula object `{formula, result}`, an error, a boolean) so a
 caller who just wants the underlying scalar, or just the string a spreadsheet would display, must
-hand-write a switch over all of them. The recurring ask is for one accessor that returns the *raw*
+hand-write a switch over all of them. The recurring ask is for one accessor that returns the _raw_
 value (the underlying scalar, formula result unwrapped, hyperlink text extracted) or the
-*displayed* value (the string the application renders, number-format applied).
+_displayed_ value (the string the application renders, number-format applied).
 
 > Spec note, not a corpus case: this is an API-ergonomics design decision with no failing current
 > behavior to baseline. The union is already exposed and correct, and the gap is a convenience layer on
@@ -23,7 +23,7 @@ Offer two distinct, clearly-named accessors so a caller never has to destructure
 - **numFmt preserved and exposed on read is the precondition.** A cell's number-format code must be
   faithfully preserved and exposed alongside its raw stored value on read, independent of any display
   rendering. A consumer who opens a file where a cell stores a number under a format that renders it
-  as `"8"` (rounded or scaled) must be able to see *both* the raw value and the numFmt that says how it
+  as `"8"` (rounded or scaled) must be able to see _both_ the raw value and the numFmt that says how it
   is meant to display. Returning the raw value is correct and lossless by default; the recurring
   surprise ("the format was not applied to the output") is resolved not by changing the raw value but
   by making the numFmt visible and offering the displayed accessor below. Faithful numFmt round-trip
@@ -52,7 +52,7 @@ union; the displayed accessor returns `string`, with a defined result for empty 
 ## Open questions
 
 - ~~Naming: does `cell.text` become the "displayed value" accessor, or do we introduce distinct
-  `raw`/`display` members?~~ **Answered: `cell.text` is the *raw* value's plain text, and applies no
+  `raw`/`display` members?~~ **Answered: `cell.text` is the _raw_ value's plain text, and applies no
   number format.** `cellValueToText` (`src/core/value.ts`) is the function, total over `CellValue`,
   and `Cell.text` is it applied to the cell in hand. Overloading was avoided from the other end than
   this note expected: rather than giving the fuzzy name the richer meaning, the name was pinned to

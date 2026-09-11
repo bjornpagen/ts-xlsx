@@ -29,7 +29,7 @@ not others, and tied to how the package manifest points at its entry and its dec
 
 The same dual-build packaging must also **execute** cleanly, not just type-check. A user importing
 the library into an SSR React framework and constructing the workbook class saw a production build
-throw *"Cannot call a class as a function"*, a Babel `_classCallCheck`-style guard emitted by a
+throw _"Cannot call a class as a function"_, a Babel `_classCallCheck`-style guard emitted by a
 UMD/CommonJS transpile breaking under a specific framework bundler. The requirement: the package
 bundles and instantiates cleanly inside modern framework build pipelines, including SSR React with
 their own bundlers, imported statically, dynamically, or across a server/client boundary, with no
@@ -37,7 +37,7 @@ class-called-as-function or interop failure. For this fork the class is native E
 CommonJS-isms in source, so a `_classCallCheck` guard cannot be emitted by construction. The
 remaining work is choosing the published module formats (ESM-only against dual ESM plus CJS) and
 declaring `exports` conditions so framework bundlers resolve and run the right build. The CI
-consumer-smoke check must therefore *instantiate* the workbook in each consumer project, not merely
+consumer-smoke check must therefore _instantiate_ the workbook in each consumer project, not merely
 type-check it.
 
 ## Open questions

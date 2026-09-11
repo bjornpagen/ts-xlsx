@@ -2,7 +2,7 @@
 
 `ts-xlsx` is a hard fork of ExcelJS, but **it is not a drop-in replacement** and does
 not try to be. The API is deliberately different because the goal of the fork was the
-*right* shape, not the familiar one (see [`CLAUDE.md`](../CLAUDE.md) §1). This page maps
+_right_ shape, not the familiar one (see [`CLAUDE.md`](../CLAUDE.md) §1). This page maps
 the common ExcelJS patterns to their `ts-xlsx` equivalents so a port is mechanical, and
 is honest about what has not been rebuilt yet.
 
@@ -59,19 +59,19 @@ row. ExcelJS let those decay into `NaN`/`"undefined"` and leak into serialized a
 
 ## Quick reference
 
-| ExcelJS | ts-xlsx |
-| --- | --- |
-| `await wb.xlsx.readFile(path)` | `readXlsx(readFileSync(path))` |
-| `await wb.xlsx.load(buffer)` | `readXlsx(bytes)` |
-| `await wb.xlsx.writeFile(path)` | `writeFileSync(path, writeXlsx(wb))` |
-| `await wb.xlsx.writeBuffer()` | `writeXlsx(wb)` → `Uint8Array` |
-| `await wb.csv.readFile(path)` | `readCsv(readFileSync(path, 'utf8'))` |
-| `await wb.csv.writeBuffer()` | `writeCsv(wb)` / `writeCsvText(wb)` |
-| `wb.addWorksheet('S')` | `wb.addWorksheet('S')` *(unchanged)* |
-| `wb.getWorksheet('S')` | `wb.getWorksheet('S')` → `Worksheet \| undefined` |
-| `sheet.getCell('A1').value = …` | `sheet.getCell('A1').value = …` *(unchanged)* |
-| `sheet.addRow([…])` | `sheet.addRow([…])` *(unchanged)* |
-| streaming `WorkbookReader` | `readSheetRows(bytes, {sheet})` / `readWorkbookStream(bytes)` |
+| ExcelJS                         | ts-xlsx                                                       |
+| ------------------------------- | ------------------------------------------------------------- |
+| `await wb.xlsx.readFile(path)`  | `readXlsx(readFileSync(path))`                                |
+| `await wb.xlsx.load(buffer)`    | `readXlsx(bytes)`                                             |
+| `await wb.xlsx.writeFile(path)` | `writeFileSync(path, writeXlsx(wb))`                          |
+| `await wb.xlsx.writeBuffer()`   | `writeXlsx(wb)` → `Uint8Array`                                |
+| `await wb.csv.readFile(path)`   | `readCsv(readFileSync(path, 'utf8'))`                         |
+| `await wb.csv.writeBuffer()`    | `writeCsv(wb)` / `writeCsvText(wb)`                           |
+| `wb.addWorksheet('S')`          | `wb.addWorksheet('S')` _(unchanged)_                          |
+| `wb.getWorksheet('S')`          | `wb.getWorksheet('S')` → `Worksheet \| undefined`             |
+| `sheet.getCell('A1').value = …` | `sheet.getCell('A1').value = …` _(unchanged)_                 |
+| `sheet.addRow([…])`             | `sheet.addRow([…])` _(unchanged)_                             |
+| streaming `WorkbookReader`      | `readSheetRows(bytes, {sheet})` / `readWorkbookStream(bytes)` |
 
 Where a method name is unchanged, its types are still stricter. `getWorksheet` returns
 `Worksheet | undefined`, so handle the miss, and the arguments are precisely typed.

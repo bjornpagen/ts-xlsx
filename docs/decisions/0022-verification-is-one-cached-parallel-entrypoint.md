@@ -22,7 +22,7 @@ never re-run against a tree already proven green.
 lefthook's `pre-push`, CI's `corpus.yml`, and the Stop hook are all that same command, so
 they cannot disagree. `--quick` (types, unit tests, lint scoped to changed files) is the
 inner loop and is explicitly **not** a substitute, because it has no corpus. The granular
-`package.json` scripts stay as the way to run *one* gate by hand; nothing automated
+`package.json` scripts stay as the way to run _one_ gate by hand; nothing automated
 composes them into a set.
 
 CI enumerated the gates as one step each for a single real benefit, a failing gate naming
@@ -39,7 +39,7 @@ scripts/verify.ts` rather than `pnpm run verify`.
 
 The gates are not single-core jobs: `node --test` forks a process per test file and
 Biome saturates every core. Running all of them at once inflated each gate about 2× and
-produced a *worse* wall than two at a time. Measured on a 14-core box: jobs=1 29.8 s,
+produced a _worse_ wall than two at a time. Measured on a 14-core box: jobs=1 29.8 s,
 jobs=2 20.7 s, jobs=3 19.6 s, jobs=7 19.2 s (±25 % run to run), so everything past two is
 inside the noise. Two `tsc` runs racing cost 1.87 s against 1.57 s alone, so the
 contention is filesystem and scheduler, not CPU count. `--jobs` overrides for anyone who
@@ -64,7 +64,7 @@ Two traps this laid, both now pinned by comments at the site:
   lives outside `dist/`, so after `clean` tsc concluded the unchanged sources needed no
   emit, and said nothing: **158 files, then 0 files, exit 0 both times.** It pins
   `incremental: false`.
-- A diagnostic *replayed* from buildinfo exits `1`; a fresh elaboration exits `2`.
+- A diagnostic _replayed_ from buildinfo exits `1`; a fresh elaboration exits `2`.
   Everything here tests for non-zero. Anything that keys on `2` would break.
 
 ### Lint fails on warnings, or most of the rule set is enforced by nothing
@@ -97,7 +97,7 @@ regression cannot be cached green.
 The hook runs `--full --cached`, not `--quick`. Pointing it at `--quick` would drop the
 corpus and with it the "cannot end a turn green while regressing" property the
 playbook advertises. The hook must get its speed from the cache, never from a smaller
-gate set. It now checks *more* than the hand-rolled chain it replaced (six gates instead
+gate set. It now checks _more_ than the hand-rolled chain it replaced (six gates instead
 of three, and it fires on any dirty path rather than only `src/`) at less wall time.
 
 Deliberately outside the cache: lefthook's `pre-push`, which runs once per push and is the
@@ -132,7 +132,7 @@ report JSON, so build stdout is captured and replayed to stderr rather than disc
   work; a turn that changed nothing verifiable costs ~0.3 s.
 - **No second definition left to drift:** `corpus.yml` is one `node scripts/verify.ts --full`
   step. Adding a gate is a one-line change in one file and CI picks it up. `build.yml` still
-  enumerates its own steps, which is not the same duplication: it gates the *emitted* package
+  enumerates its own steps, which is not the same duplication: it gates the _emitted_ package
   (build, smoke, corpus-on-dist, size budget), a set `verify` does not contain.
 - **`--jobs` is not tuned for the runner.** The default of 2 was measured on a 14-core box; a
   2-core GitHub runner is a different machine. Measure before assuming it is optimal there.

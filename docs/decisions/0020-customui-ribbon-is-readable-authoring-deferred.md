@@ -25,7 +25,7 @@ Microsoft Learn docs), **not** guessed. Doing so surfaced a latent wrong fact in
 
 ## Decision
 
-1. **The ribbon is exposed as a read-only, typed *view*, not a new source of truth.**
+1. **The ribbon is exposed as a read-only, typed _view_, not a new source of truth.**
    `Workbook.customUI: readonly CustomUiDocument[]` parses each preserved-root `customUI` part
    **lazily** and memoises the result. Each `CustomUiDocument` carries its `dialect` (`'2007'` or
    `'2010'`) and the parsed `Ribbon` (`tabs → groups → controls`). Barrel-exported from `src/customui`
@@ -38,7 +38,7 @@ Microsoft Learn docs), **not** guessed. Doing so surfaced a latent wrong fact in
    ever serialised. Same invariant as the VBA read view (ADR 0016 §2).
 
 3. **Dialect is keyed off the XML namespace, not the relationship type.** The `<customUI>` root
-   namespace is the authoritative signal; the OPC relationship type is only used to *discover* which
+   namespace is the authoritative signal; the OPC relationship type is only used to _discover_ which
    root references are ribbon parts (`isCustomUiRelType`, matching the `/ui/extensibility` suffix that
    both real rel types share, `.../2006/relationships/ui/extensibility` for 2007 and, confusingly,
    `.../2007/relationships/ui/extensibility` for 2010). This was a deliberate robustness call:
@@ -56,7 +56,7 @@ Microsoft Learn docs), **not** guessed. Doing so surfaced a latent wrong fact in
    the fallback so an unrecognised element is surfaced rather than dropped. The common attributes
    (`id` / `idQ` / `idMso` / `label` / `onAction`) are lifted onto the typed view; container controls
    carry `children`; and the **full raw attribute map is preserved on every control**, so nothing is
-   lost. *Exhaustive per-control attribute typing is deliberately deferred.* Pinning the exact schema of
+   lost. _Exhaustive per-control attribute typing is deliberately deferred._ Pinning the exact schema of
    ~15 control types for a no-consumer v1 is a lot of API for a lot of risk, and the raw map already
    covers the many `get*` dynamic callbacks and layout hints the typed fields don't. When a consumer
    needs a specific control's exotic attributes typed, that's an additive refinement.
@@ -78,12 +78,12 @@ Microsoft Learn docs), **not** guessed. Doing so surfaced a latent wrong fact in
   reader's `xmlEvents` SAX scanner and fflate's UTF-8 decode) and no risk to the preservation guarantee.
 - **Corrected on the way in, with a latent wrong fact fixed.** The `preserved-parts.test.ts` round-trip
   fixture declared the `customUI14` relationship as `Type=".../office/2009/07/customui"`, the schema
-  *namespace* copy-pasted where the relationship *type* belongs. The round-trip test passed anyway
+  _namespace_ copy-pasted where the relationship _type_ belongs. The round-trip test passed anyway
   because preservation is verbatim, faithfully carrying garbage in and garbage out, so the error was
   invisible until a reader depended on the type. It is corrected to the real
   `.../office/2007/relationships/ui/extensibility` so the fixture represents a genuine Office file, and
   the reader keys dialect off the namespace to be robust to exactly this class of mistake in the wild.
-- **Negative / deferred:** callers can *read* the ribbon tree but not *create or edit* it, and
+- **Negative / deferred:** callers can _read_ the ribbon tree but not _create or edit_ it, and
   backstage, QAT, contextualTabs and commands remain opaque, though they still round-trip. Forward map,
   each gated on a forcing consumer: parse the customUI14 backstage and QAT surface; type a specific
   control's full attribute set; and the large one, ribbon authoring (model to valid RibbonX bytes).

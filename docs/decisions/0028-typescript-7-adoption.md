@@ -22,7 +22,7 @@ from the `typescript` default export to `typescript/unstable/ast` and `typescrip
 ### The compiler is a separate process, and a project is the only way in
 
 TypeScript 7's main export is only a version string; the JavaScript API lives under
-`typescript/unstable/*` and is a *client*: an `API` that spawns a tsgo server, an
+`typescript/unstable/*` and is a _client_: an `API` that spawns a tsgo server, an
 `updateSnapshot()` that returns a disposable `Snapshot`, and a `Project` carrying the `program`
 and `checker`. Both scripts therefore acquire and release two resources under `finally`, or a
 throw would strand a tsgo process and leave the script hanging on its pipe. `check-entries.ts`

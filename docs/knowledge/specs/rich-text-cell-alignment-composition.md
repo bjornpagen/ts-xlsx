@@ -7,7 +7,7 @@ Cluster: styles
 An author builds a cell whose value is rich text, several runs with different fonts, and wants to
 control its alignment: horizontal, vertical, wrap, indent, rotation. They reach for a per-run
 alignment property and find it has no effect, and are unsure where alignment belongs when the value
-is composed of several runs. The confusion is structural: alignment is a property of the *cell*, not
+is composed of several runs. The confusion is structural: alignment is a property of the _cell_, not
 of any run, but the rich-text shape, an array of runs each with its own formatting, invites the
 assumption that layout can be set per run.
 
@@ -34,17 +34,17 @@ assumption that layout can be set per run.
 
 ## Open questions
 
-- Type surface: make run alignment *unrepresentable*, narrowing `RichTextRun` to character-format
+- Type surface: make run alignment _unrepresentable_, narrowing `RichTextRun` to character-format
   fields only, or accept and ignore it? The former prevents the confusion class at compile time for
   TypeScript callers and is preferred.
 - `vertAlign` overlap: a run's `vertAlign`, superscript or subscript, is a legitimate character
-  property and must not be confused with cell *vertical alignment*, so the naming should keep them
+  property and must not be confused with cell _vertical alignment_, so the naming should keep them
   distinct.
 - Read-back: confirm a rich-text cell read from a file surfaces cell alignment on the cell and only
   character formatting on each run, with no phantom per-run alignment.
 
 Related: `rich-text-cell-value-writer-robustness`, `hyperlink-display-text-can-be-rich-text`,
 `html-fragment-to-rich-text-cell-value`, `public-type-surface-matches-runtime`,
-`rich-text-run-font-is-all-or-nothing`, the *font* half of the same "what does a run inherit from
+`rich-text-run-font-is-all-or-nothing`, the _font_ half of the same "what does a run inherit from
 its cell" question, which answers differently: alignment lives on the cell and reaches the whole
 value, while a run's font inherits nothing at all.

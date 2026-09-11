@@ -11,9 +11,9 @@ format string back through the library returns a different code, the canonical E
 the numeric builtin id (here 14) with no explicit `formatCode`, so the visible day/month/separator
 ordering is a function of the reader's locale, not the file.
 
-> Spec note, not a corpus case: this is an open design question about what string to *report* for a
+> Spec note, not a corpus case: this is an open design question about what string to _report_ for a
 > locale-sensitive builtin id, not a malformed-serialization bug. Related corpus cases already lock
-> that builtin date ids are *detected as dates* (`builtin-cjk-date-numfmt-ids-resolve-to-date-format`)
+> that builtin date ids are _detected as dates_ (`builtin-cjk-date-numfmt-ids-resolve-to-date-format`)
 > and the literal-`m` scaling (`numfmt-date-detection-literal-m-scaling`); this note is the reporting
 > policy they sit under, alongside `xlsx-date-detection-control`.
 
@@ -25,7 +25,7 @@ ordering is a function of the reader's locale, not the file.
 - The canonical English expansion of builtin 14 is `mm-dd-yy`. Reporting that literally is faithful to
   the id but does not match what a non-US author saw.
 - The file generally carries **no recoverable authoring locale**. It may have workbook or document
-  locale metadata, but the day/month order is resolved by the *reader's* locale at display time.
+  locale metadata, but the day/month order is resolved by the _reader's_ locale at display time.
 
 ## Desired behavior (to decide)
 

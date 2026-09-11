@@ -16,7 +16,7 @@
 A large part of why this fork exists is that upstream's dependency tree rotted in place,
 not because anyone decided to keep old packages, but because nobody decided anything for
 two years and the default of a dependency is to age. This repository is three months old
-and already carries a runtime dependency, five devDependencies that *are* the quality
+and already carries a runtime dependency, five devDependencies that _are_ the quality
 gates, a .NET oracle, a pinned package manager, and four workflows' worth of GitHub
 Actions. Nothing about being young protects it from the same failure.
 
@@ -49,7 +49,7 @@ automate the updates; it is **who reviews them**, given that the answer cannot u
    - **The .NET validator and SDK.** A green run after bumping the oracle proves less than
      one after bumping the library, because the thing that changed is the judge.
    - **The Node floor**, meaning `engines`, `.nvmrc` and `@types/node` majors, held at
-     *dependency-dashboard approval* rather than opened as a PR. The supported floor is set
+     _dependency-dashboard approval_ rather than opened as a PR. The supported floor is set
      by ADR-0001 and is stated in three places at once; a bot may raise the subject, not the
      floor, and never in one place out of three.
 

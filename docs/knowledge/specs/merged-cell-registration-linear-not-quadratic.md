@@ -8,7 +8,7 @@ A worksheet contains tens of thousands of merged ranges. Real files reach 30k an
 one small horizontal merge per row across thousands of rows. Loading such a file takes minutes, or
 effectively never finishes in constrained or browser environments, even though the data is trivial.
 The correctness of merge preservation is covered by the
-`many-merged-cells-preserved-and-overlap-rejected` corpus case; this note is about the parse *time*.
+`many-merged-cells-preserved-and-overlap-rejected` corpus case; this note is about the parse _time_.
 
 > Captured as a spec note, not a corpus case: exercising the real 30k-merge fixture would make the
 > corpus run take minutes. A bounded-time check belongs in a perf harness with a hard timeout, not
@@ -27,7 +27,7 @@ thousands of merges this dominates load time.
 - A merge only ever conflicts with a cell already part of another merge, so the collision check
   should consult a **per-cell "already merged" index** where each cell records its master, making each
   registration proportional to its own area rather than to the count of prior merges.
-- **Merge *lookup* is efficient too, not just registration.** Determining whether a given cell
+- **Merge _lookup_ is efficient too, not just registration.** Determining whether a given cell
   participates in a merge, and resolving which range it belongs to, master against covered, is a
   frequent operation during read, write, and cell access. It must be an amortized-constant lookup
   against the same index, never a linear scan of all merge ranges per cell, which is the read and

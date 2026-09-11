@@ -47,13 +47,13 @@ and merely instantiating a workbook is enough to pull it in. The requirement:
 - Correct `package.json` `exports` and `browser` conditions drive the split so consumers get the right
   API automatically.
 
-## Runtime requirement: no unguarded Node-*global* access on a hot path
+## Runtime requirement: no unguarded Node-_global_ access on a hot path
 
-The boundary is not only about `import`ing Node modules. It also covers touching Node-only *globals*
+The boundary is not only about `import`ing Node modules. It also covers touching Node-only _globals_
 (`process`, `Buffer`, `global`) in code that runs in the browser. Upstream regressed here when a
 runtime environment-detection helper read `process.version`, splitting the version string, on a hot
-path reached by ordinary in-memory API use. In a browser `process` is undefined, so *merely creating a
-workbook or setting a cell* threw a cryptic `TypeError` ("Cannot read property 'split' of
+path reached by ordinary in-memory API use. In a browser `process` is undefined, so _merely creating a
+workbook or setting a cell_ threw a cryptic `TypeError` ("Cannot read property 'split' of
 undefined"), and the library was unusable in the browser on its first ordinary call, with nothing
 pointing at the real cause. The requirement:
 
@@ -68,7 +68,7 @@ pointing at the real cause. The requirement:
 The **streaming** reader and writer are the sharpest case of this boundary: they depend on Node `fs`
 and `stream`, and their CSV code paths transitively pull `fs` too, so a browser bundle that reaches
 them fails with "dependency not found: fs" and, at runtime, an undefined streaming namespace
-(`stream.xlsx` giving *"Cannot read property 'xlsx' of undefined"*). The requirement: the streaming
+(`stream.xlsx` giving _"Cannot read property 'xlsx' of undefined"_). The requirement: the streaming
 symbols must be **absent from the browser entry, or throw a precise typed error** ("streaming write
 is not available in this environment; use the document writer or a Web Streams sink"), never
 present-but-broken. The forward path is either a browser-native streaming sink over Web Streams (see

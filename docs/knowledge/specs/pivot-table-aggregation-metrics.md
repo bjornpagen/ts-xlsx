@@ -14,7 +14,7 @@ meaningless.
 > Spec note, not a corpus case: this extends the partial and unbuilt pivot-authoring feature, so the
 > durable value is the per-field aggregation model and its OOXML mapping, not an assertion against
 > current behaviour. It becomes a corpus case once the authoring API accepts a metric per field and the
-> written pivot definition's `dataField/@subtotal` is asserted. This complements the *multi-measure*
+> written pivot definition's `dataField/@subtotal` is asserted. This complements the _multi-measure_
 > axis captured in `pivot-table-multiple-value-fields`, whose open question about per-measure
 > aggregation functions is answered here.
 

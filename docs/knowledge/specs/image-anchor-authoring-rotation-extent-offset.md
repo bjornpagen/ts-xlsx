@@ -13,14 +13,14 @@ cloning internal model objects, reproduces the original placement faithfully.
 
 Today the anchor authoring API is narrower than the drawing model it serializes into. Rotation is
 preserved on a raw read-then-write round-trip (see `image-rotation-preserved-on-roundtrip`) but cannot
-be *set* through the add-image path, so a caller who assembles an image with the public API gets an
+be _set_ through the add-image path, so a caller who assembles an image with the public API gets an
 un-rotated, intrinsically-sized, cell-aligned picture even when the drawing format can express far
 more. Extent (an explicit width and height for the picture, independent of the source bitmap's pixel
 dimensions and DPI) and a sub-cell offset (the fine EMU offset from the anchor cell's top-left) are
 likewise expressible in the OOXML drawing anchor but absent from the authoring inputs.
 
 > Spec note, not a corpus case: this is a write-side API gap, not a malformed-output bug from
-> a data file. Round-trip *preservation* of rotation, extent and offset is already a corpus concern;
+> a data file. Round-trip _preservation_ of rotation, extent and offset is already a corpus concern;
 > the durable value here is the authoring contract, which placement properties a caller can specify
 > when adding an image, which is a Phase 3 API-shape decision rather than a current-behavior assertion.
 > It becomes a corpus case once the rewrite's add-image API accepts these inputs and a case can

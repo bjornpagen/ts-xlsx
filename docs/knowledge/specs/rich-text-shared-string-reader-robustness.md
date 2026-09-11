@@ -12,7 +12,7 @@ foreign-generated shapes it is handed an empty string primitive instead, so sett
 collection onto it throws `Cannot create property 'richText' on string ''`. The result is that an
 otherwise valid workbook fails to open at all.
 
-> Spec note, not a corpus case: probing shows the library reads its *own* rich-text shared strings,
+> Spec note, not a corpus case: probing shows the library reads its _own_ rich-text shared strings,
 > including runs with fonts, without throwing, and the concatenated text and runs surface correctly.
 > So the crash depends on a specific foreign-generator shape, an empty-string accumulator seeded
 > before the runs, such as a leading empty `<t/>` or a hyperlink-as-rich-text quirk, that is not

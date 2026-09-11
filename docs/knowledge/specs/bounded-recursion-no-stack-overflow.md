@@ -13,7 +13,7 @@ threshold the call stack is exhausted. The document is not malformed and the dat
 It is simply big enough, on a stack small enough, to overflow.
 
 > Spec note, not a corpus case: reproducing this reliably requires driving the model to whatever depth
-> overflows the *current* stack, which is engine- and build-dependent and would either not trigger in
+> overflows the _current_ stack, which is engine- and build-dependent and would either not trigger in
 > CI or risk crashing the runner. The durable requirement is the invariant, verified by design review
 > and a bounded large-input smoke test, not by a data file that must overflow to assert.
 

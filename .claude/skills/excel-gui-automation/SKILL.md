@@ -23,15 +23,15 @@ the scripts as starting points to confirm with `-Dump`, not gospel.
 
 Three cheaper oracles come first; reach here only for what they structurally cannot do:
 
-| Tool | Answers | Cannot |
-|---|---|---|
-| `validate-ooxml` skill (OpenXmlValidator) | Is the XML ECMA-376 conformant? | Whether *Excel* accepts it - Excel tolerates many invalid files and rejects some valid ones. |
-| `tools/excel-oracle` (headless COM) | Formula recalc, canonical re-save, model readback; *detects* that a repair happened. | The **interactive** repair experience - `DisplayAlerts=$false` suppresses the modal, so it never reproduces the dialog or captures the repair log. |
-| **this skill** (interactive GUI) | The open verdict a user actually sees; the repair log; no-COM-surface authoring; visual render. | Nothing fast, deterministic, or CI-able - see below. |
-| **this skill** (`execute-verdict.ps1`) | Whether an authored/edited VBA module actually LOADS and RUNS its source once macros are enabled (Workflow C). | Same PROBE contract - never CI. |
+| Tool                                      | Answers                                                                                                        | Cannot                                                                                                                                             |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `validate-ooxml` skill (OpenXmlValidator) | Is the XML ECMA-376 conformant?                                                                                | Whether _Excel_ accepts it - Excel tolerates many invalid files and rejects some valid ones.                                                       |
+| `tools/excel-oracle` (headless COM)       | Formula recalc, canonical re-save, model readback; _detects_ that a repair happened.                           | The **interactive** repair experience - `DisplayAlerts=$false` suppresses the modal, so it never reproduces the dialog or captures the repair log. |
+| **this skill** (interactive GUI)          | The open verdict a user actually sees; the repair log; no-COM-surface authoring; visual render.                | Nothing fast, deterministic, or CI-able - see below.                                                                                               |
+| **this skill** (`execute-verdict.ps1`)    | Whether an authored/edited VBA module actually LOADS and RUNS its source once macros are enabled (Workflow C). | Same PROBE contract - never CI.                                                                                                                    |
 
 **This is a PROBE, not a test** - same contract as `tools/excel-oracle` (ADR 0012,
-seed+lock split). Its output is a *recorded fact that seeds a corpus case*. **Never
+seed+lock split). Its output is a _recorded fact that seeds a corpus case_. **Never
 wire it into CI**: it needs a licensed Excel, an interactive desktop session, and
 is inherently slow and flaky. The committed fixture + a Tier-2 seam fact are what
 run in CI; the live GUI never does.
@@ -132,6 +132,7 @@ pwsh -File .claude\skills\excel-gui-automation\scripts\execute-verdict.ps1 `
 - **`openThrew: true`** - Excel rejected the file structurally on open.
 
 Rules that matter:
+
 - **Always pass `-RunMacro`.** `AutomationSecurity=Low` + `DisplayAlerts=$false`
   suppresses the interactive "Invalid data format" modal, so brokenness surfaces
   as a Run failure, NOT a popup. "Opened without error" alone proves nothing.

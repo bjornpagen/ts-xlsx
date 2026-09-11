@@ -12,6 +12,7 @@
  * module, and none of them cares where the process was started from.
  */
 import {DatabaseSync} from 'node:sqlite';
+
 import {silenceSqliteExperimentalWarning} from './warnings.mjs';
 
 /** Must match `build/build-db.mjs`. Bumped whenever `build/schema.sql` changes. */

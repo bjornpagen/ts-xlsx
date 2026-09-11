@@ -7,10 +7,10 @@ Cluster: worksheet
 A caller sizing a line it is about to write, a header band or a row wrapping a long paragraph,
 needs to know how large it may go. The format is no help: `CT_Row@ht` and `CT_Col@width` are both
 a bare `xsd:double` in `sml.xsd`, with no `maxInclusive` on either. The ceiling is Excel's, and it
-turns out to be a ceiling on *setting* a size rather than on having one, which is the two halves of
+turns out to be a ceiling on _setting_ a size rather than on having one, which is the two halves of
 this note. What Excel refuses from a user is not what it refuses from a file.
 
-Microsoft's published *Excel specifications and limits* table states "Row height: 409 points" and
+Microsoft's published _Excel specifications and limits_ table states "Row height: 409 points" and
 "Column width: 255 characters". The first of those is rounded.
 
 ## Measured behavior: what Excel accepts being set
@@ -18,19 +18,19 @@ Microsoft's published *Excel specifications and limits* table states "Row height
 Excel Desktop (Microsoft 365, Windows, workbook default font Aptos Narrow 11), driven over COM
 against a blank workbook, assigning then reading back:
 
-| Assigned `RowHeight` | Result |
-| --- | --- |
-| 409 | accepted, reads back 409 |
-| 409.4 | accepted, reads back 409.4 |
-| **409.5** | **accepted, reads back 409.5** |
-| 409.6 | refused, "Unable to set the RowHeight property of the Range class" |
-| 410, 500 | refused |
+| Assigned `RowHeight` | Result                                                             |
+| -------------------- | ------------------------------------------------------------------ |
+| 409                  | accepted, reads back 409                                           |
+| 409.4                | accepted, reads back 409.4                                         |
+| **409.5**            | **accepted, reads back 409.5**                                     |
+| 409.6                | refused, "Unable to set the RowHeight property of the Range class" |
+| 410, 500             | refused                                                            |
 
-| Assigned `ColumnWidth` | Result |
-| --- | --- |
-| **255** | **accepted, reads back 255** |
-| 255.4, 255.5, 255.9 | refused |
-| 256, 300 | refused |
+| Assigned `ColumnWidth` | Result                       |
+| ---------------------- | ---------------------------- |
+| **255**                | **accepted, reads back 255** |
+| 255.4, 255.5, 255.9    | refused                      |
+| 256, 300               | refused                      |
 
 So the row-height ceiling is 409.5 and the published 409 is a rounding of it; the column-width
 ceiling is exactly integral at 255, which is why one constant carries a fraction and the other
@@ -46,20 +46,20 @@ of the workbook's default font, not a property of the format. See
 
 ## Measured behavior: what Excel does with a file that exceeds them
 
-The ceilings above are what the object model and the UI refuse. A *package* is read by a different
+The ceilings above are what the object model and the UI refuse. A _package_ is read by a different
 path, which refuses nothing. Fixtures written by this library carrying over-limit `ht` and `width`,
 opened in interactive Excel Desktop on the same build and host, then read back over COM and re-saved
 by Excel itself:
 
-| In the file | Interactive open | COM reads back | Excel's own re-save writes |
-| --- | --- | --- | --- |
-| `ht="5000"` | clean | 409.6 | `ht="409.6"` |
-| `ht="600"` | clean | 409.6 | `ht="409.6"` |
-| `ht="409.6"` | clean | 409.6 | `ht="409.6"` |
-| `ht="409.5"` | clean | 409.5 | `ht="409.5"` |
-| `width="1000"` | clean | 999.36 | `width="1000"` |
-| `width="300"` | clean | 299.36 | `width="300"` |
-| `width="255.4"` | clean | 254.73 | `width="255.36328125"` |
+| In the file     | Interactive open | COM reads back | Excel's own re-save writes |
+| --------------- | ---------------- | -------------- | -------------------------- |
+| `ht="5000"`     | clean            | 409.6          | `ht="409.6"`               |
+| `ht="600"`      | clean            | 409.6          | `ht="409.6"`               |
+| `ht="409.6"`    | clean            | 409.6          | `ht="409.6"`               |
+| `ht="409.5"`    | clean            | 409.5          | `ht="409.5"`               |
+| `width="1000"`  | clean            | 999.36         | `width="1000"`             |
+| `width="300"`   | clean            | 299.36         | `width="300"`              |
+| `width="255.4"` | clean            | 254.73         | `width="255.36328125"`     |
 
 "Clean" is the full interactive verdict: no repair prompt, no `[Repaired]` in the title, no
 `error*.xml` written beside the file, no format-mismatch warning. An all-legal control file was
@@ -67,7 +67,7 @@ run through the same classifier and also came back clean, so the verdict disting
 
 Two asymmetric facts fall out.
 
-**A row height is silently clamped on read, to 409.6**, a tick *above* the 409.5 the setter
+**A row height is silently clamped on read, to 409.6**, a tick _above_ the 409.5 the setter
 accepts. 409.6 points is 8192 twentieths of a point, that is 2^13, so the file-read path saturates
 the field it parses into where interactive assignment refuses to reach it. Excel then persists the
 clamp: its own save writes `ht="409.6"`, and the authored 5000 is gone.
@@ -92,7 +92,7 @@ writer. The setters are not an authoring-only path: `read-worksheet.ts` loads a 
 clean, and, for a width, files Excel round-trips more faithfully than we would. The constants are
 published so a caller can check before writing, and the two setters' doc comments point at them.
 
-Refusing at the *writer* instead was considered and rejected on the same evidence. An
+Refusing at the _writer_ instead was considered and rejected on the same evidence. An
 `AuthoringError` above `MAX_ROW_HEIGHT` would decline to emit a file Excel opens without complaint
 and treats as 409.6; above `MAX_COLUMN_WIDTH` it would be plainly wrong, since that limit does not
 bind a file at all.

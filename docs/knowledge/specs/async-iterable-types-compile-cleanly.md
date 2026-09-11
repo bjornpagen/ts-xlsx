@@ -7,7 +7,7 @@ Reported as "getting cannot find name AsyncGenerator while build".
 ## Desired behavior
 
 The library's published type declarations must type-check cleanly in a fresh consumer project that
-meets the library's *documented* minimum TypeScript version and `lib`/`target` settings, without the
+meets the library's _documented_ minimum TypeScript version and `lib`/`target` settings, without the
 consumer being forced to enable `skipLibCheck`, hand-edit shipped `.d.ts` files, or add ad-hoc `lib`
 entries beyond what the library documents as required.
 

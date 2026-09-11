@@ -19,7 +19,7 @@ coupling to the types it exercised.
 
 The first instinct was `checkJs` plus JSDoc as the "80/20". It was reversed after
 measuring the delta: **both paths fix the same ~877 type errors at the same
-strictness**, so that cost is shared. `checkJs`'s only *saving* is avoiding a
+strictness**, so that cost is shared. `checkJs`'s only _saving_ is avoiding a
 mechanical rename, and in this repo that rename is tiny and measured (261 `git mv`;
 cross-harness import seams were two patterns; the corpus runner had two loader
 strings; nine `package.json` paths). Against that saving, `checkJs` would
@@ -38,7 +38,7 @@ the Corpus CI job.
 ### The corpus stays implementation-blind
 
 The 249 cases assert observable behavior through an adapter (`api`) that
-must never couple to one implementation. That contract is now *typed*: a shared
+must never couple to one implementation. That contract is now _typed_: a shared
 `test/corpus/case.ts` exports `Case`/`Behavior` plus `CorpusApi`, a named alias
 for `any`, carrying a single `biome-ignore` and a comment explaining why. Every
 case pins its default export with `satisfies Case`; implementation-blind values are
@@ -55,7 +55,7 @@ The `rewrite` adapter (today `test/corpus/adapters/rewrite/runtime.ts`) loads `s
 type-checked against the source API: a signature change in `src` becomes a compile
 error in the corpus. The dist retarget (`CORPUS_TARGET=dist`) still works, because dist
 mirrors src's public API, so the src type is accurate under the load-time cast. A
-handful of documented `as` casts reach past a src object's *public* API (two-cell
+handful of documented `as` casts reach past a src object's _public_ API (two-cell
 image anchors, data-table formula fields, pattern-fill `fgColor`); the corpus reads
 those internals deliberately, and we cast at the read site rather than widen `src`
 to expose them. **We never change `src` to satisfy the harness.**

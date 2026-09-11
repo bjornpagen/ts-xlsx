@@ -1,4 +1,4 @@
-# ADR 0021: The VBA project signature is readable as *presence*, not verified as *validity*
+# ADR 0021: The VBA project signature is readable as _presence_, not verified as _validity_
 
 **Status:** Accepted (2026-07-24) · VBA signature read slice · completes the `isSigned` accessor
 deferred by ADR 0016 (§Consequences) and `docs/knowledge/specs/xlsm-macro-preservation.md`'s open
@@ -15,7 +15,7 @@ writer keeps each part's own type (ADR 0016 §Consequences fixed the `<Default>`
 mis-typed a signature part). The bytes are also correctly **dropped** whenever the project is
 replaced or edited (ADRs 0017/0018), because a signature over the old bytes cannot vouch for new ones.
 
-What was missing was a *read* of that captured state. ADR 0016 left an `isSigned` accessor "cleanly
+What was missing was a _read_ of that captured state. ADR 0016 left an `isSigned` accessor "cleanly
 sourceable from the preserved closure once a consumer needs it." Per CLAUDE.md §3, exposing a read of
 already-captured data is a bounded, low-risk slice rather than speculative infrastructure, so it is built
 now without waiting for a named consumer.
@@ -23,7 +23,7 @@ now without waiting for a named consumer.
 ## Decision
 
 1. **Presence, not verification.** `Workbook.vbaProjectSigned: boolean` reports whether a signature
-   blob is *attached*; `Workbook.vbaProjectSignatures: readonly VbaProjectSignature[]` exposes each
+   blob is _attached_; `Workbook.vbaProjectSignatures: readonly VbaProjectSignature[]` exposes each
    signature's generation (`'legacy' | 'agile' | 'v3'`) and its raw bytes, passed through verbatim.
    The library does **not** parse the PKCS#7/CMS structure, validate the certificate chain, or extract
    signer identity. That is a materially larger effort (ASN.1/CMS, trust-store semantics) with real

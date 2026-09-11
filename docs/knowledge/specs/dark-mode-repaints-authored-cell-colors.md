@@ -9,7 +9,7 @@ repaints the grid, including colours the package states explicitly. A deck autho
 palette, white header text on a brand fill, does not render in those colours for a reader who has
 the mode on.
 
-The tempting inference is that this is a defect of *how* the colour was written, and therefore that
+The tempting inference is that this is a defect of _how_ the colour was written, and therefore that
 some other encoding escapes it: a near-white instead of pure white, a theme slot instead of a
 literal ARGB, an indexed palette entry instead of either. It is not. All five encodings of white
 this library can emit land on the same repainted value.
@@ -21,16 +21,16 @@ header row; each column authors bold 9pt white a different way over the same `FF
 three controls. Captured light, toggled to dark, captured again, both sampled from the rendered
 pixels of the header band.
 
-| Header font as authored | Fill as authored | Rendered light | Rendered dark |
-| --- | --- | --- | --- |
-| `argb FFFFFFFF` | `FF009EE0` | `#FFFFFF` on `#009EE0` | `#262626` on `#0095D7` |
-| `argb FFFEFEFE` | `FF009EE0` | `#FEFEFE` on `#009EE0` | `#272727` on `#0095D7` |
-| `theme 0` (lt1) | `FF009EE0` | `#FFFFFF` on `#009EE0` | `#262626` on `#0095D7` |
-| `theme 1, tint 1` (dk1 lightened to white) | `FF009EE0` | `#FFFFFF` on `#009EE0` | `#262626` on `#0095D7` |
-| `indexed 1` (palette white) | `FF009EE0` | `#FFFFFF` on `#009EE0` | `#262626` on `#0095D7` |
-| *automatic* (no colour stated) | `FF009EE0` | `#000000` on `#009EE0` | `#F6F6F6` on `#0095D7` |
-| `argb FFFFFFFF` | `FF003C64` | `#FFFFFF` on `#003C64` | `#262626` on `#B6D2FB` |
-| `argb FF262626` | `FFFFFFFF` | `#262626` on `#FFFFFF` | `#DCDCDC` on `#262626` |
+| Header font as authored                    | Fill as authored | Rendered light         | Rendered dark          |
+| ------------------------------------------ | ---------------- | ---------------------- | ---------------------- |
+| `argb FFFFFFFF`                            | `FF009EE0`       | `#FFFFFF` on `#009EE0` | `#262626` on `#0095D7` |
+| `argb FFFEFEFE`                            | `FF009EE0`       | `#FEFEFE` on `#009EE0` | `#272727` on `#0095D7` |
+| `theme 0` (lt1)                            | `FF009EE0`       | `#FFFFFF` on `#009EE0` | `#262626` on `#0095D7` |
+| `theme 1, tint 1` (dk1 lightened to white) | `FF009EE0`       | `#FFFFFF` on `#009EE0` | `#262626` on `#0095D7` |
+| `indexed 1` (palette white)                | `FF009EE0`       | `#FFFFFF` on `#009EE0` | `#262626` on `#0095D7` |
+| _automatic_ (no colour stated)             | `FF009EE0`       | `#000000` on `#009EE0` | `#F6F6F6` on `#0095D7` |
+| `argb FFFFFFFF`                            | `FF003C64`       | `#FFFFFF` on `#003C64` | `#262626` on `#B6D2FB` |
+| `argb FF262626`                            | `FFFFFFFF`       | `#262626` on `#FFFFFF` | `#DCDCDC` on `#262626` |
 
 Three facts fall out.
 
@@ -41,7 +41,7 @@ encoding for another achieves nothing.
 
 **The fill inverts too, but only when it is near an extreme.** `FF003C64` (dark navy) becomes
 `#B6D2FB`; `FFFFFFFF` becomes `#262626`. A mid-luminance fill barely moves: `FF009EE0` renders
-`#0095D7`, a dimming rather than an inversion. So fill and font do *not* invert in step, and the
+`#0095D7`, a dimming rather than an inversion. So fill and font do _not_ invert in step, and the
 pairing that suffers is a stated font over a mid-luminance fill.
 
 **An automatic font follows the mode, which is the point.** Where no colour is stated, black
@@ -53,18 +53,18 @@ what it does to cells that state something is the compromise.
 Worth stating plainly, because the reflex is to treat this as an accessibility regression. Contrast
 survives the repaint, measured as WCAG ratios over the two brand pairings above:
 
-| Pairing | Light | Dark |
-| --- | --- | --- |
-| White on brand cyan `#009EE0` | 3.01:1 | 4.53:1 |
+| Pairing                       | Light   | Dark   |
+| ----------------------------- | ------- | ------ |
+| White on brand cyan `#009EE0` | 3.01:1  | 4.53:1 |
 | White on brand navy `#003C64` | 11.47:1 | 9.80:1 |
 
-The cyan pairing gets *better*; the navy one stays comfortably above threshold. Excel is choosing a
+The cyan pairing gets _better_; the navy one stays comfortably above threshold. Excel is choosing a
 readable ink for the ground it has decided on. What it discards is the design: a deck built to a
 palette renders in Excel's interpretation of that palette, and a reader in dark mode is not seeing
 the colours anyone chose.
 
 The mode's dimming of a mid-luminance fill is small enough (`#009EE0` to `#0095D7`) that a fill
-authored *light* with white text on it, a combination that is already fragile, is where this
+authored _light_ with white text on it, a combination that is already fragile, is where this
 would genuinely collapse. Not measured here; flagged as the shape to watch.
 
 ## What follows for the writer

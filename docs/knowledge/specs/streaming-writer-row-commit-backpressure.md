@@ -15,7 +15,7 @@ Even with the streaming writer and `addRow(...).commit()` per row, plus `useShar
 ## Contract this fork should provide
 
 - Committing a row must expose backpressure. Either `commit()` returns a promise or awaitable that resolves once the row's serialized bytes have been accepted by, meaning drained into, the downstream sink, or the writer exposes the standard "wait for drain" signal so a producer loop can pause. A caller that awaits per-row commit must run in memory bounded by a small window, not by total row count.
-- The writer must not retain references to already-committed rows or cells. Once a row is committed and flushed, it and its related objects, with style records already interned and shared strings already interned, must be eligible for garbage collection. Interned and deduplicated tables (shared strings, styles) may legitimately grow with the number of *distinct* values, but not with the number of rows.
+- The writer must not retain references to already-committed rows or cells. Once a row is committed and flushed, it and its related objects, with style records already interned and shared strings already interned, must be eligible for garbage collection. Interned and deduplicated tables (shared strings, styles) may legitimately grow with the number of _distinct_ values, but not with the number of rows.
 - No artificial event-loop yield should be required by callers to achieve bounded memory. The correct, documented usage, awaiting each commit or respecting the drain signal, must be sufficient on its own.
 - Heavy per-cell styling must not defeat this: styles should be interned so that N rows sharing a style hold one style record, not N.
 
@@ -28,4 +28,4 @@ Even with the streaming writer and `addRow(...).commit()` per row, plus `useShar
 
 - Should per-row `commit()` be awaitable by default, breaking the old fire-and-forget shape, or should backpressure be surfaced via a separate drain-await API? Given the fork's no-compatibility stance, an awaitable commit is the clearer, safer default.
 - What is the target memory ceiling to assert in a benchmark, say peak RSS independent of row count for a fixed-width, fixed-style dataset?
-- How should shared-strings and style interning growth be bounded or documented so users understand what memory *is* expected to scale with?
+- How should shared-strings and style interning growth be bounded or documented so users understand what memory _is_ expected to scale with?

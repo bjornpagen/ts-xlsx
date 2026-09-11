@@ -20,7 +20,7 @@ of capabilities.
 
 ## Desired behavior
 
-- **The streaming worksheet has its own precise type** that exposes *only* what a forward-only writer
+- **The streaming worksheet has its own precise type** that exposes _only_ what a forward-only writer
   can honor. Random-access operations that require rewriting already-flushed rows (inserting or
   splicing a row above the write frontier, re-reading a committed cell, arbitrary back-reference) are
   **absent from the type**, so misuse is a compile error rather than a runtime surprise.

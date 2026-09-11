@@ -19,7 +19,7 @@ The eager full-workbook read path allocates memory grossly disproportionate to i
 
 - Reporters observed a competing library reading the same ~10 MB file in roughly 500 MB against 2+ GB, indicating the blow-up is an implementation characteristic, not an intrinsic OOXML cost.
 - Shared strings are a common culprit: a large shared-strings part fully materialized as JS strings, plus a parallel index, plus the cell model referencing them, triples the footprint. Deduplication and lazy or interned strings help.
-- The **workbook-level defined-names table** is a second, independent culprit, distinct from the visible grid. A real financial workbook with a trivial sheet (~80 KB, dimensions A1:AH258) but a ~2.85 MB defined-names block (~35,000 entries, most of them `#REF!`, thousands large array literals up to ~5 KB each, plus one external link with ~90 cached sheet names) exhausts a 900 MB heap and never resolves. The blow-up happens during *model assembly*, building objects per defined name, not during sheet parsing, so its cost tracks the defined-names table rather than the worksheet. The parsed model must retain defined names compactly, ideally lazily, without a large object graph per entry; must not choke on `#REF!` values or large array-literal values; and must round-trip the names and the external link without loss.
+- The **workbook-level defined-names table** is a second, independent culprit, distinct from the visible grid. A real financial workbook with a trivial sheet (~80 KB, dimensions A1:AH258) but a ~2.85 MB defined-names block (~35,000 entries, most of them `#REF!`, thousands large array literals up to ~5 KB each, plus one external link with ~90 cached sheet names) exhausts a 900 MB heap and never resolves. The blow-up happens during _model assembly_, building objects per defined name, not during sheet parsing, so its cost tracks the defined-names table rather than the worksheet. The parsed model must retain defined names compactly, ideally lazily, without a large object graph per entry; must not choke on `#REF!` values or large array-literal values; and must round-trip the names and the external link without loss.
 - Zip handling matters for the security posture too: decompressing all parts eagerly is both a memory and a zip-bomb concern, and bounded, streamed decompression addresses both.
 - A distinct hard-failure mode of the same eager path: materializing a single worksheet's
   decompressed XML as **one JavaScript string** throws `RangeError: Invalid string length` once the
@@ -49,7 +49,7 @@ The eager full-workbook read path allocates memory grossly disproportionate to i
   exhausts the heap on write, even though the same data can be emitted incrementally. The convenience
   write path must be able to stream rows into the zip entry with backpressure, awaiting the
   compression and output drain before pushing more, so a workbook of any size writes within a fixed
-  memory budget. The fork already has a dedicated streaming *sheet-writer* (see
+  memory budget. The fork already has a dedicated streaming _sheet-writer_ (see
   `streaming-write-memory-and-shared-strings-tradeoff`); the gap is that the ordinary write-to-file
   entry point should not require O(document size) peak memory to reach the same outcome.
 

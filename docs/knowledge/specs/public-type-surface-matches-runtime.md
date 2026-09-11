@@ -26,7 +26,7 @@ into `any` casts or module augmentation to use them. Concrete instances from the
    but the published types declared only an `interface Range`, a structural shape with no
    constructor. A caller doing `new Range(...)`, the documented way to build one, got a "not a
    constructor" type error and had to deep-import the internal module with `@ts-ignore`. Any runtime
-   value export, a class or a namespace object, must have a *value*-level declaration, not merely a
+   value export, a class or a namespace object, must have a _value_-level declaration, not merely a
    same-named type, so `new`, `instanceof`, and static members type-check.
 6. **Streaming worksheet reader `id`, `name` and `state`.** Iterating the streaming `WorkbookReader`
    yields a per-worksheet reader whose `id`, `name`, and `state` (visible, hidden, veryHidden) the

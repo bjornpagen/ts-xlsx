@@ -17,7 +17,7 @@ Excel opens without a repair prompt. Two related frustrations recur:
    "give me a styled table with a header but no filter UI." The only escape is to abandon the table
    feature and hand-style cells.
 
-The durable question this note captures is the missing *design decision*: filter presence should be
+The durable question this note captures is the missing _design decision_: filter presence should be
 an explicit, first-class choice, not an implicit consequence of whether a table has a header.
 
 > Spec note, not a corpus case: the corruption path (header-less plus forced filter) is already locked
@@ -30,7 +30,7 @@ an explicit, first-class choice, not an implicit consequence of whether a table 
   with a header and no AutoFilter, with no header and no AutoFilter, or with a header and an
   AutoFilter. All three are expressible and all three produce valid OOXML Excel opens without
   repair.
-- **`headerRow: false` conflates two concerns today**, header presence *and* filter presence, so
+- **`headerRow: false` conflates two concerns today**, header presence _and_ filter presence, so
   separate them and make the two axes independent. A header-less table never carries an AutoFilter,
   since it is not legal there; a header-bearing table carries one only when the caller asks.
 - **Round-trip preserves both axes**: a table written header-less stays header-less on reload, and a

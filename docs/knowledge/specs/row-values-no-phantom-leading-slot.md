@@ -14,7 +14,7 @@ column is off by one from every other 0-based collection in the language.
 
 The 1-based array is deliberate in the legacy design, so `values[columnNumber]` works with
 1-based Excel column numbers, but it is surprising, error-prone, and inconsistent with idiomatic
-JavaScript. For a clean-break fork the question is what the row value surface *should* be, not
+JavaScript. For a clean-break fork the question is what the row value surface _should_ be, not
 preserving the quirk.
 
 ## Desired behavior (to decide)

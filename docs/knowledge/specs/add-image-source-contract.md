@@ -10,7 +10,7 @@ only) or an in-memory buffer, so passing a URL as the "filename" silently fails 
 embedded picture: no image, no error. The community answer is always the same, which is to fetch the
 bytes yourself and pass a buffer.
 
-> Spec note, not a corpus case: the durable question is what an "image source" *is* and how a
+> Spec note, not a corpus case: the durable question is what an "image source" _is_ and how a
 > URL-shaped input should fail. That is a typing and API-contract decision, not a malformed-output
 > bug. The Node-only-ness of the filepath source is already noted in `image-by-filename-is-node-only`.
 
@@ -33,7 +33,7 @@ silent no-op.
 
 ### Validate the image definition at the point of entry
 
-Beyond the source *kind*, the image definition itself must be validated when it is added, not
+Beyond the source _kind_, the image definition itself must be validated when it is added, not
 discovered as a corrupt package at write time. The add-image entry point rejects, with a typed and
 actionable error, a definition that:
 

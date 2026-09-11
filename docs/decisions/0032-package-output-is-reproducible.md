@@ -13,7 +13,7 @@ in a few bytes per entry and in nothing else.
 `writeXlsx` and `writeXlsxAsync`, listed pinning `mtime` under rejected alternatives, and
 was right to: the two-writer comparison did not need it, and pinning would have changed
 `writeXlsx`'s output for a reason internal to a test. It named the real question and left it
-open, *should `.xlsx` output be reproducible at all?* This record answers it.
+open, _should `.xlsx` output be reproducible at all?_ This record answers it.
 
 What settled it was a consumer. The library's first authoring consumer commits the workbooks
 it generates, so a regenerated deliverable arrived as a diff of the whole file with no

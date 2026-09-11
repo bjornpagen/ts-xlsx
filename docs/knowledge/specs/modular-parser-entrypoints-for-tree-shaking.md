@@ -26,8 +26,8 @@ actually use.
   single mutating-accessor facade that eagerly references every format. A standard bundler can drop
   the XLSX stack entirely from a CSV-only application, and vice versa.
 - **The package declares itself side-effect-free** (`"sideEffects": false`) so bundlers can eliminate
-  unused branches, and the durable requirement is *"unused format code is eliminable by a standard
-  bundler,"* verified by an import-graph or bundle test rather than a fixed KB number.
+  unused branches, and the durable requirement is _"unused format code is eliminable by a standard
+  bundler,"_ verified by an import-graph or bundle test rather than a fixed KB number.
 
 ## Prior art / root cause
 

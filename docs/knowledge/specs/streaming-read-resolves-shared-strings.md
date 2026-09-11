@@ -6,7 +6,7 @@ A large `.xlsx` is read in streaming mode to process the first rows without load
 whole file into memory. String cell values must arrive as their actual text, not as
 unresolved shared-string index placeholders. In real files the `sharedStrings.xml` part
 and the worksheet parts can appear in either order within the zip, and the streaming reader
-consumes entries in the order they appear. When a worksheet entry is reached *before*
+consumes entries in the order they appear. When a worksheet entry is reached _before_
 the shared-string table has been read, string cells surface as `{ sharedString: N }`
 objects, a raw index, instead of the resolved string.
 
@@ -24,7 +24,7 @@ look intermittent and hard to pin.
   end-to-end through the streaming path.
 - The streaming reader does not require the whole shared-string table to be buffered
   before any row is emitted if that would defeat the memory goal; the design must
-  resolve strings correctly *and* stay bounded (see
+  resolve strings correctly _and_ stay bounded (see
   [[bounded-memory-large-workbook-read]]).
 
 ## Root cause (legacy)

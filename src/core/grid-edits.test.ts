@@ -624,6 +624,54 @@ test('a splice moves the defined names that refer to the spliced sheet', () => {
   );
 });
 
+test("a splice moves a table's column formulas, on its own sheet and from another", () => {
+  const workbook = new Workbook();
+  const sheet = workbook.addWorksheet('S');
+  const rates = workbook.addWorksheet('Rates');
+  sheet.addTable({
+    name: 'T',
+    ref: 'A1',
+    rowCount: 1,
+    totalsRow: true,
+    columns: [
+      {name: 'a', calculatedColumnFormula: 'T[[#This Row],[a]]*$E$9+Rates!B2'},
+      {name: 'b', totalsRowFunction: 'custom', totalsRowFormula: 'SUM(E9:E10)'},
+      {name: 'c', totalsRowFunction: 'sum'},
+    ],
+  });
+  const [before] = sheet.tables;
+  sheet.spliceRows(5, 0, []);
+  rates.spliceRows(1, 1);
+  const formulas = sheet.tables[0]?.columns.map(({calculatedColumnFormula, totalsRowFormula}) => [
+    calculatedColumnFormula,
+    totalsRowFormula,
+  ]);
+  assert.deepEqual(formulas, [
+    ['T[[#This Row],[a]]*$E$10+Rates!B1', undefined],
+    [undefined, 'SUM(E10:E11)'],
+    [undefined, undefined],
+  ]);
+  assert.equal(sheet.tables[0]?.columns[2], before?.columns[2], 'a column nothing moved is kept');
+});
+
+test("a splice moves an authored pivot's source when it is of the source sheet", () => {
+  const workbook = new Workbook();
+  const data = workbook.addWorksheet('Data');
+  const other = workbook.addWorksheet('Other');
+  data.addRow(['k', 'v']);
+  data.addRow(['a', 1]);
+  data.addRow(['b', 2]);
+  const pivot = workbook
+    .addWorksheet('P')
+    .addPivotTable({source: data, rows: ['k'], columns: ['v'], values: ['v']});
+  other.spliceRows(1, 0, []);
+  assert.equal(pivot.sourceRef, 'A1:B3', 'another sheet moves nothing');
+  data.spliceRows(2, 0, []);
+  assert.equal(pivot.sourceRef, 'A1:B4');
+  data.spliceColumns(1, 2);
+  assert.equal(pivot.sourceRef, 'A1:B4', 'a delete of the whole source leaves it as written');
+});
+
 test('a splice moves the formulas of data validations and conditional formats', () => {
   const sheet = new Workbook().addWorksheet('S');
   sheet.addDataValidation('D1', {type: 'list', formulae: ['$A$5:$A$9']});

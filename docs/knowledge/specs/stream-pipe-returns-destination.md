@@ -8,7 +8,8 @@ A caller drives the streaming writer and pipes its output into another stream, u
 Node idiom that chains off the destination:
 
 ```js
-workbook.stream.pipe(fs.createWriteStream('/tmp/sheet.xlsx'))
+workbook.stream
+  .pipe(fs.createWriteStream('/tmp/sheet.xlsx'))
   .on('finish', () => console.log('written'));
 ```
 

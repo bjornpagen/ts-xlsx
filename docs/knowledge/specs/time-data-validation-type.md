@@ -19,7 +19,7 @@ app as a Time validation. Authors fall back to a `custom` rule or hand-written X
 
 - **A `time` validation type sits alongside `date`.** A validation such as
   `{ type: 'time', operator: 'between', formulae: ['00:00', '23:59'], allowBlank, showErrorMessage,
-  errorStyle, errorTitle, error }` is writable on a cell and produces an OOXML `<dataValidation>`
+errorStyle, errorTitle, error }` is writable on a cell and produces an OOXML `<dataValidation>`
   whose `type` attribute is `time`, with the operator and formulae serialized so a spreadsheet app
   presents it as an "Allow: Time" rule. On read, that element parses back into the same typed model.
 - **Time values are day-fraction serials.** OOXML and Excel store a time as a fraction of a day, so

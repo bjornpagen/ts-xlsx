@@ -5,16 +5,16 @@
 ## Context
 
 ADR 0003 stood up the writer on `fflate` and emitted XML by direct string assembly,
-deliberately **deferring the XML *parser* choice to the reader slice**. That slice is
+deliberately **deferring the XML _parser_ choice to the reader slice**. That slice is
 now here: almost every remaining corpus capability (`roundtripWorkbook`,
 `readFixtureReport`, styles/defined-name/merge read-back, roughly 48 cases) asserts through
-a package that is *read back*, so the model cannot light them up without a reader.
+a package that is _read back_, so the model cannot light them up without a reader.
 
 The deferred decision was `fast-xml-parser` (a DOM-building dependency) against a lean
 hand-written SAX. Two forces from the constitution (`CLAUDE.md`) decide it:
 
 1. **A spreadsheet reader parses untrusted input.** "No unbounded allocation, no
-   zip-bomb naïveté, no eval-shaped surprises." A DOM parser materialises the *entire*
+   zip-bomb naïveté, no eval-shaped surprises." A DOM parser materialises the _entire_
    part as an object tree before the reader sees a single cell, which is an allocation
    multiplier an attacker controls, exactly the shape we must not ship.
 2. **The dependency tree stays small, modern, and clean**, a founding reason for the
@@ -35,7 +35,7 @@ same component that path will extend, not throwaway work.
 - **Entities are decoded, never expanded.** Only the five predefined entities
   (`&amp; &lt; &gt; &quot; &apos;`) and numeric character references (bounded to valid
   Unicode) are recognised. DTDs and `<!ENTITY>` definitions are ignored outright, so
-  *billion-laughs* entity expansion and XXE external-entity resolution are structurally
+  _billion-laughs_ entity expansion and XXE external-entity resolution are structurally
   impossible. Not mitigated, absent.
 - **Inflate is bounded** at the reader's entry (`readXlsx`): a cap on total declared
   uncompressed size rejects the naïve zip bomb before the parser runs.
@@ -54,12 +54,12 @@ same component that path will extend, not throwaway work.
 
 ## Update (2026-07-13): the inflate bound no longer trusts declared sizes
 
-The original slice bounded inflation by the zip's *declared* uncompressed size, and flagged
+The original slice bounded inflation by the zip's _declared_ uncompressed size, and flagged
 the gap: a header-lying bomb (declares small, inflates large) slips past, and worse,
 trusting the declared size to preallocate lets an attacker force a large allocation from a
 few compressed bytes. Both are now closed by `src/io/opc/inflate.ts`: the package is fed to
 fflate's streaming unzip in bounded slices, the decompressor grows its output from the bytes
-it *actually* produces, and a running counter aborts the moment real output crosses the cap.
+it _actually_ produces, and a running counter aborts the moment real output crosses the cap.
 Declared sizes are consulted for nothing. `maxUncompressedBytes` now bounds produced output,
 not header claims. This is the first slice of the streaming reader; the same streaming-inflate
 component is what an eventual row-streaming (`.eachRow`) read path extends.
@@ -67,12 +67,12 @@ component is what an eventual row-streaming (`.eachRow`) read path extends.
 ## Update (2026-07-13): the pull parser and the streaming row reader
 
 The SAX parser was push-only: `parseXml(source, handlers)` drove callbacks over the whole string
-in one loop. A callback cannot `yield`, so a reader that must *emit* incrementally could not sit on
+in one loop. A callback cannot `yield`, so a reader that must _emit_ incrementally could not sit on
 top of it. The scan loop is now extracted into a generator, `xmlEvents(source)`, that yields
 `open`/`text`/`close` events; `parseXml` is a thin push adapter over it, so every existing call site
 is byte-for-byte unchanged (the corpus proves it) while a pull consumer can now drive the parse.
 
-On that component sits the first streaming *read* API: `readSheetRows(data, options)`
+On that component sits the first streaming _read_ API: `readSheetRows(data, options)`
 (`src/io/xlsx/read-rows.ts`), a generator that yields one worksheet's rows in order as plain
 `{number, cells}` records, retaining only the row in hand rather than materialising the whole
 `Workbook`. Value decoding is shared with the buffered reader through one module
@@ -84,10 +84,10 @@ the inflate itself per-part lazy on the same pull primitive.
 
 ## Update (2026-07-20): the reader consumes the pull parser through a small helper vocabulary
 
-The hand-written SAX was right, but the *consumption* side had drifted into three habits worth
+The hand-written SAX was right, but the _consumption_ side had drifted into three habits worth
 naming so they don't return: ~30 no-op `onText(){}`/`onClose(){}` stubs, ~20 inline
 `=== '1' || === 'true'` boolean idioms in three incompatible forks, and every parser hand-coding
-both a self-closing branch *and* an on-close branch for the same element. The read path now consumes
+both a self-closing branch _and_ an on-close branch for the same element. The read path now consumes
 events through a settled set of helpers built on the same primitive, so a parser states only what it
 means:
 
@@ -97,24 +97,24 @@ means:
   plain `for..of` that reads `attrs` directly.
 - **`closeEmptyElements(events, names)`** expands a self-closing `<x/>` whose local name is in `names`
   into open+close, so a formatted-but-empty element commits once in `onClose`. It is a **per-name
-  opt-in** (`ReadonlySet<string>`), deliberately *not* a blanket "synthesize a close for every empty
-  tag" mode: text-bearing elements (`<f/>`, `<v/>`, `<t/>`) commit *captured text* on close, so a
+  opt-in** (`ReadonlySet<string>`), deliberately _not_ a blanket "synthesize a close for every empty
+  tag" mode: text-bearing elements (`<f/>`, `<v/>`, `<t/>`) commit _captured text_ on close, so a
   synthesized close would misread them. A self-closing shared-formula clone `<f t="shared" si=".."/>`
-  would set `hasFormula` and be mis-read as a shared-formula *master*. Only elements safe to run
+  would set `hasFormula` and be mis-read as a shared-formula _master_. Only elements safe to run
   on-close-when-empty are listed.
 - **Boolean attributes** go through `boolPresent` / `boolStrict` / `boolTristate`; **numeric operands**
   through `coerceNumericLiteral` (strict decimal regex `^-?\d+(?:\.\d+)?$`, so a non-canonical
-  spelling like `1E5` is kept *verbatim*, the round-trip-faithful and more conservative read of
-  foreign input); a leading `=` through `stripFormulaEquals`, which returns *unescaped* text, leaving
+  spelling like `1E5` is kept _verbatim_, the round-trip-faithful and more conservative read of
+  foreign input); a leading `=` through `stripFormulaEquals`, which returns _unescaped_ text, leaving
   the caller to escape for its target.
 
 **Enumerated attributes are narrowed, never trusted.** A union-typed attribute token is admitted only
 through a guard that recognises the known members; an unrecognised one is dropped rather than cast in
-with `as` (see the *narrow foreign tokens* working agreement in `docs/architecture.md`). This is a
-behaviour change on *malformed* input only. Valid tokens are unchanged, so the byte corpus stays
+with `as` (see the _narrow foreign tokens_ working agreement in `docs/architecture.md`). This is a
+behaviour change on _malformed_ input only. Valid tokens are unchanged, so the byte corpus stays
 green, and the drops are pinned by unit tests.
 
-**Generator gotcha (load-bearing).** A sub-parser that drains a slice of a *shared* event generator
+**Generator gotcha (load-bearing).** A sub-parser that drains a slice of a _shared_ event generator
 must pull with `.next()` (or a helper generator that `return`s), **never** `for..of` plus `break`.
 Breaking out of a `for..of` calls the generator's `.return()`, which terminates the shared stream for
 every later sub-parser. The style-table driver's `until(events, container)` is the canonical shape:
@@ -122,12 +122,12 @@ one `xmlEvents` pass, each section's sub-parser draining its own container's sli
 
 ## Update (2026-07-20): one cell-gathering state machine, two finalisers
 
-The earlier update shared value *decoding* across the buffered and streaming readers. Cell
-*gathering*, the per-cell `<c>`/`<f>`/`<v>`/`<is>` state each reader accumulated, was still
+The earlier update shared value _decoding_ across the buffered and streaming readers. Cell
+_gathering_, the per-cell `<c>`/`<f>`/`<v>`/`<is>` state each reader accumulated, was still
 re-implemented twice and free to drift. It is now one class, `CellAccumulator`
 (`src/io/xlsx/cell-accumulator.ts`, modelled on the `read-rich-runs.ts` run accumulator): both readers
 drive the same `beginCell`/`beginFormula`/`setFormula`/`setValue`/`appendText` calls, so a cell
-can never be *gathered* differently depending on which reader saw it.
+can never be _gathered_ differently depending on which reader saw it.
 
 Finalisation, by contrast, deliberately diverges, and that split is the point. The buffered reader
 calls `finalize`, which resolves shared-formula masters/clones and data-table cells and opens rich
@@ -136,7 +136,7 @@ shared formulas (it surfaces the clone's own cached result) and must **not** ope
 streamed inline string flattens to text). `finalize`'s plain path is itself routed through `decode`,
 so there is exactly one `RawCell`-build and one decode. Sharing gathering while forking finalisation
 is what lets the two readers stay honest to their different contracts without duplicating the fragile
-part. A malformed non-empty `<c r>` is handled in `beginCell` for *both* readers, closing another way
+part. A malformed non-empty `<c r>` is handled in `beginCell` for _both_ readers, closing another way
 the two could have diverged.
 
 **It is dropped there, not thrown.** This paragraph said "throws" until 2026-09-04, and it was the
@@ -145,7 +145,7 @@ must not have, so an agent trusting it would have "restored" a bug. A `<c>` whos
 that can exist (`A0`, `ZZZZ1`, `junk!!`) is treated as one with no address at all, which is the
 stance every other unreadable foreign attribute gets, and the stance this whole document argues for:
 a file this library did not write is allowed to be wrong, and losing one cell beats losing the sheet.
-The thing that had to be shared between the two readers was the *decision*, not the throw, and it is:
+The thing that had to be shared between the two readers was the _decision_, not the throw, and it is:
 `cell-accumulator.ts` makes it once.
 
 ## Update (2026-09-11): a streamed rich string keeps its runs
@@ -188,7 +188,7 @@ The parser grew a second half. Beside `xmlEvents` there are now the pull generat
 a `for..of` over (`openElements`, `capturedText`), the push adapter and the multi-pass driver that
 lets five readers of the worksheet part share one scan of it, the verbatim subtree capture
 (`elementSubtrees`, itself a second scanner over the same text), and `TextCapture`. Those are ways
-of *driving* a scan, and they had accumulated in the same file as the scan.
+of _driving_ a scan, and they had accumulated in the same file as the scan.
 
 They are now `src/xml/xml-read.ts`, and the scanner - the events, and the readings of one
 attribute's text that go with them - is `src/xml/xml-scan.ts`. Nothing changed about the parse; the
@@ -203,7 +203,7 @@ is why the scanner exports `markupAt` and `tagAt` rather than keeping them priva
 must agree to the character about where an element ends, which is the property the shared
 classification was introduced to guarantee.
 
-The split stopped one module short. The scanner kept the readings of an attribute's *value* as well
+The split stopped one module short. The scanner kept the readings of an attribute's _value_ as well
 as the events, and half of those are spreadsheet-flavoured rather than XML: `numInteger` and
 `numFinite` with their floors, `coerceNumericLiteral`, `enumToken`, and the `_xHHHH_` cell-text
 escape. They are now `src/xml/xml-attrs.ts`. The three OOXML booleans stayed with the scanner, and

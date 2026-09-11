@@ -7,15 +7,15 @@ Cluster: styles
 A cell states its colour as `<color theme="1"/>`. Resolving that means indexing the theme part's
 `<a:clrScheme>`. ISO/IEC 29500 §20.1.6.2 tabulates the scheme's child sequence explicitly:
 
-| Sequence index | 0 | 1 | 2 | 3 | 4–9 | 10 | 11 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Element | `dk1` | `lt1` | `dk2` | `lt2` | `accent1`–`accent6` | `hlink` | `folHlink` |
+| Sequence index | 0     | 1     | 2     | 3     | 4–9                 | 10      | 11         |
+| -------------- | ----- | ----- | ----- | ----- | ------------------- | ------- | ---------- |
+| Element        | `dk1` | `lt1` | `dk2` | `lt2` | `accent1`–`accent6` | `hlink` | `folHlink` |
 
 That is the order the elements appear in the XML. It is **not** the order SpreadsheetML's `theme="n"`
 indexes them. Excel swaps each dark/light pair:
 
-| `theme="n"` | 0 | 1 | 2 | 3 | 4–9 | 10 | 11 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
+| `theme="n"` | 0     | 1     | 2     | 3     | 4–9                 | 10      | 11         |
+| ----------- | ----- | ----- | ----- | ----- | ------------------- | ------- | ---------- |
 | Scheme slot | `lt1` | `dk1` | `lt2` | `dk2` | `accent1`–`accent6` | `hlink` | `folHlink` |
 
 Take the spec's listing at face value and every workbook reads inverted: `theme="1"`, which the
@@ -41,7 +41,7 @@ Recorded in `test/corpus/fixtures/excel-oracle/theme-color-index-order.json` (Ex
 ## Two more corners in the same area
 
 - **`dk1` and `lt1` are almost always `<a:sysClr>`, not `<a:srgbClr>`.** A sysClr's `val` is an
-  operating-system colour *name* (`windowText`), not a value, and its `lastClr` attribute records what
+  operating-system colour _name_ (`windowText`), not a value, and its `lastClr` attribute records what
   the authoring application last resolved that name to, which is the only thing a consumer on a
   different system can use. A reader that only understands `srgbClr` resolves nothing for the two
   most-used slots in the scheme.

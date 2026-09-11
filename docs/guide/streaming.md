@@ -130,7 +130,7 @@ sheet.commit();
 await writer.commit();
 ```
 
-`commit()` resolves with the package *only when something is going to want it*: when you
+`commit()` resolves with the package _only when something is going to want it_: when you
 supplied no sink, or when you touched `writer.stream`. Hand the writer a `stream` or a
 `filename` and never reach for `writer.stream`, as the handler above does not, and it resolves
 with `undefined` and the archive is never assembled as a whole object. That is the point of

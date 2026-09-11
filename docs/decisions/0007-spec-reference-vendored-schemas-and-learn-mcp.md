@@ -8,7 +8,7 @@ Correctness for this library is defined by an external standard: ECMA-376
 (Office Open XML) plus the ways Microsoft Excel deviates from it in practice.
 Agents implementing parser/writer paths repeatedly need the authoritative shape
 of the format, meaning element structure, attribute types, enumerations, child ordering,
-and the "how does Excel *really* do this" deltas. We already have:
+and the "how does Excel _really_ do this" deltas. We already have:
 
 - a hand-authored behavior-spec corpus (`docs/knowledge/specs/`, ~150 notes) from
   the Phase 1 harvest, and
@@ -25,7 +25,7 @@ Two complementary moves, split by the nature of the knowledge.
 
 ### 1. Vendor the ECMA-376 Transitional XSD set (static, so in-repo rather than an MCP)
 
-The base standard is a *fixed, versioned document*. The most durable,
+The base standard is a _fixed, versioned document_. The most durable,
 agent-friendly form is a pinned local copy, not a live network lookup: offline,
 greppable, deterministic, version-locked, and immune to service outages, which is exactly
 the self-contained, "verify don't assume" posture of CLAUDE.md.

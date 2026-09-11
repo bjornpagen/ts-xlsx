@@ -6,7 +6,7 @@ Images are positioned in a sheet by an anchor whose coordinates can be fractiona
 `tl.col = 1.5` means "the middle of column B", `tl.row = 2.25` means "a quarter of the
 way down row 3". The public API exposes this fractional coordinate, and OOXML stores it
 as a whole cell index plus a sub-cell offset in EMU (`<xdr:col>` plus `<xdr:colOff>`). The
-translation between the two must use the *actual* geometry of the referenced column and
+translation between the two must use the _actual_ geometry of the referenced column and
 row: a wide column means "halfway across" is a large EMU offset, and a narrow one a small
 offset. Users also resize columns and rows after anchoring and expect the picture to track.
 
@@ -20,7 +20,7 @@ reproduction:
 
 - A **wider** custom column can yield a **smaller** half-way offset than a default
   column. Concretely: halfway across a width-38 column serializes to `colOff = 190000`,
-  while halfway across a *default*-width column serializes to `colOff = 320000`, so the
+  while halfway across a _default_-width column serializes to `colOff = 320000`, so the
   wide column gets the smaller offset, which is backwards.
 - Because default columns use a constant rather than the real default width, an image
   over unset columns is positioned against a fictional width.

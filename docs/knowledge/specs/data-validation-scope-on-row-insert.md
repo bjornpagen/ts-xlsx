@@ -13,13 +13,13 @@ to prevent it.
 > Spec note, not a corpus case: the inheritance the reporter observed is performed by the desktop
 > application's UI when it inserts a row, so a file-writing library cannot control what the application
 > does after the file is opened and there is nothing to baseline against current library behavior.
-> The durable value is defining what the *library's own* row-insert operations do with validation
+> The durable value is defining what the _library's own_ row-insert operations do with validation
 > ranges, which is a real and separate question.
 
 ## Desired behavior
 
-The load-bearing distinction is between what the spreadsheet *application* does on a UI row-insert,
-which is out of our control, and what *this library's* row-insert and splice operations do to the
+The load-bearing distinction is between what the spreadsheet _application_ does on a UI row-insert,
+which is out of our control, and what _this library's_ row-insert and splice operations do to the
 validation `sqref` ranges. The library must have a defined, predictable policy for the latter:
 
 - **Data validations are anchored to explicit cell ranges (`sqref`), independent of table geometry.**

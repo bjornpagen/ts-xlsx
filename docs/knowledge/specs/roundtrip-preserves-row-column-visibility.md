@@ -25,7 +25,7 @@ hidden one, and must never emit a document mainstream consumers reject.
 Unconfirmed. The reported symptom is "all rows and columns hidden after a no-op
 round-trip," but it is not yet isolated whether the true defect is a visibility flag
 mis-serialized on the read-then-write path, say a default `hidden` leaking onto every
-row and column model, or a separate structural corruption that merely *manifested* as an
+row and column model, or a separate structural corruption that merely _manifested_ as an
 all-hidden sheet in the viewer that could open it. The two have different fixes.
 
 ## Open questions for the rebuild

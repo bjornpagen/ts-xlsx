@@ -11,7 +11,7 @@ single cell, for example a `LET` wrapping `FILTER`:
 =LET(results, FILTER(Sheet3!$B$2:$B$1000, VALUE(Sheet3!$A$2:$A$1000) = VALUE(INDIRECT("Sheet1!S" & Sheet2!B1))), IFERROR(results, ""))
 ```
 
-In modern spreadsheet semantics this is a **plain single-cell formula** that automatically *spills*
+In modern spreadsheet semantics this is a **plain single-cell formula** that automatically _spills_
 its multiple return values into the neighbouring cells of the column. It is **not** a legacy
 Ctrl+Shift+Enter (CSE) array formula and carries no surrounding braces. A user reads such a workbook,
 does nothing to that cell, and writes it back out. On reopening, the formula has been wrapped in
@@ -52,7 +52,7 @@ formula, destroying the spill.
 - Detection on read: how is a dynamic-array formula recognised on input, purely by the absence of
   `t="array"`, or by the presence of the dynamic-array cell metadata? The reader must not manufacture
   an array wrapper that was never in the source.
-- Authoring: should the public API let a caller *create* a dynamic-array formula (spilling) distinctly
+- Authoring: should the public API let a caller _create_ a dynamic-array formula (spilling) distinctly
   from a CSE array formula, or is preservation-on-round-trip the first milestone?
 
 Related: `formula-cell-value-type-minimal-required-fields`, `formula-recalculation-expectations`,

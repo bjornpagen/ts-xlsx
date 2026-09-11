@@ -13,19 +13,19 @@ ribbon parser, the BIFF12 decoder and CSV in the same module graph, and `"sideEf
 cost and cannot notice a layer being crossed.
 
 Measuring the static-import closure of each candidate entry against the emitted JS changed what the
-step was worth doing *for*. The naive expectation, that splitting the barrel makes each codec
+step was worth doing _for_. The naive expectation, that splitting the barrel makes each codec
 cheap, is mostly false here, and the measurements say why:
 
-| entry | closure | note |
-| --- | --- | --- |
-| everything | 863 KB | |
-| `/xlsx` | 848 KB | `readXlsx` sniffs and dispatches a binary package to the BIFF12 reader |
-| `/xlsb` | 435 KB | |
-| `/csv` | 308 KB | `readCsv` builds a `Workbook`, so it pulls the model whole |
-| `/core` | 299 KB | of which ~150 KB is VBA plus ribbon: `Workbook` models a macro project |
-| `/vba` | 73 KB | |
-| `/customui` | 26 KB | |
-| `/errors` | 12 KB | |
+| entry       | closure | note                                                                   |
+| ----------- | ------- | ---------------------------------------------------------------------- |
+| everything  | 863 KB  |                                                                        |
+| `/xlsx`     | 848 KB  | `readXlsx` sniffs and dispatches a binary package to the BIFF12 reader |
+| `/xlsb`     | 435 KB  |                                                                        |
+| `/csv`      | 308 KB  | `readCsv` builds a `Workbook`, so it pulls the model whole             |
+| `/core`     | 299 KB  | of which ~150 KB is VBA plus ribbon: `Workbook` models a macro project |
+| `/vba`      | 73 KB   |                                                                        |
+| `/customui` | 26 KB   |                                                                        |
+| `/errors`   | 12 KB   |                                                                        |
 
 Two structural facts fell out of that table and are worth more than the split itself: the model
 drags the whole VBA codec because `Workbook` parses and edits `vbaProject.bin` directly, and the
@@ -37,13 +37,13 @@ cannot be a dynamic import.
 
 1. **Seven entry barrels under `src/entries/`, one per published subpath** (`/core`, `/xlsx`,
    `/xlsb`, `/csv`, `/vba`, `/customui`, `/errors`), with `src/index.ts` unioning them so the bare
-   package name still carries everything. The entries are *not* the existing internal barrels:
+   package name still carries everything. The entries are _not_ the existing internal barrels:
    `src/vba/index.ts` and `src/customui/index.ts` carry the CFB writer, the MS-OVBA primitives and
    the part-path constants that the model and the codecs need, and those are implementation. A
    public face has to be able to be narrower than the module it fronts.
 
 2. **Each symbol is listed in exactly one entry, and `src/index.ts` is `export *` over all seven.**
-   The alternative, an explicit curated list at the root *and* in each entry, means every new
+   The alternative, an explicit curated list at the root _and_ in each entry, means every new
    export needs two edits and a forgotten one is silent. The union costs nothing and cannot drift.
 
    The disjointness this requires is load-bearing, not tidiness: `export *` does not report an
@@ -82,7 +82,7 @@ cannot be a dynamic import.
    parser landed; the build was measured at 861 KB and CI's `pnpm run size` step had been failing on
    it, unread. None of that growth was bloat, and a tripwire nobody can satisfy stops being read at
    all. The signal moves to the per-entry closures, which notice what a total cannot: a codec
-   acquiring a *value* import of something it previously needed only as a type moves one entry's
+   acquiring a _value_ import of something it previously needed only as a type moves one entry's
    number and leaves the total exactly where it was.
 
 7. **`scripts/smoke-dist.ts` imports through the package name, not `../dist/`.** Node's
@@ -107,7 +107,7 @@ cannot be a dynamic import.
    the run reports how many did. That is the same standing rule as a declined lint rule: a decline
    on the record is a decision, an absence is an accident. Four decline today, and all four are the
    streaming reader's granular output shapes, held as inferred structural types while that surface
-   settles. The streaming *writer*'s plumbing (`StyleRegistry`, `FlushedSheet` and the rest) also
+   settles. The streaming _writer_'s plumbing (`StyleRegistry`, `FlushedSheet` and the rest) also
    declines, and its reason is a different one: those types are reachable only through
    `WorksheetStreamWriter`'s constructor and its `flushedSheet()`, which a consumer never calls,
    because a caller receives the writer from `WorkbookStreamWriter.sheet()`. The honest fix there

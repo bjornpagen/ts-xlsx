@@ -41,7 +41,7 @@ The runtime value has always been plain numbers, and the cell's own `row`/`col` 
 
 The same drift bit the general **decoded-address** descriptor, the structured form produced when a
 cell reference is decoded (row and column indices, column letter, sheet qualifier, absolute/relative
-markers). Its published type must match the runtime value *field for field*:
+markers). Its published type must match the runtime value _field for field_:
 
 - Every field present at runtime is declared; no field is declared that never appears at runtime.
 - Each field's primitive is correct: row and column are 1-based **numbers**, the column letter and
@@ -57,7 +57,7 @@ markers). Its published type must match the runtime value *field for field*:
 
 - Derive the descriptor's type from the decoder's implementation, or type-check it against it, rather
   than maintaining a separate ambient declaration, so this class of drift cannot recur.
-- A type-level test asserts the decoder's return type *equals* the published address type, so any
+- A type-level test asserts the decoder's return type _equals_ the published address type, so any
   future mismatch fails CI rather than surviving as declaration-only debt.
 
 ## Open questions

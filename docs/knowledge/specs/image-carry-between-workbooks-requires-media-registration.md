@@ -44,9 +44,9 @@ media that was never registered: a silently broken image.
   destination surfaces the image anchored where it was placed.
 - **A raw `model` splice cannot carry the media, and no longer fails opaquely when it doesn't.** As
   originally reported, transplanting an image-bearing worksheet's serialized `model` into a
-  *different* workbook (`dstWorkbook.addWorksheet(...).model = JSON.parse(JSON.stringify(srcSheet.model))`,
+  _different_ workbook (`dstWorkbook.addWorksheet(...).model = JSON.parse(JSON.stringify(srcSheet.model))`,
   the workaround users reached for absent a copy API) threw `TypeError: Cannot read properties of
-  undefined (reading 'name')` at **write time**, because the anchor referenced a workbook-scoped media
+undefined (reading 'name')` at **write time**, because the anchor referenced a workbook-scoped media
   id that did not exist in the destination. That is now an `AuthoringError` naming the image id, and
   the model no longer carries anchors at all (ADR-0005), so the splice is a content-only copy by
   construction and `importImages` is how the pictures follow.

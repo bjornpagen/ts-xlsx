@@ -8,7 +8,7 @@ Modern Excel stores certain conditional-formatting rules in a worksheet **extens
 than the classic conditional-formatting collection. These extended rules can be of type
 `expression`, where the trigger condition is a formula carried in a nested formula element, and their
 applied formatting is described by a **differential-formatting (dxf) child that lives inside the
-extension namespace**, an *extended* dxf, distinct from the classic dxf used by ordinary
+extension namespace**, an _extended_ dxf, distinct from the classic dxf used by ordinary
 conditional formatting. When a workbook containing such an extended expression rule is read and
 written back, two things must survive: the rule's condition formula, and the extended dxf that
 describes the visual formatting. If the extended dxf is dropped on write, the rule is preserved
@@ -43,7 +43,7 @@ no formatting at all.
 - Which extended rule types beyond `expression` (data bars with extended options, icon sets, color
   scales with extension attributes) share this extension-block storage and need the same treatment?
   Concretely observed for **icon sets with per-icon overrides, "mixed" or "custom" icons**: an
-  `iconSet` rule whose individual threshold entries each draw from a *different* icon set or icon id
+  `iconSet` rule whose individual threshold entries each draw from a _different_ icon set or icon id
   than the rule's base set (one arrow, one symbol, one "no icon") is an x14-extension form. Both
   the buffered writer and the streaming writer emit only the classic `<iconSet>` element and drop the
   per-icon overrides entirely, so the custom icons never reach the file and every threshold falls back

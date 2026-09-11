@@ -3,7 +3,7 @@
 **Status:** Superseded in part (2026-08-05) by [ADR 0028](./0028-typescript-7-adoption.md) · Accepted (2026-07-19) · Phase 4 · advances the toolchain from [ADR 0029](./0029-toolchain-standup.md), constrained by the docs generator of [ADR 0006](./0006-docs-from-types.md)
 
 > The "hold at 6" half of this decision is spent: the tree is on `typescript@^7.0.2`. The
-> blocker diagnosed below was real and was removed exactly as the *Negative / deferred* note
+> blocker diagnosed below was real and was removed exactly as the _Negative / deferred_ note
 > predicted, by rendering signatures from source-text spans instead of `transform`+`printNode`.
 > The `@types/node` reasoning still stands unchanged. Kept for the diagnosis, which is the part
 > worth reading.
@@ -52,7 +52,7 @@ TypeError: ts.createPrinter is not a function
 ```
 
 TS 7's `typescript` package ships the native Go compiler plus a JavaScript API
-shim that currently exposes only a *subset* of the classic compiler API. It splits
+shim that currently exposes only a _subset_ of the classic compiler API. It splits
 in two:
 
 - **Analysis calls, present in 7.** `createProgram`, the type checker,

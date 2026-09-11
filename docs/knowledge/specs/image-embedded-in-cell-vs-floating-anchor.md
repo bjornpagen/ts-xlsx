@@ -4,10 +4,10 @@ Cluster: images
 
 ## Scenario
 
-A user adds an image and anchors it to a cell range, say C2:E6. On export the image floats *over* the
+A user adds an image and anchors it to a cell range, say C2:E6. On export the image floats _over_ the
 cells as an independent drawing object: it is not owned by any single cell, is not returned by
 cell-value reads, and is not sorted, filtered or moved with the row it visually sits on. The user
-expected the picture to be embedded *in* the cell, to behave as the cell's value, live inside the
+expected the picture to be embedded _in_ the cell, to behave as the cell's value, live inside the
 cell's bounds, and travel with the cell through sort, filter, and row insert and delete. These are two
 fundamentally different features, and today only the floating one exists.
 
@@ -28,14 +28,14 @@ Distinguish the two ways an image can live in a sheet, and let callers choose:
   the overlay's anchors. This mode deserves explicit, documented coverage of the `editAs` and
   "move and size with cells" property, which is the usual source of "why does my picture float, or not
   move with the cell" confusion.
-- **In-cell / embedded image.** The image is the *value* of exactly one cell, which is Excel's "Place
+- **In-cell / embedded image.** The image is the _value_ of exactly one cell, which is Excel's "Place
   in Cell" and IMAGE-function rich-value cells. It is owned by and clipped to that cell, moves and
   resizes with it, participates in sort, filter, insert and delete like any value, and reads back as
   the cell's value. On the OOXML side this is not an `xdr:drawing` two-cell anchor at all. It is a rich
   value in the rich-data and cell-metadata parts (`xl/richData/*`, cell metadata `vm` attributes, and a
   rels-linked image), a distinct feature from classic drawings.
 - **Native / intrinsic-size placement (a missing floating mode).** Even within the floating family,
-  callers routinely want "place this picture *here* at its own dimensions", pinned to a single
+  callers routinely want "place this picture _here_ at its own dimensions", pinned to a single
   top-left cell and rendered at the image's intrinsic pixel size, without stretching to span a range.
   Today the range-anchor helpers force a two-corner (from plus to) anchor, so supplying only a top-left
   position is not enough and the picture is distorted to fill the spanned cells. This maps to an OOXML
@@ -49,9 +49,9 @@ Distinguish the two ways an image can live in a sheet, and let callers choose:
   not silently rewrite it to a stretched two-cell anchor.
 
 - **Reading floating images is a first-class, enumerable affordance, not just a write feature.**
-  Opening a file that contains a picture floating over the grid, a caller must be able to *enumerate*
+  Opening a file that contains a picture floating over the grid, a caller must be able to _enumerate_
   the worksheet's drawing images and, for each, recover the media payload (bytes plus content
-  type or extension) and the anchor: which cells it is pinned to, the anchor *kind*
+  type or extension) and the anchor: which cells it is pinned to, the anchor _kind_
   (one-cell, two-cell or absolute), and the offset. Read-back must preserve the anchor kind and size
   so a subsequent write round-trips it faithfully rather than silently rewriting a one-cell or
   absolute anchor into a stretched two-cell one. This read enumeration across anchor variants,

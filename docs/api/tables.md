@@ -21,12 +21,12 @@ const isTotalsRowFunction: (value: string) => value is TotalsRowFunction
 ```ts
 class Table {
   readonly name: string;
-  readonly columns: readonly TableColumn[];
   readonly headerRow: boolean;
   readonly totalsRow: boolean;
   readonly totalsRowShown: boolean | undefined;
   readonly autoFilter: boolean;
   readonly style: TableStyleInfo | undefined;
+  get columns(): readonly TableColumn[];
   get columnCount(): number;
   get rowCount(): number;
   addRow(values: readonly CellValue[] = []): void;
@@ -40,6 +40,14 @@ class Table {
 ```
 
 **Members**
+
+#### `Table.columns`
+
+```ts
+get columns(): readonly TableColumn[];
+```
+
+The table's columns, left to right.
 
 #### `Table.rowCount`
 

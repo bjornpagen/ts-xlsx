@@ -46,13 +46,13 @@ the commit, and a hook that disagrees with CI is a hook people learn to skip.
 It is faster, which is worth stating plainly because an earlier draft of this migration
 claimed the opposite. Best of five, whole tree, 511 files:
 
-| command | ms |
-| --- | --- |
-| `biome check` (lint only) | 1398 |
-| `oxlint`, the adopted rule set, 122 rules | 322 |
-| `oxlint --type-aware` | 1297 |
-| `biome format` (check only) | 1287 |
-| `oxfmt --check` | 502 |
+| command                                   | ms   |
+| ----------------------------------------- | ---- |
+| `biome check` (lint only)                 | 1398 |
+| `oxlint`, the adopted rule set, 122 rules | 322  |
+| `oxlint --type-aware`                     | 1297 |
+| `biome format` (check only)               | 1287 |
+| `oxfmt --check`                           | 502  |
 
 The retracted claim is recorded because it is the trap: oxlint benchmarked with
 `restriction` and `style` enabled is slower than Biome, and at 23 576 findings most of
@@ -75,7 +75,7 @@ reasoning at the site.
 ## The two counts that look like emergencies and are not
 
 > Superseded 2026-08-26. Both counts were measured while the type-aware rules were reading
-> TypeScript's *default* compiler options for every file outside `src/**`. See ADR 0037. The
+> TypeScript's _default_ compiler options for every file outside `src/**`. See ADR 0037. The
 > `no-floating-promises` result below survives the correction unchanged; the second bullet does
 > not, and ADR 0038 carries the re-measured version. The section is kept because the trap it
 > describes is real and the numbers are what a cold reader will find in `git log`.
@@ -114,7 +114,7 @@ clean tree. `docs/agent-correctness-playbook.md` carries a planted control that 
 report exactly four findings. It reports the same four from `test/` and `scripts/`, even
 though the root `tsconfig.json` includes only `src/**`: tsgolint is not bound to a
 project the way `parserOptions.project` was, and `--tsconfig` overrides import resolution
-only. What that observation missed is *which* options those trees were then being checked
+only. What that observation missed is _which_ options those trees were then being checked
 under. The answer is TypeScript's defaults, and
 [0037](./0037-the-linter-and-the-typechecker-read-the-same-tsconfig.md) is the fix.
 

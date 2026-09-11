@@ -7,29 +7,29 @@
 
 The net is defense-in-depth. From cheapest/fastest to most authoritative:
 
-| Layer | What it proves | Command | Needs |
-| --- | --- | --- | --- |
-| Types + unit | The code compiles under strict TS and units pass | `pnpm run typecheck && pnpm run test:src` | Node 24 |
-| ↳ narrower | Only one tree, when iterating | `pnpm run typecheck:src` · `pnpm run typecheck:test` | Node 24 |
-| ↳ emitted `.d.ts` | The published declarations typecheck as a consumer sees them | `pnpm run typecheck:dist` | Node 24 + `pnpm run build` |
-| Lint | The rule gates: correctness, imports, suppression hygiene | `pnpm run lint` | Node 24 |
-| ↳ layout | Every file is as oxfmt would write it | `pnpm run format:check` | Node 24 |
-| Prose | No banned character in the authored docs | `pnpm run chars:check` | Node 24 |
-| **Corpus** | Well-formed XML, package structure, and no behavior regression | `pnpm run corpus` | Node 24 |
-| **OOXML oracle** | Schema + semantic conformance against Microsoft's own validator | `pnpm run validate:ooxml file.xlsx` | Node 24 + network on first call |
-| Spec grounding | Ground a decision in the authoritative format | `ooxml-lookup` skill + Learn MCP + `docs/knowledge/specs/` | Node 24 |
-| Coverage | Which lines/branches/functions **both** suites together ever enter | `pnpm run coverage` | Node 24 (~74 s) |
+| Layer             | What it proves                                                     | Command                                                    | Needs                           |
+| ----------------- | ------------------------------------------------------------------ | ---------------------------------------------------------- | ------------------------------- |
+| Types + unit      | The code compiles under strict TS and units pass                   | `pnpm run typecheck && pnpm run test:src`                  | Node 24                         |
+| ↳ narrower        | Only one tree, when iterating                                      | `pnpm run typecheck:src` · `pnpm run typecheck:test`       | Node 24                         |
+| ↳ emitted `.d.ts` | The published declarations typecheck as a consumer sees them       | `pnpm run typecheck:dist`                                  | Node 24 + `pnpm run build`      |
+| Lint              | The rule gates: correctness, imports, suppression hygiene          | `pnpm run lint`                                            | Node 24                         |
+| ↳ layout          | Every file is as oxfmt would write it                              | `pnpm run format:check`                                    | Node 24                         |
+| Prose             | No banned character in the authored docs                           | `pnpm run chars:check`                                     | Node 24                         |
+| **Corpus**        | Well-formed XML, package structure, and no behavior regression     | `pnpm run corpus`                                          | Node 24                         |
+| **OOXML oracle**  | Schema + semantic conformance against Microsoft's own validator    | `pnpm run validate:ooxml file.xlsx`                        | Node 24 + network on first call |
+| Spec grounding    | Ground a decision in the authoritative format                      | `ooxml-lookup` skill + Learn MCP + `docs/knowledge/specs/` | Node 24                         |
+| Coverage          | Which lines/branches/functions **both** suites together ever enter | `pnpm run coverage`                                        | Node 24 (~74 s)                 |
 
 **`typecheck` means both trees.** There are two strict projects, `tsconfig.json` over `src/` and
 `tsconfig.test.json` over `test/`, `scripts/` and `tools/`, and the `verify` gate has always run
-both. The `typecheck` *script* used to run only the first, which made the obvious command silently
+both. The `typecheck` _script_ used to run only the first, which made the obvious command silently
 blind to the tree the regression corpus lives in: edit an adapter, get a green `typecheck`, and
 learn nothing. It now runs both, and `typecheck:src` is there for when you genuinely want one.
 The `tsconfig.json` inside `test/`, `scripts/` and `tools/` is not a third gate and nothing runs
 `tsc` against it; it exists so the linter reads the same options `tsc` does, and the note under
 the planted control below says what happens when it does not.
 
-**`typecheck` does not mean the third tree.** `tsconfig.dist.json` typechecks the *emitted*
+**`typecheck` does not mean the third tree.** `tsconfig.dist.json` typechecks the _emitted_
 `.d.ts` through the package's `exports` map, and its subject only exists after `pnpm run build`,
 so it cannot live in `verify`, which must run on a never-built tree. It runs in `build.yml`
 instead (ADR 0031). Consequence worth knowing before you push: a change that breaks the published
@@ -37,8 +37,8 @@ declarations but not `src/` passes every local gate and fails on the runner. If 
 the public barrel or a type it re-exports, run `pnpm run build && pnpm run typecheck:dist` first,
 which costs about 0.8 s on top of the build.
 
-**`lint:fix` needs no confirming `lint` pass.** `oxlint --fix` applies what it can and *still
-exits non-zero* if any diagnostic survives, so a green `lint:fix` already is the proof. Re-running
+**`lint:fix` needs no confirming `lint` pass.** `oxlint --fix` applies what it can and _still
+exits non-zero_ if any diagnostic survives, so a green `lint:fix` already is the proof. Re-running
 `lint` after it only re-checks a tree you have been told is clean.
 
 **Read what `--fix` did before you keep it.** Not every autofix is meaning-preserving, and the
@@ -67,18 +67,30 @@ reports exactly four findings, `no-deprecated`, `no-floating-promises`, `only-th
 
 ```ts
 /** @deprecated use other */
-export function old(): number { return 1; }
-export function other(): number { return 2; }
-export function useIt(): number { return old(); }
+export function old(): number {
+  return 1;
+}
+export function other(): number {
+  return 2;
+}
+export function useIt(): number {
+  return old();
+}
 export async function f(): Promise<void> {}
-export function g(): void { f(); }
-export function h(): void { throw 'a string'; }
-export function i(x: {a(): void}): unknown { return x.a; }
+export function g(): void {
+  f();
+}
+export function h(): void {
+  throw 'a string';
+}
+export function i(x: {a(): void}): unknown {
+  return x.a;
+}
 ```
 
 It reports the same four from `test/`, `test/corpus/`, `scripts/` and `tools/`, verified in all
 five trees. That it does is not free: tsgolint reads compiler options from the nearest `tsconfig.json`
-that *includes* the file, which is why those three directories each carry one (ADR
+that _includes_ the file, which is why those three directories each carry one (ADR
 [0037](./decisions/0037-the-linter-and-the-typechecker-read-the-same-tsconfig.md)). Delete one and
 the linter falls back to TypeScript's defaults for that tree and disagrees with `tsc` without
 saying so. `--tsconfig` does not substitute; it overrides import resolution only.
@@ -91,19 +103,19 @@ one without a reason, you have recorded that you silenced something and not why.
 **Run one corpus case, not the whole corpus, while you iterate.**
 `node test/corpus/run.ts --case <id-or-cluster-glob>` is well under a second against tens of
 seconds for the whole corpus, and prints the case in full. `--json` gives one machine-readable report
-object. The summary line reaches stdout in *every* mode, so never pipe a run through `grep` to
+object. The summary line reaches stdout in _every_ mode, so never pipe a run through `grep` to
 find a case, and never run the corpus twice to get both the detail and the tally.
 
 **Cost is not the only thing that separates these layers. Authority is (ADR 0012).** They witness
 three different things, and a lower one cannot stand in for a higher one:
 
-- **Self-consistency.** A write→read round-trip is a fixed point of *our own* code. It
-  catches *unilateral* writer/reader bugs. It is structurally blind to *correlated* ones
+- **Self-consistency.** A write→read round-trip is a fixed point of _our own_ code. It
+  catches _unilateral_ writer/reader bugs. It is structurally blind to _correlated_ ones
   (both halves wrong in compensating directions) and to anything spanning two package
   parts. Sufficient only for **intra-model** claims (a value survives, a style does not bleed).
 - **Spec-conformance.** The `OpenXmlValidator` oracle and the `inspectPackage` structural
-  facts. An *independent* implementation, so it breaks the round-trip correlation, but it
-  enforces what ECMA-376 *states*, not what Excel *does*. Required for **single-part
+  facts. An _independent_ implementation, so it breaks the round-trip correlation, but it
+  enforces what ECMA-376 _states_, not what Excel _does_. Required for **single-part
   conformance**.
 - **Excel behavior.** What Excel Desktop actually does. The only ground truth for cross-part
   invariants the spec omits, for example that a table's header cells must exist and match its
@@ -111,8 +123,8 @@ three different things, and a lower one cannot stand in for a higher one:
   state-observable behavior (ADR 0013); recorded as
   `provenance: {source: 'excel-desktop-verification'}`.
 
-For a **cross-part correspondence**, one Excel-Desktop verification *seeds* the invariant
-and a corpus fact whose shape *is* the relationship *locks* it. The `inspectPackage`
+For a **cross-part correspondence**, one Excel-Desktop verification _seeds_ the invariant
+and a corpus fact whose shape _is_ the relationship _locks_ it. The `inspectPackage`
 vocabulary is partitioned by part and cannot phrase most cross-part relationships yet. ADR 0012
 lists the open ones.
 
@@ -130,7 +142,7 @@ way, including the pool width, the cache key and the incremental-`tsc` traps, is
 
 The **Stop hook** runs `verify --full --cached` at each turn boundary, so you cannot end a
 turn green while regressing the corpus. `--cached` exits immediately when the working tree
-is byte-for-byte what it was the last time this gate set passed. A *hit means proven*, not
+is byte-for-byte what it was the last time this gate set passed. A _hit means proven_, not
 skipped, because the key is the HEAD commit plus the full diff and every untracked file. A
 turn that changed nothing verifiable costs ~0.3 s; one that changed anything pays the real
 ~13 s. The OOXML oracle is **not** in the hook, because it is slower and it spawns a large
@@ -138,7 +150,7 @@ external binary. Invoke it yourself; see below.
 
 **Write scratch to `.tmp/`.** Probes, dumps, generated workbooks, anything regenerable
 (`$SCRATCH` and `$TMPDIR` both point there; CLAUDE.md makes it the rule). It is git-ignored,
-so probing leaves `git status` clean *and* costs nothing at the turn boundary: an untracked
+so probing leaves `git status` clean _and_ costs nothing at the turn boundary: an untracked
 file anywhere else is part of the cache key and buys you a full re-verify.
 
 ## Situation → check
@@ -177,7 +189,7 @@ schema/semantic oracle on a representative file: use the **`validate-ooxml` skil
 which emits a workbook and runs `pnpm run validate:ooxml` for you. New behavior ships
 with a corpus case in the same change (use the **`write-corpus-case` skill**).
 
-**A generated file's *content* is right but its *layout* opens wrong**, meaning a frozen header
+**A generated file's _content_ is right but its _layout_ opens wrong**, meaning a frozen header
 row unpainted until you click it, a missing outline bar, no sheet selected.
 Suspect an omitted **view-initialisation** fact before you suspect the data or the styles.
 Excel writes `<bookViews><workbookView/>`, `tabSelected="1"` on exactly one `<sheetView>`,
@@ -186,7 +198,7 @@ consumers lay the pane geometry and the outline bars out against them, so omitti
 leaves that layout uninitialised. Such a package is still schema-valid and still opens
 without a repair prompt, so **neither the oracle nor `open-verdict.ps1` will flag it**. The
 writer emits all three unconditionally now (`DEFAULT_WORKBOOK_VIEW`, `src/core/workbook.ts`).
-That they were omitted is certain; that any *one* of them causes a given paint glitch is
+That they were omitted is certain; that any _one_ of them causes a given paint glitch is
 inference from the diff. The single-variable A/B that would isolate it was never run, and
 the original report only ever reproduced under a window geometry we could not recreate. So
 if this class of symptom recurs with all three present, the cause is elsewhere: reopen the
@@ -212,19 +224,19 @@ zero today, which is what makes the gate a floor rather than a wish. Config and 
 **You are adding a throw, or touching the read path's tolerance of a foreign file.**
 Two rules, one gate each. A name inside a message goes through `quoted()` from
 `src/errors.ts`, never an inline `JSON.stringify`; run `pnpm run error-messages:check`, or
-just let the `invariants` gate do it. And a *file* may never provoke an `authoring` failure
+just let the `invariants` gate do it. And a _file_ may never provoke an `authoring` failure
 or a native `RangeError`/`SyntaxError`: if you are handing a file-derived value to a model
 method that validates, it goes through `src/io/read-policy/read-repair.ts` -- `repairSheetName`
 where there is an obviously right rewrite, `admitting` where the honest answer is that the
 file does not really carry that feature. The check that proves it is a corpus case shaped
 like `a-hostile-name-costs-that-name-not-the-read`: patch one attribute of a written
-package, read it back, and assert the read survived *and* the model re-writes. The second
+package, read it back, and assert the read survived _and_ the model re-writes. The second
 half is the one that catches the interesting failures, because a reader is allowed to
 produce only values the writer can serialise.
 
 **You are cutting a release.**
 Bump `version` in `package.json`, cut `CHANGELOG.md`'s `## [Unreleased]` into the new
-version's section, commit, and push. Then let CI go green *before* tagging, because the
+version's section, commit, and push. Then let CI go green _before_ tagging, because the
 tag is what the release names and a tag that fails its own gates is the one thing you
 cannot quietly redo. Tag `vX.Y.Z`, push it, and publish a GitHub release on it: that
 release event is what publishes to npm (ADR-0026), authenticated by OIDC with no
@@ -263,12 +275,13 @@ check and a comment.
 **You are about to claim something is faster, or that it stops blocking the event loop.**
 Measure, and distrust the first number. A bad measurement will talk you out of a correct change.
 Three traps, all hit in one sitting while sizing `writeXlsxAsync`:
+
 - **One process per case.** Running the baseline and the candidate in the same process loads the
   second with the first's GC pressure. On a ~42 MB payload that alone made the faster path look
   slower. Pass the case in on `argv` and run the script twice.
 - **Never hand-roll a `setInterval` watcher for loop blocking.** It reports timer coalescing as
   blocking, and it reports `max = 0` when the loop is blocked so hard the callback never fires
-  *once*, so the worst case reads as flawless. `perf_hooks.monitorEventLoopDelay` measures the
+  _once_, so the worst case reads as flawless. `perf_hooks.monitorEventLoopDelay` measures the
   actual thing.
 - **Responsiveness and throughput are two claims.** Moving work to a worker can leave wall-clock
   untouched while cutting the longest stall from seconds to milliseconds. Say which one you
@@ -279,7 +292,7 @@ re-derive them to know whether the trade still holds.
 
 **You are fixing a bug.**
 Test-first. Write an implementation-blind corpus case that reproduces it
-(`write-corpus-case` skill), set its `baseline` to what the code does *today*, watch it
+(`write-corpus-case` skill), set its `baseline` to what the code does _today_, watch it
 fail, then fix until `pnpm run corpus` is green. We never fix the same bug twice.
 
 **You need a cross-part or Excel-quirk invariant seeded, and the only ground truth is what Excel Desktop does.**
@@ -299,7 +312,7 @@ a case carrying `provenance: {source: 'excel-desktop-verification', ref: '<sidec
 harness is a probe, not a test: it needs Windows+Excel+`pwsh`, self-guards to a loud refusal
 without them, and **never** runs in CI (`pnpm run corpus` must not depend on Excel).
 
-If the invariant is *geometry*, such as whether an over-limit `ht`/`width` is clamped, quantized
+If the invariant is _geometry_, such as whether an over-limit `ht`/`width` is clamped, quantized
 or honoured, use the sibling probe instead, which takes a workbook you already wrote rather than a
 probe spec:
 `pwsh -NoProfile -File tools/excel-oracle/read-geometry.ps1 -Path <file.xlsx> [-Rows n] [-Cols n] [-NoResave]`.
@@ -308,11 +321,11 @@ It reports per-row `RowHeight`, per-column `ColumnWidth` and the sheet's `Standa
 writes. Reading a value back is the only thing that separates a clamp from a passthrough. See
 `docs/knowledge/specs/grid-geometry-limits-are-excels-not-the-schemas.md` for what it found.
 
-Both probes answer *state-observable* questions on *one Excel build* only. See
+Both probes answer _state-observable_ questions on _one Excel build_ only. See
 [ADR 0013](./decisions/0013-excel-desktop-as-automatable-tier3-oracle.md)
 for what is and isn't scriptable and the five standing pitfalls.
 
-**Someone reports a workbook *looks* wrong in Excel: text missing, colours not the ones authored.**
+**Someone reports a workbook _looks_ wrong in Excel: text missing, colours not the ones authored.**
 Neither probe above can answer this, because both are state-observable and painting is not state.
 Run the control before you touch the writer. Re-save the file through Excel itself
 (`pwsh -NoProfile -File tools/excel-oracle/observe.ps1 -Path <wb.xlsx>`) and have the reporter try
@@ -327,6 +340,7 @@ rendered pixels beats describing a screenshot.
 
 **You are unsure how an OOXML element / attribute / enum / child-ordering should look.**
 Do not guess. The format is full of surprises. In order:
+
 1. Ask the vendored **`ooxml-lookup`** skill. It holds the ECMA-376 graph as a local
    SQLite database and answers the four-hop question (element → type → base type →
    attribute group → facets) in one call, which is the join you would otherwise do by
@@ -346,19 +360,20 @@ Do not guess. The format is full of surprises. In order:
    **read-only reference**, not a validator; see the note below. Read
    `.claude/skills/ooxml-lookup/SKILL.md` for the rest, including direct SQL when the
    subcommands do not fit.
+
 2. Query the **microsoft-learn MCP** (`microsoft_docs_search` / `microsoft_docs_fetch`)
-   for Excel's *real-world deviations* from the standard, which is the prose the schema can't
+   for Excel's _real-world deviations_ from the standard, which is the prose the schema can't
    encode. This is enabled for the project (ADR-0007); if a run says the server isn't
    available, enable `microsoft-learn` for the project.
 3. Check `docs/knowledge/specs/` for a note we already wrote on the same corner.
 
 **You changed the build/emit path (`tsconfig.build.json`, import specifiers, a runtime reference type-stripping tolerates).**
-The dev/test loop runs *stripped* `src/` `.ts`; consumers run *`tsc`-emitted* `dist/` JS, and those two artifacts can diverge. `pnpm run build && pnpm run corpus:dist` runs the full behavioral corpus against the emitted JS (`CORPUS_TARGET=dist`), not just the `smoke:dist` round-trip. CI's `build` workflow does this on every PR; run it locally when you touch anything emit-shaped.
+The dev/test loop runs _stripped_ `src/` `.ts`; consumers run _`tsc`-emitted_ `dist/` JS, and those two artifacts can diverge. `pnpm run build && pnpm run corpus:dist` runs the full behavioral corpus against the emitted JS (`CORPUS_TARGET=dist`), not just the `smoke:dist` round-trip. CI's `build` workflow does this on every PR; run it locally when you touch anything emit-shaped.
 
 **You added, removed or moved a public export.**
 Symbols live in exactly one entry barrel under `src/entries/`, and `src/index.ts` is `export *`
 over seven of the eight, so adding a name in two places does not conflict, it makes the name
-*vanish* from the root specifier with no error anywhere. `node scripts/check-entries.ts` (already
+_vanish_ from the root specifier with no error anywhere. `node scripts/check-entries.ts` (already
 in `verify --full`) is what catches that, along with an entry `package.json` forgot to publish.
 Then run `pnpm run docs`. The reference is generated from the root barrel, so a symbol missing
 from the diff is a symbol that fell out of the union. Error classes go in `src/entries/errors.ts`
@@ -412,10 +427,10 @@ applies to a binary part: a `RecordReader` is constructed per record, so anythin
 paid once for every record in the part, including the ~700 BIFF12 types this library does not model.
 
 **You are extending a shared enumeration, facet table, or record-type list.**
-The `AssertNever` proof beside the table covers omission from *the table*. It says nothing about a
+The `AssertNever` proof beside the table covers omission from _the table_. It says nothing about a
 consumer that re-enumerates the same set beside it, and that is how these have actually drifted:
 `grep` the new member's siblings across `src/` before you trust the build. A table whose members a
-binary codec *indexes* is the sharp case, because the index list is a second enumeration by
+binary codec _indexes_ is the sharp case, because the index list is a second enumeration by
 construction; see "A table is only a single source of truth if the other copy is derived from it"
 in `docs/architecture.md` for the three shapes this takes and what each one is owed.
 
@@ -441,8 +456,8 @@ validate several files in one call.
 Exit codes: `0` = every input clean, `1` = validation/package errors found, `2` = the tool
 could not run. Every input appears in the report with an explicit `valid` flag, so a
 missing entry is a broken contract rather than a clean file. Known, tracked errors are
-baselined in `test/ooxml-validation/allowed-errors.json`; a *new* error fails the gate and
-a *stale* baseline fails it too, so keep that file honest when you fix or introduce a
+baselined in `test/ooxml-validation/allowed-errors.json`; a _new_ error fails the gate and
+a _stale_ baseline fails it too, so keep that file honest when you fix or introduce a
 diagnostic.
 
 If the oracle cannot be obtained (offline, say), do **not** reach for a second validator.
@@ -453,10 +468,10 @@ subtly permissive. Instead: rely on `pnpm run corpus` (well-formedness plus stru
 locally, query `ooxml-lookup` and the Learn MCP to reason about correctness, and let CI's
 `ooxml-validation` workflow run the authoritative oracle on your PR.
 
-When the oracle *has* run and you have a diagnostic, `ooxml-lookup` answers the question
+When the oracle _has_ run and you have a diagnostic, `ooxml-lookup` answers the question
 that follows it. Hand `explain` the diagnostic as JSON, meaning the `id`, `description`,
 `xpath` and `partUri` an `ooxml-validate` report already gives you, and it returns what
-*would* have been legal at that position:
+_would_ have been legal at that position:
 
 ```bash
 node .claude/skills/ooxml-lookup/scripts/ooxml.mjs explain \

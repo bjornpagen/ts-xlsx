@@ -1,10 +1,10 @@
 # ADR 0016: The VBA project is readable through a typed view; authoring stays deferred
 
 **Status:** Accepted (2026-07-22) · VBA read slice (Phase 1) · **Amended 2026-07-23 by ADR 0017 §2.3d.**
-Decisions 2 and 5 below (preservation is the *sole* emission authority; authoring is out of scope) no
+Decisions 2 and 5 below (preservation is the _sole_ emission authority; authoring is out of scope) no
 longer hold. `Workbook.setVbaProject({modules})` now synthesizes a `vbaProject.bin` from module source,
 making the workbook an emission authority for authored macros. The read view (decisions 1, 3, 4) is
-unchanged, and preservation remains the emission authority for a project that was *read* and not
+unchanged, and preservation remains the emission authority for a project that was _read_ and not
 re-authored. See ADR 0017 for the authoring design and its real-Excel verification.
 
 ## Context
@@ -26,7 +26,7 @@ evidence: a dependency-free CFB plus MS-OVBA plus `dir`/`PROJECT` parser that de
 
 ## Decision
 
-1. **The VBA project is exposed as a read-only, typed *view*, not a new source of truth.**
+1. **The VBA project is exposed as a read-only, typed _view_, not a new source of truth.**
    `Workbook.vbaProject: VbaProject | undefined` parses the already-preserved
    `vbaProject.bin` **lazily** and memoises it; `VbaProject` carries the project code page
    and `readonly VbaModule[]` (`name`, `streamName`, `kind`, decompressed `source`).
@@ -34,7 +34,7 @@ evidence: a dependency-free CFB plus MS-OVBA plus `dir`/`PROJECT` parser that de
 
 2. **Preservation stays the sole emission authority.** There is **no** write path from
    `VbaProject` back to bytes. Editing a workbook re-emits the original blob unchanged, so
-   VBA *read* cannot regress macro preservation. It is strictly additive and cannot desync
+   VBA _read_ cannot regress macro preservation. It is strictly additive and cannot desync
    the two representations, because only one of them is ever serialised. This mirrors the
    worksheet invariant at `src/core/worksheet.ts` (`#preservedReferences` "stays its sole
    emission authority; this collection is never emitted").
@@ -59,21 +59,21 @@ evidence: a dependency-free CFB plus MS-OVBA plus `dir`/`PROJECT` parser that de
 
 ## Consequences
 
-- **Positive:** the spec's "expose the bytes?" open question is closed *with evidence*.
+- **Positive:** the spec's "expose the bytes?" open question is closed _with evidence_.
   `workbook.vbaProject?.modules[*].source` reads macro source through a precisely-typed
   API, with zero new dependencies and no risk to the preservation guarantee.
 - **Corrected on the way in, with a real bug found and fixed.** The plan had leaned toward an
   `isSigned` accessor on the assumption that a signed `.xlsm` lost its `vbaProjectSignature`
   part on round-trip. A reproduction disproved that: the signature is a sibling part reached
   from `xl/_rels/vbaProject.bin.rels`, so the closure walk already carries it. But the
-  reproduction surfaced a *different* real bug. The content-types writer collapsed all
+  reproduction surfaced a _different_ real bug. The content-types writer collapsed all
   same-extension binary preserved parts to one `<Default>`, mis-typing a
   `vbaProjectSignature.bin` sitting next to a `vbaProject.bin` (both `.bin`, different
   types). Fixed in `workbook-xml.ts` (per-part `<Override>` for any preserved binary part
   whose type differs from its extension default) and corpus-locked in
   `preserved-parts.test.ts`. `isSigned` remains deferred for want of a consumer, but is now
   cleanly sourceable from the preserved closure if one appears.
-- **Negative / deferred:** callers can *read* macros but not *create or edit* them. The
+- **Negative / deferred:** callers can _read_ macros but not _create or edit_ them. The
   forward map, in value-to-cost order, each gated on a forcing consumer:
   attach-an-external-blob authoring (a thin wrapper over preservation); first-class authoring
   (source to a valid `.bin`); a `customUI`/ribbon round-trip audit; and, adjacent rather than

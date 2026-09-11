@@ -12,7 +12,7 @@ interned and looked up by index rather than fully materialized per cell, the str
 date-typing path can fail to resolve a cell's number format at all, degrading date cells to raw
 serials or crashing, where the buffered read succeeds.
 
-> Spec note, not a corpus case here: the *core* streaming-date defect, a date-formatted numeric cell
+> Spec note, not a corpus case here: the _core_ streaming-date defect, a date-formatted numeric cell
 > streaming as a raw serial because styles are not applied when typing, is already locked as a
 > known-open corpus case (`streaming-read-applies-date-format`). What this note carries is the root
 > cause that case does not exercise: the cached or compact style mode. It needs a workbook exercised
@@ -33,12 +33,12 @@ an input to every cell decode.
   cache or compact form. A date cell reads as a date in every style mode, and no mode crashes or
   silently downgrades a date to a raw serial.
 - **Parity is the invariant.** For the same workbook, streaming and buffered reads agree on both the
-  *type* (date) and the *value* of every date-formatted cell.
+  _type_ (date) and the _value_ of every date-formatted cell.
 
 ## Open questions
 
-- Does the compact or cache style mode intern the number-format *code*, which is recoverable, or only a
-  resolved style *object*, which may omit the numFmt needed for date detection? The fix differs
+- Does the compact or cache style mode intern the number-format _code_, which is recoverable, or only a
+  resolved style _object_, which may omit the numFmt needed for date detection? The fix differs
   accordingly.
 
 Related: `streaming-read-applies-date-format` (the default-style face of the same defect),

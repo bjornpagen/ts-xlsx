@@ -41,24 +41,24 @@ unwritten cell in the block silently stays unstyled.
   with the same live-view contract. There is no `setRangeStyle` helper beside it, one surface rather
   than two, and having a real type is what leaves room for range-scoped values and formulas later.
 - ~~Merge-against-replace default~~ **Answered: the same semantics `Cell` already has**, which turned
-  out to settle the question rather than trade it off. `cell.style = {...}` *already* composes facet by
+  out to settle the question rather than trade it off. `cell.style = {...}` _already_ composes facet by
   facet, laying on each facet named and leaving the rest, while `cell.fill = x` replaces that facet.
   `Range` mirrors both exactly, so there is no second convention to learn and no mode flag. Wholesale
   replace is `clearStyle()` then assign.
 - ~~Empty-cell materialization~~ **Answered: eager, and the cost cliff is closed off at the door.**
   A styled-but-valueless cell is the only way an empty cell renders with a fill, so the holes have to
-  be filled. The 10,000-row worry is answered by *refusing* the shape that causes it: `getRange` takes
+  be filled. The 10,000-row worry is answered by _refusing_ the shape that causes it: `getRange` takes
   only a bounded rectangle, and `A:A` and `1:1` throw, pointing at `getColumn` and `getRow`, which say
   the same thing in one `<col style>` or `<row s>` attribute. `Range.cellCount` is the exact number of
   cells a write will create, before it creates them.
 - ~~Interaction with column and row-level styles and merged ranges~~ **Answered.** The column and row
-  layer is where whole-axis defaults belong and is now the *only* way to state one, so the two cannot
+  layer is where whole-axis defaults belong and is now the _only_ way to state one, so the two cannot
   compete. A block overlapping a merge resolves each address through `getCell`, which lands on the
   region's master, so the master is restyled and no covered position gains a cell whose style the
   serializer would then have to drop.
 - ~~Address-iteration primitive~~ **Answered: yes, typed and public.** `Range.addresses()` is a
   generator, so walking a block materializes nothing and can be abandoned part-way. The eager cost
-  this note flagged is a property of *styling*, not of iterating. The facet setters do not go through
+  this note flagged is a property of _styling_, not of iterating. The facet setters do not go through
   it as sugar; they materialize directly.
 
 Related: `shared-styles-deduplicated-in-written-package`, `per-cell-fill-isolation`,

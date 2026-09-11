@@ -26,7 +26,7 @@ timeout before any byte is sent.
   time-to-first-byte and a steady flow, not a single flush after the entire package is assembled.
 - Incremental delivery must not depend on the caller inserting manual event-loop yields; correct
   documented usage, awaiting each row commit and respecting the drain signal, is sufficient. This is
-  the delivery-latency face of the same writer-to-sink contract whose *memory* face is
+  the delivery-latency face of the same writer-to-sink contract whose _memory_ face is
   `streaming-writer-row-commit-backpressure`.
 - Where the OOXML and zip container genuinely force some trailing structure to be written last, such
   as the zip central directory, that unavoidable tail must be small and bounded, and the bulk of each

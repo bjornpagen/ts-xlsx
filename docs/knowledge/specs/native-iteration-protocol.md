@@ -15,7 +15,7 @@ collections implement the standard JS iteration protocol so idiomatic `for...of`
 
 > Spec note, not a corpus case: this is an API-shape proposal, not a bug with a reproduction. There is
 > no failing current behavior to baseline, since the callback forms work and the gap is an ergonomic
-> layer on top of them. In a TS-first fork iteration should likely be the *primary* traversal API,
+> layer on top of them. In a TS-first fork iteration should likely be the _primary_ traversal API,
 > which is a Phase 3 design decision. It becomes corpus-covered by type-level and in-memory unit tests
 > once the iterators exist.
 
@@ -36,7 +36,7 @@ collections implement the standard JS iteration protocol so idiomatic `for...of`
 - **Sparse against dense is explicit, not an argument.** Iteration must honor the established
   "populated cells only by default" contract, but `[Symbol.iterator]` is invoked by the runtime with
   no arguments and cannot receive options during `for...of`. So the include-empty variant is a
-  *distinct* method: a default `[Symbol.iterator]` over populated entries plus an explicit
+  _distinct_ method: a default `[Symbol.iterator]` over populated entries plus an explicit
   `cells({ includeEmpty: true })` generator, not a single option-bearing iterator.
 
 - **Coordinates are preserved.** Consumers of the callback form relied on the second

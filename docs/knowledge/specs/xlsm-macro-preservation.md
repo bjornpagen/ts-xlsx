@@ -8,7 +8,7 @@ A user maintains a macro-enabled spreadsheet (.xlsm) with VBA automation, for ex
 template whose embedded macro exports to PDF. They want to open it, edit worksheet data
 programmatically, and save it back with the macros intact so it still runs when reopened in Excel.
 Today, reading and rewriting such a workbook silently strips the VBA project, yielding a plain .xlsx
-that has lost its macros. The related, explicitly out-of-scope wish is to *invoke* macros from
+that has lost its macros. The related, explicitly out-of-scope wish is to _invoke_ macros from
 Node, which needs a live Excel or automation host and is not a document-tool concern.
 
 > Spec note, not a corpus case: capturing this needs a real .xlsm fixture and a feature that does not
@@ -57,10 +57,10 @@ Node, which needs a live Excel or automation host and is not a document-tool con
   reached from `xl/_rels/vbaProject.bin.rels`, so the closure walk carries it through, and its
   distinct `.bin` content type is re-declared per-part rather than collapsed into the `vbaProject`
   default, which a single extension `<Default>` would otherwise do, locked by `preserved-parts.test.ts`.
-  Editing the *project itself* legitimately invalidates the signature; editing unrelated cells does
+  Editing the _project itself_ legitimately invalidates the signature; editing unrelated cells does
   not (see open questions). Every project-mutating surface drops the now-stale signature.
 - **Out of scope:** executing or running macros, which needs a live host (ADR 0013), and authoring or
-  editing module *source* inside the shipped library, which needs real compiled p-code and is done by
+  editing module _source_ inside the shipped library, which needs real compiled p-code and is done by
   the offline `tools/vba-compiler` instead (ADR 0019). In scope in pure TS: attaching and replacing a
   whole `.bin` via `Workbook.vbaProjectBytes`, and structural edits that don't touch p-code, removing a
   module and adding a reference (ADRs 0018/0019). The library is a document tool, not a VBA interpreter.
@@ -100,7 +100,7 @@ without parsing. Macro-enabled templates (.xltm) are the template analog.
   already preserves each part. CMS and PKCS#7 parsing, cert-chain validation, and signer identity stay
   out of scope.
 - ~~Parse macro/toolbar-referenced `customUI`, or leave it opaque?~~ **Audited and fixed:** the ribbon
-  parts (`customUI/customUI.xml`, `customUI14.xml`) hang off the *package root* `_rels/.rels`, not the
+  parts (`customUI/customUI.xml`, `customUI14.xml`) hang off the _package root_ `_rels/.rels`, not the
   workbook rels, so the workbook-closure net never reached them and the writer, which regenerates the
   root rels from the model, dropped them. Now captured as package-root preserved references and
   re-declared verbatim on write, locked by `preserved-parts.test.ts`. **A typed read view now sits on
@@ -108,9 +108,9 @@ without parsing. Macro-enabled templates (.xltm) are the template analog.
   callback names) of each part, lazily and memoised, keying dialect off the `<customUI>` namespace. It
   is strictly additive, since preservation stays the sole emission authority and the bytes still
   round-trip opaquely, and the reader just projects a view over them exactly as `Workbook.vbaProject`
-  does. Backstage, QAT, contextualTabs, commands, and ribbon *authoring* stay deferred for want of a
+  does. Backstage, QAT, contextualTabs, commands, and ribbon _authoring_ stay deferred for want of a
   consumer. Fixing this surfaced a latent wrong fact: the round-trip fixture had used the customUI14
-  *namespace* as its relationship *type*, corrected to the real
+  _namespace_ as its relationship _type_, corrected to the real
   `.../office/2007/relationships/ui/extensibility`.
 
 Related: `roundtrip-preserves-unmodeled-package-parts`; ADR 0016 (VBA read view, authoring deferred),

@@ -24,7 +24,7 @@ styling, column widths, merges, notes, images, tables, and data validations.
 
 > Spec note, not a corpus case: there is no clone or merge API yet, so there is nothing to assert
 > against. The `dst.model = {...src.model}` workaround's specific merge-loss is captured as a corpus
-> case (`worksheet-model-preserves-merged-cells`); this note records the durable *requirement* for
+> case (`worksheet-model-preserves-merged-cells`); this note records the durable _requirement_ for
 > the real operation that should replace the workaround.
 
 ## Desired behavior
@@ -55,7 +55,7 @@ styling, column widths, merges, notes, images, tables, and data validations.
   reconciled.
 - The row-by-row re-add approach misuses the add-row API, since a read-back row is not an add-row
   input, and drops all formatting. Any merge API must not rely on that pattern.
-- The underlying "large single-sheet generation is slow" complaint is a *separate* concern; merge is
+- The underlying "large single-sheet generation is slow" complaint is a _separate_ concern; merge is
   requested to parallelize, not as a performance guarantee the library must make.
 
 ## Open questions

@@ -5,7 +5,7 @@ Cluster: types
 ## Scenario
 
 A user opens or builds a workbook, removes one or more worksheets, then wants to operate on "the
-first sheet." Worksheet ids are stable identifiers that are intentionally *not* renumbered when a
+first sheet." Worksheet ids are stable identifiers that are intentionally _not_ renumbered when a
 sheet is removed, so indexing the workbook by id 1 returns nothing once the sheet that originally
 held id 1 has been deleted, even though other sheets still exist. Callers routinely conflate "id 1"
 with "the first sheet" and are surprised when the by-id lookup yields undefined after a deletion.
@@ -42,7 +42,7 @@ knowing which ids remain.
   typed shape; `undefined` is the natural fit.
 - Whether to disambiguate id-based from order-based access at the type or name level so the two cannot
   be confused at a call site.
-- Whether the active or first-*visible* sheet concept (active tab, `veryHidden` and `hidden` state)
+- Whether the active or first-_visible_ sheet concept (active tab, `veryHidden` and `hidden` state)
   should factor in, since "first worksheet" and "first visible worksheet" can differ and consumers
   often want the latter.
 

@@ -7,7 +7,7 @@ Cluster: data-validation
 A user attaches a list-type data validation and supplies the allowed options as an **inline
 comma-separated formula string**, say `formulae: ['"opt1,opt2,opt3,…"']`. The spreadsheet format
 enforces a hard limit of **255 characters** on the inline drop-down formula string for a single cell.
-When the joined string exceeds 255 characters, the written file is *structurally valid* but the
+When the joined string exceeds 255 characters, the written file is _structurally valid_ but the
 application silently refuses to show the drop-down: the cell has a validation attached, yet no visible
 list. Because nothing warns the author, the failure looks like a library bug when it is actually an
 application-format constraint.

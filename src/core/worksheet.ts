@@ -360,6 +360,7 @@ export class Worksheet {
       columns: this.#columns,
       merges: this.#merges,
       tables: this.#tables,
+      pivotTables: this.#pivotTables,
       images: this.#images.anchors,
       dataValidations: this.#dataValidations,
       conditionalFormattings: this.#conditionalFormattings,
@@ -594,7 +595,8 @@ export class Worksheet {
 
   /**
    * Add a pivot table to this (destination) sheet, summarising a source sheet's data. The source is
-   * read once, now, so the pivot is a snapshot: later edits to the source do not change it. The
+   * read once, now, so the pivot is a snapshot: later edits to the source's values do not change it,
+   * while a row or column splice of the source sheet moves its {@link PivotTable.sourceRef}. The
    * supported shape (one summed value field, at least one row and column field) is enforced here.
    *
    * @throws {AuthoringError} if the metric, fields, or source shape are unsupported.
@@ -867,8 +869,9 @@ export class Worksheet {
    * shift with the rows they cover.
    *
    * Formulas move with the rows as Excel moves them: a reference to this sheet, in any sheet's formula,
-   * a defined name, a data validation or a conditional format, follows the row it names, and one to a
-   * deleted row becomes `#REF!`. What the inserted rows carry is written against the sheet after the
+   * a defined name, a data validation, a conditional format or a table's column formulas, follows the
+   * row it names, and one to a deleted row becomes `#REF!`. An authored pivot drawing from this sheet
+   * has its source range moved the same way. What the inserted rows carry is written against the sheet after the
    * edit and is not moved.
    *
    * @throws {RangeError} if `start` is not a positive integer or `count` is negative.

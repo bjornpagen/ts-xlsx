@@ -14,7 +14,7 @@ with a position, so a developer relying on IntelliSense cannot tell from the sig
 a 0-based index, a 1-based position, or an opaque ID.
 
 > Spec note, not a corpus case: this is a developer-experience and type-surface requirement, not a
-> runtime behavior bug. The accessors work; their *names* lie. In a TS-first fork where the types are
+> runtime behavior bug. The accessors work; their _names_ lie. In a TS-first fork where the types are
 > the primary documentation, a parameter named `index` that is actually 1-based is a real defect. It
 > becomes enforceable through the public-type surface and type-level tests, not a runtime assertion.
 

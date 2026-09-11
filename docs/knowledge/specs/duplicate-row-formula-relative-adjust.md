@@ -28,7 +28,7 @@ fork already models per-cell formula text and shared formulas.
 ## Open questions
 
 - **Scope of reference updates.** Should duplicating or inserting rows also rewrite formulas
-  *elsewhere* in the sheet, and on other sheets, that reference cells at or below the insertion
+  _elsewhere_ in the sheet, and on other sheets, that reference cells at or below the insertion
   point, the way a live spreadsheet would? That is a much larger reference-maintenance feature
   than local translation of the copied cells and should probably be a separate, opt-in
   capability with its own spec.

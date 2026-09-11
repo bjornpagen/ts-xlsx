@@ -1,20 +1,20 @@
 # ADR 0001: Rewrite runtime and toolchain, run `.ts` directly, defer the bundler
 
-**Status:** Accepted (2026-07-11) · Phase 3 kickoff · *build slice resolved 2026-07-19 (see addendum)*
+**Status:** Accepted (2026-07-11) · Phase 3 kickoff · _build slice resolved 2026-07-19 (see addendum)_
 
 ## Context
 
 `STRATEGY.md` decided the rewrite stack up front: strict TypeScript, ESM-only,
 Vitest, Biome, and a `tsup`/`unbuild`-class bundler emitting ESM plus `.d.ts`. Those
 were sound defaults written before the rewrite began. On starting Phase 3 two facts
-changed the cheapest correct path for the *first* modules:
+changed the cheapest correct path for the _first_ modules:
 
 1. The dev environment runs **Node 24**, which executes `.ts` files directly via
    type-stripping, with no transpile step and no loader, and an `.mjs` can `import` a
    local `.ts` module.
 2. The corpus is what pins the product's behavior and already runs via plain `node`. The
-   rewrite only needs to be *reachable* from a corpus adapter and *type-checked*; it does
-   not need to be *bundled* to be proven correct.
+   rewrite only needs to be _reachable_ from a corpus adapter and _type-checked_; it does
+   not need to be _bundled_ to be proven correct.
 
 Standing up Vitest plus Biome plus a bundler now is real dependency and config weight for
 no correctness gain on a single pure module, and it is the highest-drift work in the
@@ -27,7 +27,7 @@ dependency-clean (`CLAUDE.md` §2).
   `rewrite.mjs` corpus adapter imports `src/**/*.ts` directly; unit tests run under
   the built-in `node --test` runner on `.ts` files. Local TS imports use explicit
   `.ts` extensions.
-- **`tsc` is the type-safety *gate*, not a build tool.** `npm run typecheck`
+- **`tsc` is the type-safety _gate_, not a build tool.** `npm run typecheck`
   (`tsc --noEmit -p tsconfig.json`) enforces the full strict flag set
   (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`,
   `noImplicitOverride`, `verbatimModuleSyntax`, …). TypeScript is pinned to 5.x.
@@ -51,7 +51,7 @@ dependency-clean (`CLAUDE.md` §2).
   publishable artifact is needed (Phase 4), or `src/` is large enough that
   Biome's lint/format and Vitest's watch/coverage pay for their config.
 
-## Addendum (2026-07-19): the deferred bundler resolved to *no bundler*
+## Addendum (2026-07-19): the deferred bundler resolved to _no bundler_
 
 Phase 4's publishable-build slice revisited the deferred "`tsup`/`unbuild`-class
 bundler" and rejected it. The emit requirement is narrow: rewrite the source's
@@ -70,16 +70,17 @@ moving to `tsconfig.build.dts.json`. This is the one thing a bundler would have 
 asked for and it did not take one.
 
 Decisions that rode along:
+
 - **`exports`/`main`/`types` point at `dist/`;** `files` ships `dist` only (no maps, no
   `src`) to keep the tarball lean (~237 KB packed). Maps are omitted deliberately,
   because maintainers debug `src/` directly, never `dist/`.
-- **`engines` split:** the *compiled artifact* is ES2022 ESM and supports Node
-  `>=18` (declared in `engines`); the *dev toolchain* still needs Node 24 for
+- **`engines` split:** the _compiled artifact_ is ES2022 ESM and supports Node
+  `>=18` (declared in `engines`); the _dev toolchain_ still needs Node 24 for
   `.ts` execution and is pinned via `.nvmrc`.
 - **`private` dropped;** publish is guarded by `prepublishOnly` (build, full test,
   `smoke:dist`, `size`). The definitive package **name** remains the one human
   decision deferred to the rebrand slice.
-- **Two new CI-enforced guards:** `smoke:dist` loads the *compiled* artifact as a
+- **Two new CI-enforced guards:** `smoke:dist` loads the _compiled_ artifact as a
   consumer would and asserts a write→read round-trip, catching emit-shaped breakage
   typecheck can't; `size` fails if the emitted runtime JS crosses a 600 KB budget
   (currently ~489 KB). Both run in a dedicated `Build` workflow.

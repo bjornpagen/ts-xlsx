@@ -23,10 +23,10 @@ are dropped, or enumeration crashes.
 - Worksheets are emitted in workbook order, each discoverable by its declared name.
 - Enumeration completes, and the stream never stalls, regardless of sheet count.
 - The workbook-level model (sheet list, relationships, shared strings) needed to resolve a
-  worksheet must be available *before* that worksheet is emitted. Parsing order must guarantee it,
+  worksheet must be available _before_ that worksheet is emitted. Parsing order must guarantee it,
   so a worksheet handler never dereferences an unpopulated model.
 - **Foreign-generated workbooks keep their sheet names.** A file emitted by a non-Excel producer,
-  openpyxl in the report, was streamed with its worksheet *names* lost: the sheets
+  openpyxl in the report, was streamed with its worksheet _names_ lost: the sheets
   emitted, but each `name` came back empty or wrong because the streaming reader bound names by an
   Excel-specific assumption the foreign `workbook.xml` did not satisfy. Names must be resolved from
   the workbook part's declared sheet list, via the relationship graph, so a streamed worksheet

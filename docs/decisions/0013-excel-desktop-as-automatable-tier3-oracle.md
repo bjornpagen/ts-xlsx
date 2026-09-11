@@ -4,8 +4,8 @@
 
 ## Context
 
-[ADR 0012](./0012-three-tiers-of-correctness-evidence.md) named Tier 3, *what Excel
-Desktop actually does with a file*, as the only ground truth for cross-part invariants
+[ADR 0012](./0012-three-tiers-of-correctness-evidence.md) named Tier 3, _what Excel
+Desktop actually does with a file_, as the only ground truth for cross-part invariants
 the spec omits, and described it as "**not cheaply automatable; reached by hand and
 captured as provenance.**" That framing made every Tier-3 seed a manual, folkloric step:
 open the file, squint at the cells, remember what you saw. The open shared-formula `ref`
@@ -36,8 +36,8 @@ never replaces the Tier-2 seam fact that locks a behavior.**
   corpus-internal machinery.
 - `observe.ps1` is the COM driver. It owns **every** safety guardrail (below) and emits one
   JSON observation blob: `{version, build, openThrew, repaired, cells:[{address, hasFormula,
-  formula, value}], resaved…}`.
-- `read-geometry.ps1` is a sibling COM driver answering the *geometry* question instead of the
+formula, value}], resaved…}`.
+- `read-geometry.ps1` is a sibling COM driver answering the _geometry_ question instead of the
   cell one: per-row `RowHeight`, per-column `ColumnWidth`, the sheet's `StandardHeight`/
   `StandardWidth`, and the same optional re-save. It takes an existing workbook path rather than a
   probe spec, since the fixtures worth asking this of are ones a writer already produced, so it is
@@ -61,9 +61,9 @@ observation JSON out.
 the canonical geometry Excel re-saves, per-cell value/formula readback, whether `Open`
 threw, and whether the workbook name carries `[Repaired]`.
 
-**Not scriptable (interactive-only):** the modal *repair dialog experience* itself.
+**Not scriptable (interactive-only):** the modal _repair dialog experience_ itself.
 `DisplayAlerts=$false` **suppresses** that modal, which is what keeps the agent from
-deadlocking, so the harness can *detect that a repair happened* (Open throws, the name
+deadlocking, so the harness can _detect that a repair happened_ (Open throws, the name
 carries `[Repaired]`, re-saved content diverges) but cannot reproduce what a human clicking
 through the dialog would see. **Automation-open is not interactive-open.** Every observation
 records which class it is (`openClass` field).
@@ -71,9 +71,9 @@ records which class it is (`openClass` field).
 ### The seed-once / lock-in-CI split is unchanged (ADR 0012)
 
 Excel is **Windows/machine-bound and never runs in CI.** A harness observation is captured
-**once** as recorded provenance that *seeds* a case; a **Tier-2 seam fact is what locks it**
+**once** as recorded provenance that _seeds_ a case; a **Tier-2 seam fact is what locks it**
 and runs in CI. `node test/corpus/run.ts` must never depend on Excel being installed. The
-harness lowers the *cost* of a Tier-3 seed; it does not move Tier 3 into the CI gate.
+harness lowers the _cost_ of a Tier-3 seed; it does not move Tier 3 into the CI gate.
 
 ### The five standing pitfalls (the contract for using the harness)
 
@@ -89,7 +89,7 @@ harness lowers the *cost* of a Tier-3 seed; it does not move Tier 3 into the CI 
 4. **Provenance is the deliverable.** The point of a run is a durable, auditable sidecar
    (`test/corpus/fixtures/excel-oracle/<invariant>.json`), not console output. It carries
    `{excel:{version,build}, capturedAt, probeSpecRef, cells, resave, verdict}`.
-5. **Don't over-claim.** The harness answers *state-observable* questions on *this build*.
+5. **Don't over-claim.** The harness answers _state-observable_ questions on _this build_.
    It is not a conformance oracle (that is Tier 2, ADR 0002) and it is not proof of what
    every consumer does (LibreOffice materializes shared-`ref` interiors where Excel does not).
 
@@ -113,7 +113,7 @@ the empty interior cells, and **re-saved a byte-structurally identical group** (
 `ref="B1:D5"`, same `si="0"`, the same two clones). ts-xlsx's output is already Excel's own
 canonical form, so the ADR 0012 candidate fixes (split into contiguous runs, or degrade clones
 to standalone `<f>`) would make ts-xlsx **diverge** from Excel and are wrong for this geometry.
-This is now *locked* by the Tier-2 seam fact
+This is now _locked_ by the Tier-2 seam fact
 `shared-formula-sparse-ref-matches-excel-canonical.case.ts`, which asserts our emitted geometry
 (one master, `ref="B1:D5"`, exactly the two authored clones as slaves) matches Excel's canonical
 re-save and runs in CI without re-opening Excel. ADR 0012's hazard is closed.
@@ -126,9 +126,9 @@ re-save and runs in CI without re-opening Excel. ADR 0012's hazard is closed.
 - **Positive:** the capability is discoverable. A playbook dispatch row points to it and
   this ADR states its limits, so a fresh agent finds both the tool and its boundary.
 - **Neutral / unchanged:** Tier 3 is still irreducible and still never in CI. The harness
-  makes the *seed* cheap; the **seam fact is still what keeps a behavior locked**. On a
+  makes the _seed_ cheap; the **seam fact is still what keeps a behavior locked**. On a
   non-Windows or non-Excel host the harness self-guards to a clear refusal, so the seed simply
   cannot be taken there, which is honest, not a regression.
 - **Negative:** a second machine dependency (Windows plus Excel plus `pwsh`) now exists for
-  *seeding*. It is quarantined to `tools/` and gated only by typecheck and lint, never by the
+  _seeding_. It is quarantined to `tools/` and gated only by typecheck and lint, never by the
   corpus or a CI job, so it cannot make the corpus depend on Excel.

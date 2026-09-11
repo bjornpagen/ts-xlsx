@@ -20,8 +20,8 @@ hand them to the buffer-loading API, which is the environment-neutral entry poin
 
 - The path-based read entry point is understood as inherently **Node-only**, since it needs filesystem
   access. Invoked without that capability it fails fast with a **clear, actionable** error that
-  names the constraint and points at the fix, such as *"reading from a filesystem path requires a
-  Node.js environment; in the browser, load the file's bytes with the buffer-loading API instead"*,
+  names the constraint and points at the fix, such as _"reading from a filesystem path requires a
+  Node.js environment; in the browser, load the file's bytes with the buffer-loading API instead"_,
   never an internal undefined-property dereference.
 - The **buffer and array-buffer loading path is the documented, primary way to open a file** so users
   do not default to the path reader. Correct use is the easy path. An analogous buffer loader

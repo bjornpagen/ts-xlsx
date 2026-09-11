@@ -13,7 +13,7 @@ bundled third-party zip libraries. Replacing the rotting zip toolchain is one of
 motivations.
 
 > Spec note, not a corpus case: `roundtripWorkbook` and `readFixtureReport` already exercise the
-> container end-to-end, so the *behavior* is locked regardless of implementation. The durable value
+> container end-to-end, so the _behavior_ is locked regardless of implementation. The durable value
 > is the container strategy and its hard-input safety limits.
 
 ## Desired behavior

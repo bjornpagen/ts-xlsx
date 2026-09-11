@@ -5,7 +5,7 @@ Cluster: styles
 ## Scenario
 
 A workbook's default (normal-style) font is not Calibri 11, say Calibri 72, or a different
-face entirely. Column widths in the spreadsheet format are expressed in *character units* of the
+face entirely. Column widths in the spreadsheet format are expressed in _character units_ of the
 **Maximum Digit Width** of the workbook's default font, so the pixel width of a column depends on
 what that default font actually is. A library that hardcodes an assumed Calibri-11 metric when
 reading or writing column widths miscomputes them for any workbook whose real default font
@@ -45,10 +45,11 @@ visibly breaks its layout.
   interpret it when a caller asks for pixels? Round-tripping the raw value avoids the metric problem
   for the common open-modify-save path; true pixel-accurate layout needs the metrics.
 
-  Widths stay opaque for now. Fixing the default font changed what the units *mean* without changing
+  Widths stay opaque for now. Fixing the default font changed what the units _mean_ without changing
   the units, and read-write stays faithful as long as we neither reinterpret nor recompute them,
   so nothing about that fix forces the metric question. It is only forced by a caller who wants
   pixels, or by `autoFit`.
+
 - **Still open, and downstream of the above:** what is the fallback when a declared default font is
   unknown to our metric table? Assume a documented default while preserving the declared font name
   for re-emission? Moot until there is a metric table.

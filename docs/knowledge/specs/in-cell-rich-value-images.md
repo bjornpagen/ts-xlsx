@@ -4,7 +4,7 @@ Cluster: images
 
 ## Scenario
 
-Excel's "Place in Cell" feature stores an image *inside a cell value* rather than as a
+Excel's "Place in Cell" feature stores an image _inside a cell value_ rather than as a
 floating drawing anchored over the grid. This uses the rich-value mechanism: the cell carries a
 value-metadata (`vm`) index that points through the workbook metadata part to a rich-value record,
 which references the image via a rich-value relationship to a media part. The legacy `#VALUE!`

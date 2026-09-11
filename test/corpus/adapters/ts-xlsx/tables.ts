@@ -722,7 +722,78 @@ export const tables = {
       dataFields: indicesIn('dataFields', 'dataField', 'fld'),
     };
   },
+
+  // Read a fixture and make each edit in turn, writing the workbook after each → one entry per edit,
+  // each a map of `<column name> calculated` or `<column name> totals` → that formula's text as the
+  // written table parts store it. An edit names its sheet; see `SpliceEdit`.
+  tableFormulasThroughSplices(rel: string, edits: readonly SpliceEdit[]) {
+    const workbook = readFixture(rel);
+    return edits.map((edit) => {
+      applySplice(workbook.requireWorksheet(edit.sheet), edit);
+      const parts = partMapOf(writeXlsx(workbook));
+      const entries = Object.keys(parts)
+        .filter((name) => /^xl\/tables\/table\d+\.xml$/.test(name))
+        .flatMap((name) =>
+          [
+            ...(parts[name] ?? '').matchAll(
+              /<tableColumn\b[^>]*\bname="([^"]*)"[^>]*>(?:<calculatedColumnFormula>([^<]*)<\/calculatedColumnFormula>)?(?:<totalsRowFormula>([^<]*)<\/totalsRowFormula>)?/g,
+            ),
+          ].flatMap(([, column = '', calculated, totals]) => [
+            ...(calculated === undefined ? [] : [[`${column} calculated`, decodeText(calculated)]]),
+            ...(totals === undefined ? [] : [[`${column} totals`, decodeText(totals)]]),
+          ]),
+        );
+      return Object.fromEntries(entries);
+    });
+  },
+
+  // Author pivot P on S4 of a fresh workbook over S3!A1:B5 (headers x and y, four data rows), make one
+  // edit of S3, and report the source the written cache definition carries → { ref, sheet } from its
+  // `<worksheetSource>`, null where absent.
+  authoredPivotSourceAfterSplice(edit: Omit<SpliceEdit, 'sheet'>) {
+    const workbook = new Workbook();
+    for (const name of ['S1', 'S2', 'S3', 'S4']) workbook.addWorksheet(name);
+    const source = workbook.requireWorksheet('S3');
+    source.addRow(['x', 'y']);
+    for (let row = 2; row <= 5; row++) source.addRow([`k${row}`, row]);
+    workbook
+      .requireWorksheet('S4')
+      .addPivotTable({source, rows: ['x'], columns: ['y'], values: ['y']});
+    applySplice(source, edit);
+    const cache = partMapOf(writeXlsx(workbook))['xl/pivotCache/pivotCacheDefinition1.xml'] ?? '';
+    const tag = /<worksheetSource\b[^>]*>/.exec(cache)?.[0] ?? '';
+    return {
+      ref: /\bref="([^"]*)"/.exec(tag)?.[1] ?? null,
+      sheet: /\bsheet="([^"]*)"/.exec(tag)?.[1] ?? null,
+    };
+  },
 };
+
+/** One row or column edit of a sheet: `count` lines inserted or deleted at `start`. */
+export interface SpliceEdit {
+  readonly sheet: string;
+  readonly op: 'insert' | 'delete';
+  readonly axis: 'row' | 'column';
+  readonly start: number;
+  readonly count: number;
+}
+
+function applySplice(sheet: WorksheetInstance, edit: Omit<SpliceEdit, 'sheet'>): void {
+  const inserted = edit.op === 'insert' ? Array.from({length: edit.count}, () => []) : [];
+  const removed = edit.op === 'delete' ? edit.count : 0;
+  if (edit.axis === 'row') sheet.spliceRows(edit.start, removed, ...inserted);
+  else sheet.spliceColumns(edit.start, removed, ...inserted);
+}
+
+// Text content as a part stores it, decoded: the writer escapes `&`, `<` and `>` in element text.
+function decodeText(text: string): string {
+  return text
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&amp;', '&');
+}
 
 // A table's range, or the message reading it threw. An anchor moved past the last column makes
 // `range`, `autoFilterRef` and `region` all throw, so a case has to be able to see that as a value.

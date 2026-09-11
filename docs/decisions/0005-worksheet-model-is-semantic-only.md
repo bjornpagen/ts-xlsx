@@ -12,19 +12,19 @@ setter ignored).
 
 That promise was false. The getter carried the sheet's value and overlay content
 (cells, styles, column/row/page metadata, merges, data validations, conditional
-formattings, tables, protection) but silently omitted every *attached part*: anchored
+formattings, tables, protection) but silently omitted every _attached part_: anchored
 and background images, the autofilter, authored pivots, loaded pivots, and the
 byte-preserved references (charts, vector drawings, slicers) captured for
 round-tripping. A `dst.model = src.model` on a loaded sheet quietly dropped all of them.
 
-The parked question was whether to make the model *faithful* by carrying those parts,
+The parked question was whether to make the model _faithful_ by carrying those parts,
 concretely whether to put opaque preserved-part **byte closures** (and loaded-pivot
 records) onto the public model so the "drops nothing" claim became true.
 
 ## Decision
 
 1. **`WorksheetModel` remains a semantic, serialisable value type.** It carries pure
-   sheet state; it does not carry attached parts that hold *workbook-level identity*.
+   sheet state; it does not carry attached parts that hold _workbook-level identity_.
    Those parts cannot be made correct inside a value snapshot: image bytes live on the
    `Workbook`, a pivot's source references a live `Worksheet` instance, and preserved
    parts are opaque package bytes with their own relationship graph. None of that
@@ -42,12 +42,12 @@ records) onto the public model so the "drops nothing" claim became true.
 3. **The docs are made honest.** The `WorksheetModel` and `model`-getter comments now
    scope the "drops nothing" claim to value plus overlay content and name the boundary
    explicitly: attached parts carrying workbook-level identity stay with their source
-   sheet, and a model assignment *neither copies nor clears* them. The silent trap
+   sheet, and a model assignment _neither copies nor clears_ them. The silent trap
    becomes a documented boundary.
 
 4. **A faithful whole-sheet/package copy primitive is deferred pending a consumer.**
    Transferring attached parts (a chart, a pivot, an image) between sheets would be a
-   *new* public API, not a change to `model`. Nothing in the codebase needs it yet, and
+   _new_ public API, not a change to `model`. Nothing in the codebase needs it yet, and
    building it now would be speculative abstraction (CLAUDE.md §4). It waits for a real
    use-case to force its shape.
 
@@ -78,14 +78,14 @@ and an anchor cell, workbook-independent, in the category the model already carr
 rides the registry, and `worksheet-model-preserves-frozen-pane` locks it through to the written
 `<pane>`.
 
-The recurrence is the lesson. §2 fixed one gap by name and left the *test* implicit, so the next
+The recurrence is the lesson. §2 fixed one gap by name and left the _test_ implicit, so the next
 field in the same position went unnoticed until someone looked. The test is now written into the
 `WorksheetModel` doc comment as the thing a new field is measured against: **a field belongs in
 the model when its value means the same thing on any sheet of any workbook.**
 
 Applying that test also settles `commentThreads`, which had been in neither list. A threaded
 comment names its author by an id into the workbook's `persons` registry (`Workbook.persons`,
-emitted as `xl/persons/person.xml` from the *workbook*, not the sheet), so a copied conversation
+emitted as `xl/persons/person.xml` from the _workbook_, not the sheet), so a copied conversation
 would name an author the destination workbook has never heard of. It fails the test and is now
 named explicitly on the out-of-scope side rather than being absent from both.
 

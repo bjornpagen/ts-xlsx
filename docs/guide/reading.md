@@ -83,7 +83,7 @@ console.log(cellValueToText(sheet.getCell('A2').value)); // '2469'
 console.log(sheet.getCell('B9').value); // null
 ```
 
-Note what `cellValueToText` gives you for a formula: the cached *result*, not the formula
+Note what `cellValueToText` gives you for a formula: the cached _result_, not the formula
 source, because the source is not text the sheet ever displayed. And note what it does not
 do. It is the value's text, with no number format applied, because the format lives on the
 style and this function is handed only the value. A currency cell has no currency sign here.
@@ -94,7 +94,7 @@ This library models number formats; it does not implement a formatting engine, a
 
 A real workbook contains parts this library does not model: a pivot cache, a slicer, a
 chart, a linked-workbook reference. It reads those bytes, keeps them, and writes them back
-untouched, so a load and save does not quietly delete them. They surface as *preserved*
+untouched, so a load and save does not quietly delete them. They surface as _preserved_
 references, and each one carries the package parts it reaches.
 
 ```ts

@@ -30,6 +30,7 @@ preset. Scripts: `lint` (`biome check`), `lint:fix`, `format`. `lint` is now the
 first gate in `npm test`.
 
 Two deliberate config choices:
+
 - **`noNonNullAssertion` is disabled for test files only** (an `overrides` block
   matching `**/*.test.ts` and `test/**/*.mjs`). In a test a non-null assertion is
   the honest idiom, because the fixture is known, so `getCell('A1')!.value` beats
@@ -37,7 +38,7 @@ Two deliberate config choices:
   the rule (CLAUDE.md §2 prefers narrowing over "trust me" escapes); the one `src`
   site was fixed by using `String.prototype.charAt` (typed `string`, no assertion).
 - **The unsafe autofixes were applied, then verified against the corpus.** Biome
-  classes `useOptionalChain` and `useTemplate` as unsafe, because they *can* change
+  classes `useOptionalChain` and `useTemplate` as unsafe, because they _can_ change
   semantics. We applied them and leaned on the full gate (typecheck, 647 unit
   tests, 671 corpus behaviors) to prove behavior was preserved. One unsafe fix was
   reverted by hand: `noSparseArray` rewrote the intentional sparse literals
@@ -57,6 +58,7 @@ Two deliberate config choices:
 The `STRATEGY.md` default was Vitest. We reject it. The 647 tests already run green
 under Node's built-in runner on `.ts` sources with zero build step, and everything
 Vitest would buy us we already have without its dependency tree:
+
 - **Coverage** comes from `node --test --experimental-test-coverage`. (Superseded 2026-08-25 by
   [0035](./0035-coverage-is-the-union-of-both-suites.md): that command measures only the unit
   suite, so it reported confident wrong numbers for everything the corpus covers. `test:coverage`

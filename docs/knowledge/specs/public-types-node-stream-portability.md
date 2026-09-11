@@ -15,7 +15,7 @@ These errors appear even when the consumer never touches the stream-based APIs, 
 
 ## Prior art / observed workarounds
 
-- Adding `"types": ["node"]`, and installing `@types/node`, to the *app-level* tsconfig such as `tsconfig.app.json` rather than the root `tsconfig.json`, resolves it. But this is a consumer-side band-aid and unintuitive to discover.
+- Adding `"types": ["node"]`, and installing `@types/node`, to the _app-level_ tsconfig such as `tsconfig.app.json` rather than the root `tsconfig.json`, resolves it. But this is a consumer-side band-aid and unintuitive to discover.
 - Some users avoided the stream-typed methods entirely.
 
 ## Desired behavior for ts-xlsx

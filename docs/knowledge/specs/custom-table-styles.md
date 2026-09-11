@@ -19,7 +19,7 @@ The claim spans three parts: the **table part** names a style, the **styles part
 the whole says nothing to Excel and the table renders completely unstyled, a file that opens clean
 and looks wrong, which no schema check and no round-trip of our own can catch.
 
-So it was put to Excel directly, reading `DisplayFormat` (the *effective* format: direct formatting
+So it was put to Excel directly, reading `DisplayFormat` (the _effective_ format: direct formatting
 plus table style plus conditional formatting) on a table whose cells carry no formatting of their own:
 
 - the authored style appears in the workbook's own table-style gallery;
@@ -29,7 +29,7 @@ plus table style plus conditional formatting) on a table whose cells carry no fo
 - the file opens with no repair.
 
 Recorded in `test/corpus/fixtures/excel-oracle/authored-table-style-renders.json` (Excel 16.0 build
-20131). That observation *seeds*; the corpus case locks it with the structural half, every element's
+20131). That observation _seeds_; the corpus case locks it with the structural half, every element's
 `dxfId` resolved through the emitted dxf table and the table's name resolved against the emitted
 definitions (ADR 0012's seed-plus-lock split).
 
@@ -46,7 +46,7 @@ Both produce a file Excel opens without complaint and then quietly does nothing 
 class that never gets found. The same reasoning the ARGB normaliser uses: reject at the boundary
 where the caller can still see the cause.
 
-## What is deliberately *not* refused
+## What is deliberately _not_ refused
 
 **`TableStyleInfo.name` is not validated.** A table may name a style nothing defines, and this
 library will write it.
@@ -62,7 +62,7 @@ that should use it.**
 ## Also not modelled
 
 `defaultTableStyle` and `defaultPivotStyle` on the `<tableStyles>` container are **preserve-only**. They
-tell Excel which style to pre-select for a table the *user* inserts later; every table this library
+tell Excel which style to pre-select for a table the _user_ inserts later; every table this library
 writes states its own `tableStyleInfo`, so nominating a default would change nothing about the file's
 appearance. Preserved faithfully, not authorable.
 

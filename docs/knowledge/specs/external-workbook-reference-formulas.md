@@ -18,7 +18,7 @@ requires.
 
 ## Desired behavior
 
-The library should author, and round-trip, formulas that reference cells or ranges in *other* workbook
+The library should author, and round-trip, formulas that reference cells or ranges in _other_ workbook
 files, such that Excel resolves them on open. In `.xlsx` an external reference is **not** the literal
 `[filename.xlsx]Sheet1!A1` text inside `<f>`. It requires dedicated parts:
 
@@ -35,7 +35,7 @@ files, such that Excel resolves them on open. In `.xlsx` an external reference i
 
 ## Already implemented: faithful round-trip preservation
 
-*Authoring* a new external reference is still unbuilt, but *preserving* one that a read file already
+_Authoring_ a new external reference is still unbuilt, but _preserving_ one that a read file already
 carries is done. An `externalLink` part is captured through the workbook-level preserved-reference net,
 the same machinery that carries pivot and slicer caches and the VBA project, so a read-then-write
 round-trip re-emits, intact:
@@ -55,7 +55,7 @@ model, and the reference is not yet surfaced as an inspectable value (see the Re
 ## Open questions
 
 - **Public API shape:** a first-class cell value kind carrying `{path, sheet, cellOrRange,
-  cachedValue}`, structured and in the spirit of a typed API, against parsing `[name]Sheet!ref` magic
+cachedValue}`, structured and in the spirit of a typed API, against parsing `[name]Sheet!ref` magic
   strings, which is fragile and collides with defined-name and table syntax. Prefer the structured
   value.
 - **Relative and absolute paths and `TargetMode="External"`:** let the user control the relationship
@@ -63,9 +63,9 @@ model, and the reference is not yet surfaced as an inspectable value (see the Re
   folder (legacy fell back to the user's Documents folder).
 - **Cached values:** write a plausible cached result so the reference displays before recalculation,
   and decide the policy when unknown.
-- **Read side:** round-tripping faithfully is **done** (see *Already implemented* above, where the link,
+- **Read side:** round-tripping faithfully is **done** (see _Already implemented_ above, where the link,
   its external target, and the `<externalReferences>` ordering all survive). Still open: parsing those
-  parts into *structured external-reference values* the caller can inspect and edit, rather than
+  parts into _structured external-reference values_ the caller can inspect and edit, rather than
   preserving them as opaque bytes.
 - **Scope:** whole external workbooks, named ranges in external workbooks, and DDE/OLE links are
   distinct sub-features; start with cell and range references to another `.xlsx` by path.

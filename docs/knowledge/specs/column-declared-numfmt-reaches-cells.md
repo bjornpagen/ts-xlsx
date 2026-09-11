@@ -16,7 +16,7 @@ path.
 
 > Spec note, not a corpus case: the corpus already locks per-cell numFmt survival
 > (`custom-numfmt-string-roundtrips-verbatim`, `date-value-written-as-serial-not-text`). This note
-> records the distinct, currently-unmet requirement that a *column-level* numFmt propagate to cells,
+> records the distinct, currently-unmet requirement that a _column-level_ numFmt propagate to cells,
 > so it can be designed and then locked once the propagation model is decided. Capturing it as a note
 > avoids pinning a fragile assertion against today's ambiguous column-style application.
 

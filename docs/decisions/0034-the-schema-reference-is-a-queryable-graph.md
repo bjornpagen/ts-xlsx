@@ -8,7 +8,7 @@ whose part 2 (Microsoft Learn MCP for the evolving prose) is unchanged.
 [ADR 0007](./0007-spec-reference-vendored-schemas-and-learn-mcp.md) got the posture right
 and the artifact wrong.
 
-The posture: the base standard is a *fixed, versioned document*, so the durable
+The posture: the base standard is a _fixed, versioned document_, so the durable
 agent-friendly form is a pinned local copy, offline, deterministic, version-locked, immune
 to service outages. That reasoning has not weakened. What has changed is the one line in
 its **Rejected** list:
@@ -23,8 +23,8 @@ account and no network. The premise that forced the choice is gone.
 Which matters, because vendoring the raw XSDs has a cost ADR 0007 counted as a benefit.
 "Greppable" is the word it used. In practice greppable is the failure mode: `rg tblPr
 schemas/` returns a matching line with no declaration around it, so the next move is `Read`
-on a file of several hundred KB, and the question an agent actually has (*what may go
-inside `x:c`, in what order, with what attributes*) is a four-hop join across element,
+on a file of several hundred KB, and the question an agent actually has (_what may go
+inside `x:c`, in what order, with what attributes_) is a four-hop join across element,
 type, base type, `attributeGroup` and `simpleType` facets, spread over several files, done
 by hand, in context, every time. It works. It is enormous, and it is silently wrong when the
 agent stops one hop early at an unresolved base type.
@@ -51,7 +51,7 @@ which this repo already requires; nothing to install, nothing to configure, and 
 at any point. Every command prints JSON on stdout.
 
 This is the **same posture ADR 0007 chose**, a pinned artifact in the tree, applied to a
-better artifact. It is *reference*, not a validator: conformance validation stays with the
+better artifact. It is _reference_, not a validator: conformance validation stays with the
 independent `OpenXmlValidator` oracle ([ADR 0002](./0002-ooxml-validation-oracle.md), as
 mechanised by [ADR 0033](./0033-the-ooxml-oracle-is-a-shared-package.md)), and the upstream
 project draws that boundary in its own README. Do not wire the graph into a second
@@ -91,12 +91,12 @@ where that is announced.
 
 **Prefixes: write them the way you already write them.** `x:c` and `c:ser` resolve, as do
 `w:`, `a:`, `p:`, `s:`, `m:`, `r:` and `v:`. Answers come back in the graph's canonical
-spelling, so `x:c` replies `sml:c`, because `x` is *also* VML's excel namespace and printing
+spelling, so `x:c` replies `sml:c`, because `x` is _also_ VML's excel namespace and printing
 both as `x:` would render two different namespaces identically. A bare name returns every
 match rather than guessing, which is often the faster way in.
 
 This needed an upstream fix. Until `ooxml-lookup` 0.0.4 the graph recorded only prefixes
-*observed* in the XSDs, and nothing binds one to SpreadsheetML's own namespace, so `x:`
+_observed_ in the XSDs, and nothing binds one to SpreadsheetML's own namespace, so `x:`
 resolved to VML and `c:` to nothing at all, which also meant `explain` could not read a
 spreadsheet diagnostic, since `ooxml-validate` writes those as `/x:worksheet[1]/…`. Vendor
 0.0.4 or later; **0.0.3 on ClawHub is broken and ships no database at all.**

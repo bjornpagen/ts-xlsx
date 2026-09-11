@@ -32,7 +32,7 @@ node scripts/ooxml.mjs element w:tblPr
 ```
 
 Returns every declaration of the name. More than one is normal and not an
-error — OOXML declares element names *locally*, inside types, so `w:tblPr` is
+error — OOXML declares element names _locally_, inside types, so `w:tblPr` is
 `CT_TblPr` inside `w:CT_Tbl` and `CT_TblPrBase` in three other places. The
 `scope.declared_in` field tells you which is which.
 
@@ -61,7 +61,7 @@ node scripts/ooxml.mjs explain '{"id":"Sch_UndeclaredAttribute",
 
 Takes a diagnostic from an `ooxml-validate` report — or the whole report, it
 will use the first diagnostic — and answers the question that always follows:
-*then what would have been legal there.* The xpath does real work: it
+_then what would have been legal there._ The xpath does real work: it
 disambiguates a name with several content models by looking at its ancestors.
 
 An id it does not recognise is not a failure; it still tells you what the
@@ -94,12 +94,12 @@ unit suffixes are a closed set.
 ## Things that will bite you
 
 - **Always check the profile.** Answers default to **Transitional**, which is
-  what Word, Excel and PowerPoint actually write. Strict uses *different
-  namespace URIs for the same vocabulary* and drops VML entirely. If a document
+  what Word, Excel and PowerPoint actually write. Strict uses _different
+  namespace URIs for the same vocabulary_ and drops VML entirely. If a document
   declares `purl.oclc.org/ooxml/...` namespaces, pass `--profile strict`.
   `diff` shows what changes for one symbol.
 - **A name is not an identity.** `ST_Percentage` is a pattern-restricted string
-  in `shared-commonSimpleTypes` and a *union* in `dml-main`; `ST_Direction` is
+  in `shared-commonSimpleTypes` and a _union_ in `dml-main`; `ST_Direction` is
   `ltr|rtl` in wml, `horz|vert` in pml and `norm|rev` in dml-diagram. A bare
   name like that comes back as `ambiguous:true` with a `variants` array rather
   than one arbitrary answer, so **check for `variants` before reading a
@@ -125,7 +125,7 @@ Two of those — `x` for spreadsheetml and `c` for charts — are accepted becau
 the ecosystem writes them, not because a schema binds them; `namespace` reports
 those under `aliases` with a citation, and leaves `prefix` null, which is what
 the standard actually says. **Answers come back in the canonical spelling**, so
-`element x:worksheet` replies `sml:worksheet`. That is deliberate: `x` is *also*
+`element x:worksheet` replies `sml:worksheet`. That is deliberate: `x` is _also_
 VML's excel namespace, and printing both as `x:` would render two different
 namespaces identically. The lookup checks both and returns whichever actually
 has the name.
@@ -152,7 +152,7 @@ Tables: `profiles`, `vocabularies`, `namespaces`, `prefix_aliases`, `symbols`,
 Two things to know before writing a join. Symbols are keyed on the
 **vocabulary**, not the namespace URI, because the two profiles are the same
 vocabulary under different URIs — so `symbols` has no profile column and every
-*edge* table does. And `symbols.parent_symbol_id` is `0` for a global
+_edge_ table does. And `symbols.parent_symbol_id` is `0` for a global
 declaration, not NULL.
 
 Prefer the subcommands where they fit: they resolve inheritance and expand

@@ -1,0 +1,75 @@
+{
+  "invariant": "references-outside-cells-through-a-splice",
+  "description": "How Excel moves the references a workbook spells outside cell formulas when rows or columns are inserted or deleted: a table column's calculated column formula and totals row formula, a pivot cache's worksheet source, and a chart series. Sequence A is one workbook of sheets S1 to S4, each edit applied after the one before and the workbook saved after each; the stored XML is quoted from those saves. Table T sits on S1 at A10:C14 with a calculated column c (=[@a]+$E$20+S2!$A$5+E20) and a custom total on a (=SUM($E$20:$E$22)+S2!A5); pivot P on S4 draws from S3!A1:B5; a column chart on S2 plots S3!A1:B5. Sequence B is a fresh copy of the pivot and the chart per edit, each edit made once on S3. Table formulas move by the same rules as cell formulas, with the table's sheet as the home of an unqualified reference. A pivot source grows and shrinks with the rows and columns it spans, and one whose every row or every column is deleted is left as written. A chart series moves too, and Excel re-derives a series whose name or categories an edit takes.",
+  "probe": "a one-off COM script: Workbooks.Add, ListObjects.Add with DataBodyRange.Formula and TotalsRowRange formulas, PivotCaches().Create over S3!R1C1:R5C2, ChartObjects().Add with SetSourceData, then Rows()/Columns() Insert or Delete, SaveCopyAs after each edit",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-11",
+  "openClass": "headless COM (DisplayAlerts off), a workbook created in the session and saved as .xlsx",
+  "fixture": "test/corpus/fixtures/references-outside-cells-through-a-splice/before.xlsx is the sequence A workbook before any edit",
+  "sequenceA": {
+    "before": {
+      "table ref": "A10:C14",
+      "calculatedColumnFormula c": "T[[#This Row],[a]]+$E$20+'S2'!$A$5+E20",
+      "totalsRowFormula a": "SUM($E$20:$E$22)+'S2'!A5",
+      "worksheetSource": "<worksheetSource ref=\"A1:B5\" sheet=\"S3\"/>",
+      "chart c:f": ["'S3'!$B$1", "'S3'!$A$2:$A$5", "'S3'!$B$2:$B$5"]
+    },
+    "S1.Rows(\"5:6\").Insert()": {
+      "table ref": "A12:C16",
+      "calculatedColumnFormula c": "T[[#This Row],[a]]+$E$22+'S2'!$A$5+E22",
+      "totalsRowFormula a": "SUM($E$22:$E$24)+'S2'!A5",
+      "worksheetSource": "<worksheetSource ref=\"A1:B5\" sheet=\"S3\"/>",
+      "chart c:f": ["'S3'!$B$1", "'S3'!$A$2:$A$5", "'S3'!$B$2:$B$5"]
+    },
+    "S2.Rows(\"2:3\").Insert()": {
+      "table ref": "A12:C16",
+      "calculatedColumnFormula c": "T[[#This Row],[a]]+$E$22+'S2'!$A$7+E22",
+      "totalsRowFormula a": "SUM($E$22:$E$24)+'S2'!A7",
+      "worksheetSource": "<worksheetSource ref=\"A1:B5\" sheet=\"S3\"/>",
+      "chart c:f": ["'S3'!$B$1", "'S3'!$A$2:$A$5", "'S3'!$B$2:$B$5"]
+    },
+    "S3.Rows(\"3:3\").Insert()": {
+      "table ref": "A12:C16",
+      "calculatedColumnFormula c": "T[[#This Row],[a]]+$E$22+'S2'!$A$7+E22",
+      "totalsRowFormula a": "SUM($E$22:$E$24)+'S2'!A7",
+      "worksheetSource": "<worksheetSource ref=\"A1:B6\" sheet=\"S3\"/>",
+      "chart c:f": ["'S3'!$B$1", "'S3'!$A$2:$A$6", "'S3'!$B$2:$B$6"]
+    },
+    "S1.Rows(\"22:22\").Delete()": {
+      "table ref": "A12:C16",
+      "calculatedColumnFormula c": "T[[#This Row],[a]]+#REF!+'S2'!$A$7+#REF!",
+      "totalsRowFormula a": "SUM($E$22:$E$23)+'S2'!A7",
+      "worksheetSource": "<worksheetSource ref=\"A1:B6\" sheet=\"S3\"/>",
+      "chart c:f": ["'S3'!$B$1", "'S3'!$A$2:$A$6", "'S3'!$B$2:$B$6"]
+    },
+    "S3.Rows(\"4:4\").Delete()": {
+      "worksheetSource": "<worksheetSource ref=\"A1:B5\" sheet=\"S3\"/>",
+      "chart c:f": ["'S3'!$B$1", "'S3'!$A$2:$A$5", "'S3'!$B$2:$B$5"]
+    },
+    "S3.Columns(\"B:B\").Insert()": {
+      "worksheetSource": "<worksheetSource ref=\"A1:C5\" sheet=\"S3\"/>",
+      "chart c:f": ["'S3'!$C$1", "'S3'!$A$2:$A$5", "'S3'!$C$2:$C$5"]
+    }
+  },
+  "sequenceB": {
+    "S3.Rows(\"1:5\").Delete()": {
+      "worksheetSource": "<worksheetSource ref=\"A1:B5\" sheet=\"S3\"/>",
+      "chart c:f": ["'S3'!#REF!"]
+    },
+    "S3.Rows(\"1:1\").Delete()": {
+      "worksheetSource": "<worksheetSource ref=\"A1:B4\" sheet=\"S3\"/>",
+      "chart c:f": ["'S3'!$A$1:$A$4", "'S3'!$B$1:$B$4"]
+    },
+    "S3.Columns(\"A:B\").Delete()": {
+      "worksheetSource": "<worksheetSource ref=\"A1:B5\" sheet=\"S3\"/>",
+      "chart c:f": ["'S3'!#REF!"]
+    },
+    "S3.Rows(\"2:5\").Delete()": {
+      "worksheetSource": "<worksheetSource ref=\"A1:B1\" sheet=\"S3\"/>",
+      "chart c:f": ["'S3'!$B$1", "'S3'!#REF!"]
+    }
+  }
+}

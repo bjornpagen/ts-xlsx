@@ -25,12 +25,12 @@ bug in your code or in your runtime, and this library will not have wrapped it.
 The taxonomy is deliberately coarse, because four is the number of genuinely different next
 actions.
 
-| `code` | What happened | What you do |
-| --- | --- | --- |
-| `'unsupported-format'` | Not a container this library reads at all. | Reject the file, or hand it to something else. |
-| `'malformed-input'` | A part we do read is corrupt or off-specification. | Reject the file. It is broken, or hostile. |
-| `'authoring'` | Your code described a document that cannot exist. | Fix the calling code. |
-| `'internal'` | An invariant the library maintains did not hold. | Report it. The bug is ours. |
+| `code`                 | What happened                                      | What you do                                    |
+| ---------------------- | -------------------------------------------------- | ---------------------------------------------- |
+| `'unsupported-format'` | Not a container this library reads at all.         | Reject the file, or hand it to something else. |
+| `'malformed-input'`    | A part we do read is corrupt or off-specification. | Reject the file. It is broken, or hostile.     |
+| `'authoring'`          | Your code described a document that cannot exist.  | Fix the calling code.                          |
+| `'internal'`           | An invariant the library maintains did not hold.   | Report it. The bug is ours.                    |
 
 Every subclass fixes `code` to a literal, so the hierarchy is a discriminated union and
 narrowing on `error.code` narrows the type.
@@ -62,7 +62,7 @@ console.log(classify(new Uint8Array([0, 0, 0, 0]))); // 'not a spreadsheet we re
 
 ## Telling apart the two ways a file can be wrong
 
-`UnsupportedFormatError` says the input is a different *kind* of thing. `PackageReadError`
+`UnsupportedFormatError` says the input is a different _kind_ of thing. `PackageReadError`
 says it is the right kind and cannot be unpacked. Keeping them apart is what lets you answer
 "should I try another reader, or reject this?", and the first carries a `format` field so you
 never have to match on a message.
@@ -88,7 +88,7 @@ sees, so no lower-layer string can leak into a log or a user-facing error.
 
 ## Errors that are your fault
 
-`AuthoringError` is raised when the *document you described* cannot exist: a workbook with no
+`AuthoringError` is raised when the _document you described_ cannot exist: a workbook with no
 worksheets, a table whose columns do not span its range, a merge overlapping another.
 
 ```ts

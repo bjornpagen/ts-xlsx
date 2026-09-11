@@ -60,7 +60,7 @@ pre-commit:
   parallel: true
   jobs:
     - name: oxfmt
-      glob: "*.{ts,js,mjs,cjs,json,jsonc}"
+      glob: '*.{ts,js,mjs,cjs,json,jsonc}'
       run: node node_modules/oxfmt/bin/oxfmt --write {staged_files}
       stage_fixed: true
 
@@ -75,7 +75,7 @@ pre-commit:
     # runs `verify --full`, which has it on. Same reasoning keeps
     # `--report-unused-disable-directives` off here.
     - name: oxlint
-      glob: "*.{ts,js,mjs,cjs}"
+      glob: '*.{ts,js,mjs,cjs}'
       run: node node_modules/oxlint/bin/oxlint --fix --deny-warnings --no-error-on-unmatched-pattern {staged_files}
       stage_fixed: true
 

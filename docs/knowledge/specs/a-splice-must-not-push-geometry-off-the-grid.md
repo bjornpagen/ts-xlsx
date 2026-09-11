@@ -25,15 +25,15 @@ validator can check against.
 Excel does not. Excel Desktop (Microsoft 365, Windows, build 16.0.20228), one over-limit region per
 file so the verdict names a culprit:
 
-| File | Automation open (`tools/excel-oracle/observe.ps1`) | Interactive open (`open-verdict.ps1`) |
-| --- | --- | --- |
-| `sqref="B1:B1048578"` (validation) | throws, no workbook | **repair-prompt** |
-| `ref="C1048577:D1048578"` (merge) | throws, no workbook | not run |
-| `autoFilter ref="A1:A1048578"` | throws, no workbook | not run |
-| control: the same three regions bounded at 1048576 | opens, `repaired: false`, cells read back | **clean** |
+| File                                               | Automation open (`tools/excel-oracle/observe.ps1`) | Interactive open (`open-verdict.ps1`) |
+| -------------------------------------------------- | -------------------------------------------------- | ------------------------------------- |
+| `sqref="B1:B1048578"` (validation)                 | throws, no workbook                                | **repair-prompt**                     |
+| `ref="C1048577:D1048578"` (merge)                  | throws, no workbook                                | not run                               |
+| `autoFilter ref="A1:A1048578"`                     | throws, no workbook                                | not run                               |
+| control: the same three regions bounded at 1048576 | opens, `repaired: false`, cells read back          | **clean**                             |
 
-The interactive dialog is the ordinary corruption one: *"We found a problem with some content in
-'over-validation.xlsx'. Do you want us to try to recover as much as we can?"* The control was run
+The interactive dialog is the ordinary corruption one: _"We found a problem with some content in
+'over-validation.xlsx'. Do you want us to try to recover as much as we can?"_ The control was run
 through the same classifier and came back `clean` with no dialog, so the verdict distinguishes. This
 is the whole workbook's content put at the user's mercy by an edit that touched none of it, which is
 why this is a defect rather than a judgement call about a region's size.
@@ -43,15 +43,15 @@ why this is a defect rather than a judgement call about a region's size.
 The reverse direction, and the one that decides the fix. A workbook carrying one region was opened
 over COM and given `Rows("900:901").Insert()`, then saved by Excel and read back as XML:
 
-| Region present | Excel's insert | What Excel then wrote |
-| --- | --- | --- |
-| validation `B1:B1048576` | succeeds | `sqref="B1:B1048576"`, the bottom edge left on the last row |
-| autofilter `A1:A1048576` | succeeds | `ref="A1:A"`, Excel's own canonical spelling, with no over-limit row |
-| merge `C1048575:D1048576` | **refused** | *"Microsoft Excel can't insert new cells because it would push non-empty cells off the end of the worksheet…"* |
-| control: neither, data in `A1`/`A5` | succeeds | nothing to report |
+| Region present                      | Excel's insert | What Excel then wrote                                                                                          |
+| ----------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------- |
+| validation `B1:B1048576`            | succeeds       | `sqref="B1:B1048576"`, the bottom edge left on the last row                                                    |
+| autofilter `A1:A1048576`            | succeeds       | `ref="A1:A"`, Excel's own canonical spelling, with no over-limit row                                           |
+| merge `C1048575:D1048576`           | **refused**    | _"Microsoft Excel can't insert new cells because it would push non-empty cells off the end of the worksheet…"_ |
+| control: neither, data in `A1`/`A5` | succeeds       | nothing to report                                                                                              |
 
 So Excel has two answers, and which it gives depends on whether what would be pushed off is a
-*region* or *content*. A region is clamped: its bottom edge stays where it is and the region absorbs
+_region_ or _content_. A region is clamped: its bottom edge stays where it is and the region absorbs
 the loss. Content is not clamped, and rather than damage it Excel refuses the whole insert.
 
 ## What this library does

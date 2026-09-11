@@ -13,10 +13,10 @@ worker-backed API, keeping the sync functions as the default.
 Measuring first changed the shape of the answer. Deflating a ~42 MB part map with `fflate`'s
 callback `zip()` against `zipSync`, one process per case, `monitorEventLoopDelay` for the stall:
 
-| workbook shape | `zipSync` | `zip()` async | event-loop stall under async |
-| --- | --- | --- | --- |
-| one large sheet | 1408 ms | 1417 ms | max **17 ms** |
-| twenty sheets | 1402 ms | **581 ms** | max 41 ms |
+| workbook shape  | `zipSync` | `zip()` async | event-loop stall under async |
+| --------------- | --------- | ------------- | ---------------------------- |
+| one large sheet | 1408 ms   | 1417 ms       | max **17 ms**                |
+| twenty sheets   | 1402 ms   | **581 ms**    | max 41 ms                    |
 
 Under `zipSync` the loop does not tick at all for the whole duration. So the async writer buys
 responsiveness always, and wall-clock only when there are several parts to deflate in parallel,
@@ -31,7 +31,7 @@ duration. That is a promise the library would not keep, the same reasoning that 
 `UnsupportedFeatureError` before it shipped in the error-taxonomy work.
 
 **It would regress the zip-bomb ceiling.** `io/opc/inflate.ts` derives its guarantee from feeding
-compressed input in 16 KiB slices and checking a running *output* counter between them, which bounds
+compressed input in 16 KiB slices and checking a running _output_ counter between them, which bounds
 worst-case overshoot to one slice's expansion (~16 MiB at DEFLATE's ~1032:1 ceiling). With
 `AsyncUnzipInflate` the counter sits on the calling thread while a worker keeps producing, and
 `fflate` exposes no way to enforce a cap inside the worker. The cap would become advisory with
@@ -88,6 +88,6 @@ asynchronous; deflating a buffer is not.
   stall on the table for a five-line function over a boundary that was already clean.
 - **Pinning `mtime` so the two writers are byte-identical.** Tempting while testing, but it changes
   `writeXlsx`'s output and belongs to a separate question, whether `.xlsx` output should be
-  reproducible at all, which it is not today for the same reason. *(Answered yes by
+  reproducible at all, which it is not today for the same reason. _(Answered yes by
   [ADR 0032](./0032-package-output-is-reproducible.md), on a consumer's evidence rather than a
-  test's convenience; the two writers are byte-identical as a side effect.)*
+  test's convenience; the two writers are byte-identical as a side effect.)_

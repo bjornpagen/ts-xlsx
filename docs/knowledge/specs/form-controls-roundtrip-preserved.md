@@ -29,7 +29,7 @@ Tiered, so partial support is still valuable:
 ## Prior art / notes
 
 - The same class of "unmodeled part gets discarded on write" failure has bitten other embedded content, such as media and images. A general principle worth adopting: parts the model does not understand should be carried through untouched on round-trip rather than dropped, so fidelity degrades gracefully.
-- Data-validation dropdowns (`<dataValidation type="list">`) are a *different* feature from form-control drop-downs and are unrelated here. Don't conflate them.
+- Data-validation dropdowns (`<dataValidation type="list">`) are a _different_ feature from form-control drop-downs and are unrelated here. Don't conflate them.
 
 ## Open questions
 

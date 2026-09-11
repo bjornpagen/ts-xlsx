@@ -11,12 +11,12 @@ ADR 0002 gave this repo a `tools/ooxml-validator/` .NET console tool around
 It worked. Two things it could not fix on its own:
 
 - **`ts-pptx` had one too, and it was not the same one.** That project wrapped a third-party
-  binary pinned to `DocumentFormat.OpenXml` **3.2.0**, reported clean files by *omitting* them,
+  binary pinned to `DocumentFormat.OpenXml` **3.2.0**, reported clean files by _omitting_ them,
   and exited `0` no matter what happened. Two sibling projects were validating OOXML against
   **different rule sets** while both describing it as "Microsoft's validator". Nothing in either
   repo could notice that, because neither could see the other's pin.
 - **Building it needed the .NET 10 SDK.** That is a real barrier for contributors and an
-  `actions/setup-dotnet` step in CI, for a tool whose *output* is all anyone wants.
+  `actions/setup-dotnet` step in CI, for a tool whose _output_ is all anyone wants.
 
 `ooxml-validate` was built to remove the first problem: one oracle, one pin, one report
 contract, distributed as a prebuilt binary. Its own code descends from this repo's
@@ -32,7 +32,7 @@ fetched on first use, checksum- and provenance-verified, cached in `~/.cache/oox
 the `Microsoft365` conformance pin; batching; and the CI gate that turns an unobtainable
 oracle into a hard failure instead of a silent skip.
 
-This repo keeps what is actually about *this* project: `test/ooxml-validation/run.ts`, which
+This repo keeps what is actually about _this_ project: `test/ooxml-validation/run.ts`, which
 emits the buffered and both streaming writers' real output plus the negative controls, and
 `allowed-errors.json`, the frozen baseline it holds them against.
 
@@ -58,11 +58,11 @@ this repo's baseline from a repository this one does not gate. That is the delib
 having one rule set instead of two, and it is not unmanaged: `ooxml-validate` carries its own
 fixture corpus and a committed snapshot of the diagnostics they produce, so a bump PR there has
 to show the delta in its own diff before it can land. What this repo gives up is the ability to
-pin *differently*, which is exactly the ability that caused the divergence.
+pin _differently_, which is exactly the ability that caused the divergence.
 
 **Renovate's subject changes.** [ADR 0027](./0027-dependencies-are-updated-by-a-bot-and-ci-is-the-reviewer.md)
 listed the NuGet lockfile as a thing to watch here; there is no longer one. The oracle now
-arrives as an ordinary npm dev dependency, and its npm version *is* its binary's version, so a
+arrives as an ordinary npm dev dependency, and its npm version _is_ its binary's version, so a
 bump of that one number moves both halves at once.
 
 **What the wrapper script was quietly doing.** `scripts/ooxml-validator.ts` shifted off the

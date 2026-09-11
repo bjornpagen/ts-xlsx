@@ -12,7 +12,7 @@ cell content with a single chosen value. They ask the library to emit such a "mu
 > multi-select dropdown is **not a native spreadsheet-format feature**. Standard list data validation
 > is single-select, and the accumulate-on-pick behavior in real spreadsheets is implemented with an
 > event-handler macro (VBA `Worksheet_Change`) in a macro-enabled workbook, not with any writable
-> validation XML. Recording the constraint and the portable primitive we *should* nail is the durable
+> validation XML. Recording the constraint and the portable primitive we _should_ nail is the durable
 > value.
 
 ## Desired behavior

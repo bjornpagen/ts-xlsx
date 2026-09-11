@@ -19,7 +19,7 @@ and callers resort to casts or filler values to satisfy the compiler.
 ## Desired behavior
 
 - **The date-system flag is not required to author a formula cell.** The 1900-against-1904 base is a
-  property of the *workbook* (`workbookPr/@date1904`), governing how all serial dates in the package
+  property of the _workbook_ (`workbookPr/@date1904`), governing how all serial dates in the package
   are interpreted, and it is not a per-cell attribute. The formula-cell authoring type must therefore
   let a caller construct a value from just the `formula` string, optionally a cached `result`, and
   nothing else.
@@ -28,19 +28,19 @@ and callers resort to casts or filler values to satisfy the compiler.
   optional and defaults from the workbook's date system, never a field the author must provide.
 - **The required and optional split reflects the format, not implementation convenience.** Required:
   `formula`. Optional: `result`, shared-formula linkage (`shareType`, `ref`, `sharedFormula`), and any
-  read-back-only metadata. The types *are* the docs: a caller should be able to see, from the type
+  read-back-only metadata. The types _are_ the docs: a caller should be able to see, from the type
   alone, the minimal shape needed to write a formula cell.
 
 ## Open questions
 
-- Does the same over-required-field problem exist on the *other* cell value types (rich-text,
+- Does the same over-required-field problem exist on the _other_ cell value types (rich-text,
   hyperlink, shared-formula, error)? Audit the whole cell-value union for fields marked required that
   are really workbook-level or read-back-only, and fix them as a class.
 - Read-back shape: when a formula cell is read from a 1904 workbook, does the returned value need to
   carry the base at all, or is the workbook the single source of truth the consumer already has access
   to? Prefer not duplicating workbook state onto every cell.
-- Distinct authoring and read-back types: is it cleaner to expose a narrow *input* type, what you must
-  supply to write, separate from a wider *output* type, what a read surfaces, rather than one type
+- Distinct authoring and read-back types: is it cleaner to expose a narrow _input_ type, what you must
+  supply to write, separate from a wider _output_ type, what a read surfaces, rather than one type
   doing both?
 
 Related: `column-definition-type-is-partial-on-write`, `public-types-node-stream-portability`,

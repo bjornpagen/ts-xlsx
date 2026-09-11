@@ -4,7 +4,7 @@
 
 ## Context
 
-ADR-0015 settled *what* a version is called and left publishing as "a separate,
+ADR-0015 settled _what_ a version is called and left publishing as "a separate,
 deliberate, human-triggered action". 1.0.0 was then published by hand: `npm publish`
 from a maintainer's terminal, with a one-time password typed at the prompt. That works
 exactly once per person who has the password, and it produces a package the registry
@@ -24,7 +24,7 @@ change that can read secrets, and it is invisible: nothing in a diff shows who c
 
 2. **No npm credential exists in this repository.** Authentication is npm **trusted
    publishing**: the job proves its identity with a GitHub OIDC token (`id-token: write`),
-   and npm exchanges it for a short-lived one *only* when the repository, workflow
+   and npm exchanges it for a short-lived one _only_ when the repository, workflow
    filename and environment match the trusted publisher configured on the package. The
    same exchange emits a provenance attestation, so the registry can state which commit
    and which run built what it serves. There is nothing to leak and nothing to rotate.
@@ -35,7 +35,7 @@ change that can read secrets, and it is invisible: nothing in a diff shows who c
    diff instead of being a settings page nobody reads, and the workflow fails when the live
    environment disagrees with the declaration.
 
-   It *provisioned* the environment through 1.1.0 and now only checks it (**amended
+   It _provisioned_ the environment through 1.1.0 and now only checks it (**amended
    2026-08-08**). Writing an environment is an administration endpoint, and `administration`
    is not among the permissions a workflow may request for `GITHUB_TOKEN`, so provisioning
    needed a PAT, `ENV_ADMIN_TOKEN`, which was never created; the workflow spent every day
@@ -48,7 +48,7 @@ change that can read secrets, and it is invisible: nothing in a diff shows who c
    eyes: the only login that could approve was the one that had just cut the release, so it
    asked the releaser to confirm a decision they had made one command earlier. Consent that
    only the decider can give is a delay, not a control. What it genuinely stopped was an
-   *accidental* publish; see the consequences below for what now carries that.
+   _accidental_ publish; see the consequences below for what now carries that.
 
 4. **The workflow enumerates no gates.** `npm publish` runs `prepublishOnly`, which is
    build, `verify --full`, `smoke:dist` and the size budgets. That is the single definition of
@@ -69,12 +69,12 @@ change that can read secrets, and it is invisible: nothing in a diff shows who c
   wrong commit) publishes unattended, and a version number cannot be taken back. Two
   things still stand between a mistake and npm: the tag-name/version agreement check, which
   refuses a tag whose commit declares a different version, and `prepublishOnly`, which
-  refuses a tree that fails its gates. Neither catches a *correct* publish of something
+  refuses a tree that fails its gates. Neither catches a _correct_ publish of something
   nobody meant to release. Rehearse (`dry_run`) when a release is in any way unusual;
   that habit is the replacement for the click, and unlike the click it can actually fail.
 - **Negative / deferred:** the trusted publisher must be configured once on npmjs.com
   before CI can publish at all, and it pins three names that live outside this repository's
-  review: the repository, the workflow *filename*, and the *environment*. Renaming
+  review: the repository, the workflow _filename_, and the _environment_. Renaming
   `publish.yml` or the `npm-publish` environment breaks publishing until npm is updated to
   match, and npm reports any of the three disagreeing identically.
 
@@ -82,7 +82,7 @@ change that can read secrets, and it is invisible: nothing in a diff shows who c
   credential at all** (2026-08-08). `ENV_ADMIN_TOKEN` was never created, so the reviewer
   removal of 2026-08-05 was applied by hand and the file and the live environment agreed by
   coincidence rather than by construction, which is the one property this ADR had bought.
-  Restoring the secret would have bought it back at the price of the *other* property, since
+  Restoring the secret would have bought it back at the price of the _other_ property, since
   a PAT with Administration rights is a long-lived credential sitting beside a publish path
   that deliberately has none, and it is the strictly more dangerous of the two: it can rewrite
   the gate that decides who may publish. So the write was dropped instead. `environment.yml`
@@ -97,10 +97,11 @@ change that can read secrets, and it is invisible: nothing in a diff shows who c
   Proving it could fail found a defect in it, which is the argument for the practice. Run
   against a throwaway environment configured wrong on purpose, it went red, with
   `gh: Not Found (HTTP 404)` and none of its own output. GitHub serves the
-  deployment-branch-policies endpoint only while custom policies are switched *on*; with them
+  deployment-branch-policies endpoint only while custom policies are switched _on_; with them
   off it 404s rather than returning an empty list. So the drift that matters most, the tag
   rule removed, was the one case reported as an unattributed HTTP error. The switch is now
   read first and "off" is spelled as the empty list it means.
+
 - **Verified, not assumed.** The verification corrected the design twice and the
   npm-side configuration once, each against a mistake of ours.
 
@@ -114,12 +115,12 @@ change that can read secrets, and it is invisible: nothing in a diff shows who c
   was wrong, and 1.0.1 failed `ENEEDAUTH` proving it: `registry-url` writes the .npmrc
   entry naming the registry this publish authenticates against, and without it npm does not
   begin the exchange at all. The placeholder is genuinely unused, because that variable is
-  read when *installing* private dependencies, not when publishing. The lesson generalises: a
+  read when _installing_ private dependencies, not when publishing. The lesson generalises: a
   plausible reading of an observed value is not evidence, and the release path is one place
   where the difference is a burned version number.
 
   The publisher's **environment** field was then wrong on npm, and being wrong looked like
-  nothing. It named `environment.yml`, the workflow that *provisions* the deployment
+  nothing. It named `environment.yml`, the workflow that _provisions_ the deployment
   environment, where it had to name the environment itself, `npm-publish`. npm answers a
   rejected identity with a 404, which reads as "no such package" and says nothing about
   which of the three claims failed to match, so 1.0.2 failed against a workflow that was
@@ -130,13 +131,14 @@ change that can read secrets, and it is invisible: nothing in a diff shows who c
 
   The rehearsal had been unable to catch any of this, which is the part worth keeping.
   `npm publish --dry-run` treats a rejected identity as a warning and exits `0`, so the
-  rehearsal passed *because* it was a rehearsal, and the misconfiguration reached a real
+  rehearsal passed _because_ it was a rehearsal, and the misconfiguration reached a real
   release twice. A check that cannot fail on the thing it is checking is decoration, and it
   reads as reassurance, which is worse than having no check at all. The job now reads the
   verbose log and fails when the exchange was rejected, or when npm never attempted one.
   Both markers were taken from the failing run's own output and re-run against it, rather
   than written from what the log was assumed to say, which is the same discipline the two
   corrections above had to be learned through.
+
 - **Revisit when:** npm changes the trusted-publishing contract, or a second package ships
   from this repository (the environment and the publisher config are both single-package
   shaped today).

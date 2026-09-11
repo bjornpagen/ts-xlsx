@@ -34,7 +34,7 @@ We classified every module by reachability from the two entry pairs (`read.ts`/`
    `read/` and `write/` would advertise a separation the graph does not have.
 
 **The invariant we do keep** is narrower and true: no read-pipeline module imports a write-pipeline
-module *directly*. Making that hold required extracting `parseColor` and `colorAttrs` into
+module _directly_. Making that hold required extracting `parseColor` and `colorAttrs` into
 `color-xml.ts`, because reading and writing `<color>` are one concern with two directions, and
 `parseColor` had been sitting in the write-side style table, which made `read-styles.ts` and
 `read-worksheet.ts` import the writer to decode a colour. That was the only such import in the codec.
@@ -45,7 +45,7 @@ a gate for it cannot be written honestly today.
 - `check-layering.ts` matches `forbidden` entries as directory prefixes (`target.startsWith(layer + '/')`),
   so a file-level rule silently never fires. Its `RULES.find` also stops at the first matching rule,
   so per-file rules cannot stack.
-- A rule that *derives* the write pipeline from reachability defeats itself. The moment a read module
+- A rule that _derives_ the write pipeline from reachability defeats itself. The moment a read module
   imports a write module, that module becomes reachable from the read roots and therefore classifies
   as **shared**, which is exactly the label that makes the check pass. Verified, not assumed.
 - A declared list of write-pipeline modules would work and would go stale in silence, since a new
@@ -76,7 +76,7 @@ to say this here is that a convention a reader assumes is gated is a convention 
 
 ## Revisit if
 
-- `check-layering.ts` grows file-level `forbidden` matching *and* multi-rule stacking, at which point
+- `check-layering.ts` grows file-level `forbidden` matching _and_ multi-rule stacking, at which point
   the direction rule becomes expressible without a stale-prone list. That is the cheapest path to
   gating this.
 - A feature module's two halves stop sharing anything but a filename, which would make splitting that

@@ -15,7 +15,7 @@ a legitimate, generator-dependent ZIP ordering, the cell is emitted with no form
 surfaces as a number. The "open and re-save fixes it" reports are the same root: Excel rewrites the
 package into an ordering the reader happens to tolerate.
 
-> The date-application *behavior* is locked as a corpus case
+> The date-application _behavior_ is locked as a corpus case
 > (`streaming-read-applies-date-format`). This note captures the surrounding streaming-reader design
 > requirements, meaning ordering-independence, default style interpretation, and guaranteed
 > termination, including the ones that cannot be a corpus case because they are hang or latency

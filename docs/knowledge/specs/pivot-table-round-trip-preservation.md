@@ -23,7 +23,7 @@ Even a workbook the library does not otherwise understand should not have these 
 Expose parsed pivot-table definitions (source range or cache, row, column, data and filter field placement, and the cached field items) so callers can inspect existing pivots.
 
 **Tier 3, authoring.**
-Allow creating new pivot tables programmatically. The acknowledged hard part is not the pivot *definition* XML but generating the *cached* content (`pivotCacheRecords`) that Excel stores alongside, since a from-scratch author must materialize the cache from the source range.
+Allow creating new pivot tables programmatically. The acknowledged hard part is not the pivot _definition_ XML but generating the _cached_ content (`pivotCacheRecords`) that Excel stores alongside, since a from-scratch author must materialize the cache from the source range.
 
 ## Related secondary defect
 

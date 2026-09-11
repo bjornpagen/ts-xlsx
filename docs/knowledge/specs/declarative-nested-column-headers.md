@@ -31,7 +31,7 @@ grouping is only known at runtime.
 
 - The proposed shape is a recursive column tree walked into a flat leaf list plus a per-level
   header plan; that flat list is exactly the existing column model, so nested headers can be a
-  *builder* over the current primitives rather than a new core concept.
+  _builder_ over the current primitives rather than a new core concept.
 - The hard part is interaction with the rest of the feature set (merged cells, borders on merged
   regions, per-node styles, and shared column keys) which is why this belongs in the design phase
   rather than as a mechanical corpus lock.

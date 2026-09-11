@@ -13,7 +13,7 @@ on one premise:
 > mismatch, discard the (absent) PerformanceCache, and **recompile every module from source on open**.
 
 **That premise is false.** It was never actually exercised: ADR 0017's Excel oracle opened files with
-`AutomationSecurity = ForceDisable`, which blocks the VBA engine *before* it loads or compiles anything;
+`AutomationSecurity = ForceDisable`, which blocks the VBA engine _before_ it loads or compiles anything;
 ADR 0018's GUI probe used `open-verdict.ps1`, which dismisses prompts with the safe negative and **never
 clicks Enable Content**. Neither ever ran the VBA compiler. So "opens clean, source preserved" only ever
 proved the file passed through structurally, not that a single module ever recompiled.
@@ -23,13 +23,13 @@ proved the file passed through structurally, not that a single module ever recom
 Byte-surgery against a genuine, known-good Excel-authored file, each variant opened with **macros
 enabled** and the authored macro **executed over COM** (the new `execute-verdict.ps1` probe):
 
-| Mutation against a known-good file | Result |
-|---|---|
-| change only a module's source; real p-code and real `_VBA_PROJECT` untouched | loads and runs (the p-code still runs, so **the new source is ignored**) |
-| `MODULEOFFSET → 0` (p-code removed); `_VBA_PROJECT` untouched | **"Invalid data format"**, project deleted |
-| p-code present but garbage (same length); `_VBA_PROJECT` untouched | **"Invalid data format"**, project deleted |
-| `_VBA_PROJECT → cookie` only; real p-code and `MODULEOFFSET` untouched | loads and runs correctly (**the cookie does nothing**) |
-| real-but-unrelated p-code plus a wildly different new source | loads clean, but **silently runs the stale p-code**; the new source's macros don't exist and the placeholder's original macro runs |
+| Mutation against a known-good file                                           | Result                                                                                                                             |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| change only a module's source; real p-code and real `_VBA_PROJECT` untouched | loads and runs (the p-code still runs, so **the new source is ignored**)                                                           |
+| `MODULEOFFSET → 0` (p-code removed); `_VBA_PROJECT` untouched                | **"Invalid data format"**, project deleted                                                                                         |
+| p-code present but garbage (same length); `_VBA_PROJECT` untouched           | **"Invalid data format"**, project deleted                                                                                         |
+| `_VBA_PROJECT → cookie` only; real p-code and `MODULEOFFSET` untouched       | loads and runs correctly (**the cookie does nothing**)                                                                             |
+| real-but-unrelated p-code plus a wildly different new source                 | loads clean, but **silently runs the stale p-code**; the new source's macros don't exist and the placeholder's original macro runs |
 
 Conclusions, now facts rather than hypotheses:
 
@@ -38,7 +38,7 @@ Conclusions, now facts rather than hypotheses:
    line, or runs Debug ▸ Compile.
 2. **The `_VBA_PROJECT` version cookie has no effect** on loading when real p-code is present. It is not
    the recompile trigger it was believed to be. Worse, resetting `_VBA_PROJECT` to the cookie on a
-   project that *has* real p-code **crashes the VBA load** (RPC-fatal), so it was not even a harmless
+   project that _has_ real p-code **crashes the VBA load** (RPC-fatal), so it was not even a harmless
    no-op.
 3. **"Loads clean" is not evidence of correctness** for a VBA-authoring feature. A module can load
    without any error and silently run the wrong (stale) code, which is strictly worse than a loud failure.
@@ -49,7 +49,7 @@ can produce it.
 
 ## Decision
 
-1. **Authoring and editing VBA module *source* moves out of the shipped library into an offline build
+1. **Authoring and editing VBA module _source_ moves out of the shipped library into an offline build
    tool, `tools/vba-compiler`.** It drives a real, headless Excel through the VBIDE object model
    (`VBComponents.Add`, then `CodeModule.AddFromString`, then `SaveAs`) to produce genuinely compiled,
    source-matched p-code, emitting either a `vbaProject.bin` (from-scratch, procedural or class) or a whole
@@ -71,7 +71,7 @@ can produce it.
 
 3. **The purely-structural edits are kept, and fixed.** `removeVbaModule` and `addVbaReference` (and
    their `Workbook`/`editXlsxVba*` wrappers) never rewrite a module's p-code. They only edit the `dir`
-   stream (and, for a removal, `PROJECT`/`PROJECTwm`). They were being broken *solely* by the
+   stream (and, for a removal, `PROJECT`/`PROJECTwm`). They were being broken _solely_ by the
    `_VBA_PROJECT → cookie` reset they inherited; **that reset is removed**, leaving `_VBA_PROJECT`
    untouched. Verified: both now load and run correctly, because the surviving modules keep their real
    p-code and the `dir` stream, authoritative for the module/reference list, carries the change.
@@ -86,7 +86,7 @@ can produce it.
 - **Breaking API change** (welcome, per the constitution): the source-authoring functions above are gone
   from the public API. There is no deprecation shim, because they produced silently-wrong output.
 - Authoring VBA now requires an offline Excel build step. This is an honest reflection of reality: no
-  pure-code path can produce runnable VBA, because runnable VBA *is* compiled p-code only Excel emits.
+  pure-code path can produce runnable VBA, because runnable VBA _is_ compiled p-code only Excel emits.
 - ADR 0016's read view is unchanged. Byte-for-byte macro **preservation** on round-trip, the safety
   floor, is untouched and remains the default for any `.xlsm` the library reads and rewrites.
 - The prior ADRs' "Verified against real Excel 365" claims are **withdrawn** as never having exercised

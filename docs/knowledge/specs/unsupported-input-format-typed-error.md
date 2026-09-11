@@ -6,12 +6,12 @@ Cluster: xlsx-io
 
 A user hands the reader a legacy binary spreadsheet, the old BIFF `.xls` format, or any other file
 that is not an OOXML `.xlsx` package. Because `.xlsx` is a ZIP container and `.xls` is not, the zip
-layer fails deep in its own internals with an opaque message like *"Can't find end of central
-directory : is this a zip file?"*. The user cannot tell from that message that the real problem is a
+layer fails deep in its own internals with an opaque message like _"Can't find end of central
+directory : is this a zip file?"_. The user cannot tell from that message that the real problem is a
 wrong or unsupported format, and the raw error may even leak absolute local filesystem paths from the
 zip layer.
 
-> Spec note, not a corpus case: the desired behavior is an error *contract* covering message clarity,
+> Spec note, not a corpus case: the desired behavior is an error _contract_ covering message clarity,
 > error type and no path leakage, rather than a serialization property the corpus asserts on a
 > package. The durable value is the classification of input-format failures and their typed errors.
 
@@ -36,14 +36,14 @@ zip layer.
 The classification is only useful if the message points at the layer that refused. Three sites, three
 answers (`io/opc/sniff-format.ts`, `io/xlsx/read.ts`):
 
-| Input | Error | What the message may say |
-| --- | --- | --- |
-| Not a ZIP at all (CSV, `.xls`) | `UnsupportedFormatError` (`'unknown'` / `'xls'`) | the input is not a ZIP, *not* that a workbook part is missing, since none was looked for |
-| `PK`-headed, the zip layer rejects it | `PackageReadError` | the container is corrupt or truncated |
-| Inflated fine, no `xl/workbook.xml` or `.bin` | `UnsupportedFormatError('unknown')` | no OOXML workbook part was found, the one place that sentence is true |
+| Input                                         | Error                                            | What the message may say                                                                 |
+| --------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Not a ZIP at all (CSV, `.xls`)                | `UnsupportedFormatError` (`'unknown'` / `'xls'`) | the input is not a ZIP, _not_ that a workbook part is missing, since none was looked for |
+| `PK`-headed, the zip layer rejects it         | `PackageReadError`                               | the container is corrupt or truncated                                                    |
+| Inflated fine, no `xl/workbook.xml` or `.bin` | `UnsupportedFormatError('unknown')`              | no OOXML workbook part was found, the one place that sentence is true                    |
 
 Note the middle row is narrower than "any corrupt-looking `PK` blob": a streaming unzip silently
-*skips* a stub it cannot make an entry out of rather than failing, so a few hand-made `PK` bytes
+_skips_ a stub it cannot make an entry out of rather than failing, so a few hand-made `PK` bytes
 inflate to zero parts and land in the third row. The fixture that exercises the real path is a
 genuine package cut off mid-stream, which is also what a corrupt file looks like in the wild.
 

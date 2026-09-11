@@ -5,7 +5,7 @@ Cluster: images
 ## Scenario
 
 Beyond preserving existing header and footer images on round-trip, covered by the
-`header-footer-image-survives-roundtrip` corpus case, users want to *create* them: place a logo
+`header-footer-image-survives-roundtrip` corpus case, users want to _create_ them: place a logo
 in the left, center or right section of a page header or footer. There is no authoring API for this
 today.
 
@@ -18,6 +18,7 @@ section with an id and explicit size (`addHeaderFooterImage(imageId, { position:
 in the chosen section (`&L&G`, `&C&G` or `&R&G`).
 
 On write this must emit:
+
 - the `&G` token in the correct section of the `headerFooter` element,
 - a `<legacyDrawingHF>` relationship on the worksheet,
 - a VML drawing part containing a `v:shape` of type `_x0000_t75` whose `v:imagedata` references

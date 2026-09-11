@@ -28,7 +28,7 @@ boilerplate back onto the caller for what is an everyday data shape.
   cell. A path that does not resolve, because of a missing intermediate, yields an empty cell, never
   a throw and never the literal string `"[object Object]"`.
 - The mapping is symmetric where it can be: setting row values by a keyed object and reading them
-  back by the same keys round-trips. Whether *writing* through a nested path reconstructs the
+  back by the same keys round-trips. Whether _writing_ through a nested path reconstructs the
   nested object on read-back is an open question (see below); the load-bearing requirement is the
   common export direction, record to cells.
 - A plain, non-nested key keeps working exactly as before, and nested support is additive.

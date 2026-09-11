@@ -10,10 +10,10 @@ languages.
 `Cell.numFmt` holds an Excel number-format code. So does `DEFAULT_DATE_NUMFMT` (`'yyyy-mm-dd'`), so
 does everything `isDateFormat` classifies, and so does every format code that arrives from or leaves
 for a `.xlsx` file. The vocabulary is lowercase and case-insensitive, and its one genuinely subtle
-rule is that `m` means *month* or *minute* depending on where it sits: minutes beside an hour or a
+rule is that `m` means _month_ or _minute_ depending on where it sits: minutes beside an hour or a
 seconds run, months anywhere else.
 
-`CsvWriteOptions.dateFormat` was a moment.js-style token table. It is case-*sensitive*, the month is
+`CsvWriteOptions.dateFormat` was a moment.js-style token table. It is case-_sensitive_, the month is
 uppercase `MM`, and lowercase `mm` means minutes unconditionally. Feeding it this library's own
 vocabulary produced silent garbage, and the results were reproduced against the table in the source
 rather than reasoned about:
@@ -67,7 +67,7 @@ came from one is UTC wall-clock.
 
 ## Why this break, in the worst shape a break comes in
 
-This changes the *meaning* of an existing public option without changing its type. A consumer passing
+This changes the _meaning_ of an existing public option without changing its type. A consumer passing
 `"MM/DD/YYYY"` gets no compile error and no runtime error; they get a different string. That is the
 worst shape of break there is, and it is worth naming rather than glossing.
 
@@ -79,22 +79,22 @@ It is still right, for three reasons.
 2. **The failure it removes is silent, and the one it introduces mostly is not.** Under the old
    reading, a caller who passed a format code got plausible-looking wrong output that survives review.
    Under the new one, a caller who passed a moment token gets `MM/DD/YYYY` rendered as an Excel code,
-   which for the overwhelmingly common formats is *the same string*: `MM/DD/YYYY`, `YYYY-MM-DD` and
+   which for the overwhelmingly common formats is _the same string_: `MM/DD/YYYY`, `YYYY-MM-DD` and
    `DD/MM/YYYY` all render identically under both readings, because the tokens differ only in case and
    the new grammar is case-insensitive. The formats that do change are the ones containing a time, and
    there `mm` moves from minutes to months -- visible in the first row of output.
 3. **`CHANGELOG.md` and this record are the notice**, and the version is a major. The corpus case
-   `csv-write-date-format-honored` now asserts a code where the two readings *disagree*, so the
+   `csv-write-date-format-honored` now asserts a code where the two readings _disagree_, so the
    contract is pinned rather than left to coincidence.
 
 ## Consequences
 
 - `CsvWriteOptions.dateFormat` and `Cell.numFmt` are interchangeable. `writeCsv(wb, {dateFormat:
-  cell.numFmt})` renders what the cell shows, which is what it always looked like it did.
+cell.numFmt})` renders what the cell shows, which is what it always looked like it did.
 - The CSV delimiter is validated by one function (`src/io/csv/delimiter.ts`) called from both
   `readCsv` and `writeCsvText`, closing a smaller version of the same defect: the reader refused a
   multi-character delimiter and the writer accepted anything, so `readCsv(writeCsv(wb, {delimiter:
-  '||'}))` threw on text this codec had just produced, and `{delimiter: ''}` quoted every field and
+'||'}))` threw on text this codec had just produced, and `{delimiter: ''}` quoted every field and
   emitted no separators at all.
 - A displayed-value accessor now has its date renderer waiting for it, rather than a third
   implementation to write.

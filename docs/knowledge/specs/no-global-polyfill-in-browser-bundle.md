@@ -20,7 +20,7 @@ Rationale: a spreadsheet library is a leaf dependency. Host applications and fra
 ## Requirements for this fork
 
 1. **Ship modern ESM** targeting current runtimes; assume the consumer's toolchain, or a runtime baseline, provides `Promise`, async iterators and the rest. Do not down-compile to ES5.
-2. **Zero global mutation at import.** No core-js entry modules, no polyfill side-effects, no assignment to `globalThis.*` on load. If a runtime lacks a needed built-in, that is the consumer's polyfill decision, made *before* our code runs, not ours.
+2. **Zero global mutation at import.** No core-js entry modules, no polyfill side-effects, no assignment to `globalThis.*` on load. If a runtime lacks a needed built-in, that is the consumer's polyfill decision, made _before_ our code runs, not ours.
 3. If any optional runtime-feature shim is ever offered, it must be an explicit, opt-in, separate import that the consumer chooses, never bundled into the default entrypoint.
 4. A CI guard should assert the built package produces no global side-effects on import, for example by snapshotting key global identities before and after importing the entrypoint and asserting they are unchanged.
 

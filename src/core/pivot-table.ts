@@ -8,11 +8,13 @@
 // lives in `io/xlsx/pivot.ts`.
 //
 // The source data is captured when the pivot is added: the model reads the source sheet's cells
-// once, here, so the pivot is a stable snapshot independent of later edits to the source.
+// once, here, so the pivot is a stable snapshot independent of later edits to the source's values. The
+// source *range* is the exception: a splice of the source sheet moves it, as it moves any reference.
 
 import {AuthoringError, InternalError, quoted} from '../errors.ts';
 import {tokenSet} from '../token-set.ts';
 import {encodeRect} from './address.ts';
+import {type SheetSplice, spliceFormula} from './formula-references.ts';
 import {INTERNAL} from './internal.ts';
 import {
   type CellValue,
@@ -21,6 +23,7 @@ import {
   isHyperlinkValue,
   isRichTextValue,
   isSharedFormulaValue,
+  REF_ERROR,
   richTextToPlain,
 } from './value.ts';
 import type {Worksheet} from './worksheet.ts';
@@ -178,8 +181,7 @@ const BLANK: PivotItem = {kind: 'blank'};
 export class PivotTable {
   readonly metric: PivotMetric;
   readonly sourceSheetName: string;
-  /** The `A1:C4` source range: the header row through the last data row, across the field columns. */
-  readonly sourceRef: string;
+  #sourceRef: string;
   readonly cacheFields: readonly PivotCacheField[];
   readonly records: readonly (readonly PivotRecordCell[])[];
   /** Indices into {@link cacheFields} of the row-axis, column-axis, and value fields. */
@@ -234,7 +236,7 @@ export class PivotTable {
       );
     }
     this.sourceSheetName = source.name;
-    this.sourceRef = encodeRect({
+    this.#sourceRef = encodeRect({
       top: 1,
       left: firstField.col,
       bottom: lastRow,
@@ -303,6 +305,27 @@ export class PivotTable {
     }
     this.records = records;
   }
+
+  /**
+   * The `A1:C4` source range: the header row through the last data row, across the field columns.
+   *
+   * It moves with a row or column splice of the source sheet, as Excel moves a pivot's source: an
+   * insert inside it grows it and a delete shrinks it, while a delete that takes the whole range leaves
+   * it as it was. The cache captured at construction does not change; Excel rebuilds it from this range
+   * when it opens the file.
+   */
+  get sourceRef(): string {
+    return this.#sourceRef;
+  }
+
+  /** What a splice does to the pivot's source; see `core/internal.ts`. */
+  readonly [INTERNAL]: PivotTableInternals = {
+    spliceSource: (edit) => {
+      if (edit.sheet.toLowerCase() !== this.sourceSheetName.toLowerCase()) return;
+      const moved = spliceFormula(this.#sourceRef, edit.sheet, edit);
+      if (moved !== REF_ERROR) this.#sourceRef = moved;
+    },
+  };
 
   /** The value field's header name, used to label the aggregated data column ("Sum of Amount"). */
   get valueFieldName(): string {
@@ -488,4 +511,10 @@ function scalarOf(value: CellValue): PivotItem {
     return value.result === undefined ? BLANK : scalarOf(value.result);
   }
   return BLANK;
+}
+
+/** What the library's own machinery may do to a {@link PivotTable}; reached as `pivot[INTERNAL]`. */
+export interface PivotTableInternals {
+  /** Move the source range through a row or column splice, when the splice is of the source sheet. */
+  spliceSource(edit: SheetSplice): void;
 }

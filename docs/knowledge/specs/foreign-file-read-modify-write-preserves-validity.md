@@ -16,10 +16,10 @@ plausible.
 
 > Spec note rather than a corpus case: faithfully reproducing this needs a specific foreign-authored
 > fixture exhibiting the inconsistency, and the harvested attachments for these reports are no longer
-> available. The durable *requirement* is recorded here; when a concrete corrupting fixture surfaces
+> available. The durable _requirement_ is recorded here; when a concrete corrupting fixture surfaces
 > it should be promoted into a corpus case under this spec. The general "spec-built workbook survives
 > mutate-then-write" direction is already locked by `themed-workbook-mutate-write-stays-valid`; what
-> is distinct here is a *foreign* source with parts the reader under-models.
+> is distinct here is a _foreign_ source with parts the reader under-models.
 
 ## Desired behavior
 

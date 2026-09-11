@@ -571,7 +571,8 @@ addPivotTable(options: PivotTableOptions): PivotTable;
 ```
 
 Add a pivot table to this (destination) sheet, summarising a source sheet's data. The source is
-read once, now, so the pivot is a snapshot: later edits to the source do not change it. The
+read once, now, so the pivot is a snapshot: later edits to the source's values do not change it,
+while a row or column splice of the source sheet moves its [`PivotTable.sourceRef`](./pivot-tables.md#pivottablesourceref). The
 supported shape (one summed value field, at least one row and column field) is enforced here.
 
 **Throws:** [`AuthoringError`](./errors.md#authoringerror) if the metric, fields, or source shape are unsupported.
@@ -869,8 +870,9 @@ silently becomes a no-op. Cells carry their full style to the shifted position, 
 shift with the rows they cover.
 
 Formulas move with the rows as Excel moves them: a reference to this sheet, in any sheet's formula,
-a defined name, a data validation or a conditional format, follows the row it names, and one to a
-deleted row becomes `#REF!`. What the inserted rows carry is written against the sheet after the
+a defined name, a data validation, a conditional format or a table's column formulas, follows the
+row it names, and one to a deleted row becomes `#REF!`. An authored pivot drawing from this sheet
+has its source range moved the same way. What the inserted rows carry is written against the sheet after the
 edit and is not moved.
 
 **Throws:** `RangeError` if `start` is not a positive integer or `count` is negative.

@@ -9,7 +9,7 @@ could enable that would add real safety without paying for a backlog of pre-exis
 violations? The gates were already green at the strict bar CLAUDE.md §2 mandates
 (`strict` plus the seven strict-adjacent `tsc` flags, Biome `recommended`). The audit
 measured each candidate by actually running it against the tree rather than reasoning
-about it, and sorted candidates by *current violation count*. A rule that fires zero
+about it, and sorted candidates by _current violation count_. A rule that fires zero
 times today locks in a guarantee at zero code cost; one that fires hundreds of times
 is a refactor backlog wearing a config toggle.
 
@@ -23,7 +23,7 @@ enabling it changes no existing code. It only prevents a future regression:
 - **`tsc` `noUncheckedSideEffectImports: true`** catches a broken or typo'd
   side-effect import (`import './x'`) instead of letting it resolve to nothing.
 - **Biome `nursery/noFloatingPromises: error`** enforces that every promise is
-  awaited. This is the single highest-value correctness rule for *this* library:
+  awaited. This is the single highest-value correctness rule for _this_ library:
   the reader and writer paths are async-heavy, and a dropped `await` is exactly the
   class of bug that survives unit tests but corrupts streaming output. Caveat noted:
   it is a `nursery` (still-stabilizing) rule; if a false positive ever appears, the
@@ -41,7 +41,7 @@ Considered and **declined.** Enabling it (on the build config, which already emi
 `io/xlsx/` modules, and 20 of the 26 fall on one hotspot: the `REL` table in
 `relationships.ts`, which derives OPC relationship-type URIs from the `NS` table via
 template literals (`` `${NS.docRels}/worksheet` ``). `isolatedDeclarations` cannot
-infer those, and every way to satisfy it there is a *downgrade*:
+infer those, and every way to satisfy it there is a _downgrade_:
 
 1. annotating `REL: Record<…, string>` loses the exact-URI literal types the
    `as const` currently guarantees;
@@ -50,7 +50,7 @@ infer those, and every way to satisfy it there is a *downgrade*:
    derivation those tables exist for.
 
 The value `isolatedDeclarations` offers, a guaranteed-correct, fast-to-emit
-*published* `.d.ts`, is already met here by other means: the public API produces
+_published_ `.d.ts`, is already met here by other means: the public API produces
 zero findings and is independently pinned by the `Expect<Equal>` type-tests in
 `src/type-tests/` and the docs-from-barrel generator ([ADR 0006](./0006-docs-from-types.md)).
 The performance argument (parallel declaration emit) is nil for a 97-file library that
@@ -58,10 +58,10 @@ builds instantly, and today's inference-based emit already works. So the cost la
 internal plumbing where the benefit doesn't, and contorts the DRY constant tables to
 satisfy a check whose payoff is already covered.
 
-This is the inverse of the three checks we *did* adopt: those lock in a guarantee at
+This is the inverse of the three checks we _did_ adopt: those lock in a guarantee at
 zero code cost. `isolatedDeclarations` would make the code worse to satisfy a
 redundant check, the opposite of CLAUDE.md §5's "harder, better thing", since here
-the better thing is *not* contorting `relationships.ts`.
+the better thing is _not_ contorting `relationships.ts`.
 
 ## Consequences
 

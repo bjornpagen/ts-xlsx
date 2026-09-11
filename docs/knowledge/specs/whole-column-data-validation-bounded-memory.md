@@ -20,7 +20,7 @@ not merely a performance nit.
 
 - Reading a workbook whose validations cover whole columns, or any large or multi-part `sqref`,
   completes in **bounded time and memory**, independent of how many cells the ranges nominally
-  cover. Memory scales with the number of *rules*, not the number of *covered cells*.
+  cover. Memory scales with the number of _rules_, not the number of _covered cells_.
 - A data validation is retained as a **rule associated with its ranges**, so the `sqref` is kept
   as ranges rather than expanded to an entry per cell. Lookups ("does this cell have a validation?")
   resolve against the ranges.

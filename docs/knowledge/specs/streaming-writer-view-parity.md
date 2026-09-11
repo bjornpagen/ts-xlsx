@@ -6,7 +6,7 @@ Cluster: streaming
 
 A caller writes a workbook through the streaming writer, adds a worksheet, and then, because the
 split position is computed dynamically and is not known at the moment the sheet is created, assigns
-the worksheet's view configuration, say a frozen split at column 3, row 4, *after* the worksheet
+the worksheet's view configuration, say a frozen split at column 3, row 4, _after_ the worksheet
 already exists. The buffered, in-memory writer honors both paths: views passed as a construction
 option and views set on the property afterward. The streaming writer does not. Its worksheet view
 configuration is fixed at creation time and cannot be changed later, so the natural
@@ -17,14 +17,14 @@ configuration is fixed at creation time and cannot be changed later, so the natu
 > (`Cannot set property views of #<WorksheetWriter> which has only a getter`) rather than accepting
 > and then dropping the value. So there is no silent wrong-output to baseline: the after-creation
 > authoring path does not exist at all. Views supplied as an `addWorksheet(name, { views })`
-> construction option *do* work and emit a correct `<pane>`, verified. The durable value is the
+> construction option _do_ work and emit a correct `<pane>`, verified. The durable value is the
 > parity requirement and the API-shape decision, which a corpus case can lock once the property is
 > settable.
 
 ## Desired behavior
 
 - **Writer parity.** The streaming writer and the buffered writer produce the same sheet-view result
-  for a given view configuration, regardless of *when* the caller supplies it. Assigning `views`
+  for a given view configuration, regardless of _when_ the caller supplies it. Assigning `views`
   after `addWorksheet` must be honored, exactly as passing it at construction time is, up until the
   worksheet is committed. After commit the header is already serialized and the configuration is
   necessarily frozen, and that boundary should be a clear error rather than a silent drop.

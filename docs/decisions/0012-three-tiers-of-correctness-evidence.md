@@ -17,8 +17,8 @@ part, so **write→read was a perfect fixed point** and every round-trip case st
 green. The structural facts (`inspectPackage`) were green too, because they were
 partitioned by package part and each part was internally valid. And the schema oracle
 was green, because each part conforms to ECMA-376 in isolation. The rule Excel
-enforces, that the header cells must exist and carry the column names, is a *cross-part
-behavioral* rule the written spec does not state. The only thing that rejected the
+enforces, that the header cells must exist and carry the column names, is a _cross-part
+behavioral_ rule the written spec does not state. The only thing that rejected the
 file was Excel Desktop.
 
 The lesson is not "add one more fact." It is that a green corpus was systematically
@@ -36,12 +36,12 @@ Write with our writer, read with our reader, assert the model survives. This is 
 **fixed-point property of our own code.** It proves the encoder and decoder share a
 model; it proves nothing about whether that model matches Excel.
 
-- **Catches:** *unilateral* bugs, where one half is malformed and the other half strict
+- **Catches:** _unilateral_ bugs, where one half is malformed and the other half strict
   about it (a dropped field, an unparseable emission).
-- **Structurally blind to:** *correlated* bugs, where writer and reader are wrong in
+- **Structurally blind to:** _correlated_ bugs, where writer and reader are wrong in
   compensating directions or ignore the same field. These are not a rare tail: writer
   and reader for a feature are typically authored together from one mental model, so
-  their blind spots are correlated *by construction*. The table bug is the canonical
+  their blind spots are correlated _by construction_. The table bug is the canonical
   instance.
 - **Cheapest, highest volume, weakest.** Sufficient for **intra-model** invariants (a
   value survives, a style does not bleed) and nothing more.
@@ -54,7 +54,7 @@ code, so it cannot share our blind spot.
 
 - **Catches:** everything the written standard (ECMA-376) states, meaning schema validity,
   OPC part structure, enums, child-element ordering, per-part semantic rules.
-- **Ceiling:** it enforces what the spec *says*, not what Excel *does*. Excel's real
+- **Ceiling:** it enforces what the spec _says_, not what Excel _does_. Excel's real
   acceptance rules are a **superset** of the spec, and many are cross-part invariants
   the spec never spells out. The table bug passed the oracle.
 - Required for any **single-part conformance** claim; round-trip is not enough there.
@@ -76,21 +76,21 @@ experience is not. It is captured as provenance
 
 **Match the tier to the invariant, and record which tier witnessed it.**
 
-| Invariant class | Lowest sufficient tier | Example |
-| --- | --- | --- |
-| Intra-model (value/style survives a round-trip) | Tier 1 | a number keeps its type; a font does not bleed |
-| Single-part conformance (well-formed, ordered, valid enum) | Tier 2 | `CT_Worksheet` child order; valid `patternType` |
-| Cross-part correspondence / Excel quirk | Tier 3 (seed) plus a Tier-2 seam fact (lock) | table columns against header cells |
+| Invariant class                                            | Lowest sufficient tier                       | Example                                         |
+| ---------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------- |
+| Intra-model (value/style survives a round-trip)            | Tier 1                                       | a number keeps its type; a font does not bleed  |
+| Single-part conformance (well-formed, ordered, valid enum) | Tier 2                                       | `CT_Worksheet` child order; valid `patternType` |
+| Cross-part correspondence / Excel quirk                    | Tier 3 (seed) plus a Tier-2 seam fact (lock) | table columns against header cells              |
 
 A cross-part invariant is **seeded** by one Tier-3 verification (prove Excel enforces
-it) and then **locked** by a corpus fact whose *shape is the relationship itself*, so
+it) and then **locked** by a corpus fact whose _shape is the relationship itself_, so
 regressions are caught in CI without re-opening Excel. The header fix did exactly this:
 one Excel-Desktop verification, then two new seam facts (`cellText`, `columnNames`)
 that phrase the correspondence.
 
 ### Corollary: the corpus is partitioned by part, and that is a blind spot
 
-`inspectPackage` describes each package part well and the relationships *between* parts
+`inspectPackage` describes each package part well and the relationships _between_ parts
 barely. Any invariant spanning two parts is unstateable until a fact is deliberately
 built to cross the seam. An audit of the current vocabulary (2026-07-21) found these
 **unstated cross-part seams** Excel is known or expected to enforce:
@@ -110,13 +110,13 @@ built to cross the seam. An audit of the current vocabulary (2026-07-21) found t
 - ~~Shared-formula master against slaves (`formulas` holds `<f>` text only, not `t="shared" si= ref=`).~~
   **Closed** by the `sharedFormulas` fact and
   `shared-formula-master-slave-geometry-structural.case.ts`, which lock the master/slave
-  `si`/`ref` geometry structurally. The `ref` for a *non-contiguous* clone set
+  `si`/`ref` geometry structurally. The `ref` for a _non-contiguous_ clone set
   is also **closed**, verified benign against Excel (ADR 0013) and locked by
   `shared-formula-sparse-ref-matches-excel-canonical.case.ts` (see hazard below).
 - Comment → VML shape → `legacyDrawing` rel.
 
 **Structural ceiling:** `worksheetRels` reads only `sheet1.xml.rels`, and tables and drawings
-are not tied to an owning sheet. Every *multi-sheet* cross-part chain and every
+are not tied to an owning sheet. Every _multi-sheet_ cross-part chain and every
 "reference-in-sheet → rel → target part" resolution is unstateable until that is lifted.
 It is the precondition for several rows above, so it is the highest-leverage fix.
 
@@ -127,10 +127,10 @@ the same way: Tier-3 seed, then a seam fact that locks it.
 
 > **Seeded 2026-07-21 via the Excel-oracle harness ([ADR 0013](./0013-excel-desktop-as-automatable-tier3-oracle.md)); locked the same day.**
 > **Verdict: BENIGN. The presumed fix direction was wrong.** Excel treats the shared-formula
-> `ref` as a *bounding-box hint*, not an instruction to materialize the interior. On Excel 16.0
+> `ref` as a _bounding-box hint_, not an instruction to materialize the interior. On Excel 16.0
 > build 20131 it opened the `ref="B1:D5"` package **without repair**, did **not** auto-fill the
 > empty interior cells, and **re-saved a byte-structurally identical group** (same `ref="B1:D5"`,
-> same `si="0"`, the same two clones). ts-xlsx's output *is* Excel's own canonical form, so the
+> same `si="0"`, the same two clones). ts-xlsx's output _is_ Excel's own canonical form, so the
 > two candidate fixes below (split into contiguous runs, or degrade clones) would make ts-xlsx
 > **diverge from Excel**. Sidecar: `test/corpus/fixtures/excel-oracle/shared-formula-sparse-ref.json`.
 > **Locked (Phase 4):** `shared-formula-sparse-ref-matches-excel-canonical.case.ts` is the Tier-2
@@ -142,7 +142,7 @@ the same way: Tier-3 seed, then a seam fact that locks it.
 Discovered while closing the shared-formula seam (2026-07-21). `planSharedFormulas`
 (`src/io/xlsx/worksheet-xml.ts`) computes a master's `ref` as the **bounding rectangle**
 of the master plus all its clones. For the common fills, down a column or across a row,
-that rectangle *is* the clone set, and the emitted geometry is exact. But when the clones
+that rectangle _is_ the clone set, and the emitted geometry is exact. But when the clones
 are non-contiguous, the rectangle covers cells that were never cloned:
 
 ```
@@ -151,7 +151,7 @@ master B1, clones B2 + D5  →  <f t="shared" ref="B1:D5" si="0">…</f>
 
 `B1:D5` is fifteen cells; only three (`B1`, `B2`, `D5`) carry a `<c>`. The other twelve are
 absent from the sheet. The hazard is that the shared-formula `ref` is, to some consumers, an
-*instruction to materialize the formula across the whole rectangle*: **LibreOffice** auto-fills
+_instruction to materialize the formula across the whole rectangle_: **LibreOffice** auto-fills
 every cell in `ref` with the translated formula, so those twelve empty cells would silently
 gain a formula the caller never wrote. This is the same shape as the merge-repair bug, where the
 writer emits geometry a consuming app interprets more aggressively than we intended, which is
@@ -160,7 +160,7 @@ why it is called out rather than left implicit.
 The two candidate fixes this framing implied were **split the group into maximal contiguous runs**
 (each its own master, each needing the formula **translated** to its new anchor, which is
 R1C1/relative-offset machinery we do not yet have) and **degrade non-fill clones to standalone
-`<f>` cells**. Both are real work, and crucially the seed proved neither is *correct*: Excel keeps
+`<f>` cells**. Both are real work, and crucially the seed proved neither is _correct_: Excel keeps
 the group whole and the over-wide `ref` intact, so either would make ts-xlsx diverge from the
 application it must match. The right move was to seed the Tier-3 question before touching the
 writer, and the seed's answer was "the writer is already right." That is why the resolution is a
@@ -171,7 +171,7 @@ schema validator passed the analogous table bug), so the probe file (master `B1`
 `D5`, `ref="B1:D5"`) was emitted, opened headless in Excel Desktop, and re-saved via the
 Excel-oracle harness ([ADR 0013](./0013-excel-desktop-as-automatable-tier3-oracle.md)): probe
 `tools/excel-oracle/probes/shared-formula-sparse-ref.json` produced sidecar
-`test/corpus/fixtures/excel-oracle/shared-formula-sparse-ref.json`. Excel *ignored* the empty interior
+`test/corpus/fixtures/excel-oracle/shared-formula-sparse-ref.json`. Excel _ignored_ the empty interior
 (no auto-fill) and re-saved the identical group, and the verdict box above records the result. The seam
 fact `shared-formula-sparse-ref-matches-excel-canonical.case.ts` then locked that `ref`-to-clone-set
 geometry so CI catches any regression without re-opening Excel.

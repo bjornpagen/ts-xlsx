@@ -11,7 +11,7 @@ to survive a read/write round-trip rather than being dropped. Today the library 
 (raster media with cell anchors) but has no concept of a native drawing shape, so shapes authored
 elsewhere are lost and there is no API to add one.
 
-> The *preserve-on-round-trip* half is already locked as a corpus case
+> The _preserve-on-round-trip_ half is already locked as a corpus case
 > (`vector-shape-drawing-survives-roundtrip`, currently known-open): a no-op load-then-save must not
 > drop an `xdr:sp` shape. This note captures the broader, still-unbuilt **authoring** API and the
 > read-back model that make shapes first-class rather than merely passed-through.

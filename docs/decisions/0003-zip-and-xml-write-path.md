@@ -19,7 +19,7 @@ forces two dependency decisions that `STRATEGY.md` left open:
 ## Decision
 
 - **Zip: `fflate`.** A single, tiny (~8 kB), zero-dependency, actively-maintained,
-  ESM-first library that does both deflate *and* inflate. It replaces
+  ESM-first library that does both deflate _and_ inflate. It replaces
   `archiver` + `unzipper` + `jszip` outright. The writer uses `zipSync`; the reader
   (later slice) will use `fflate`'s streaming inflate, which is where the
   hostile-input guards (bounded output, no zip-bomb naïveté) will live.
@@ -28,7 +28,7 @@ forces two dependency decisions that `STRATEGY.md` left open:
   escaping of text and attributes is the only hard requirement, and it is security-
   relevant (an unescaped `<`/`&`/`"` produces a malformed package a consumer rejects),
   so it is centralised and unit-tested rather than sprinkled inline.
-- **The XML *parser* choice stays deferred** to the reader slice (`fast-xml-parser`
+- **The XML _parser_ choice stays deferred** to the reader slice (`fast-xml-parser`
   against a lean SAX). The writer does not need it, and deferring keeps this slice to
   exactly one new package (`fflate`).
 
@@ -45,7 +45,7 @@ forces two dependency decisions that `STRATEGY.md` left open:
 
 ## Update (2026-07-20): the streaming writer, and a settled attribute-serialisation vocabulary
 
-The deferred streaming *writer* is built (`src/io/xlsx/write-stream.ts`):
+The deferred streaming _writer_ is built (`src/io/xlsx/write-stream.ts`):
 `WorkbookStreamWriter`/`WorksheetStreamWriter`/`StreamedRow` author a package incrementally,
 flushing each committed row and evicting its cell graph so peak memory tracks the rows in flight,
 not the whole sheet. It uses `fflate`'s streaming `Zip`/`ZipDeflate` with incremental CRC-32, the
@@ -60,7 +60,7 @@ spellings scattered across the serialisers were unified into `boolAttr(name, val
 `attr(name, value?)` in `xml.ts`. Each returns a leading-space ` name="…"` or `''`, so an emitter
 states an attribute once and absence costs nothing. One subtlety worth keeping: when two passes emit
 paired markup for the same logical element (a data-bar rule's classic body and its `<extLst>` x14
-extension), they must agree on the shared synthetic key by *identity*, not by walking the rule list
+extension), they must agree on the shared synthetic key by _identity_, not by walking the rule list
 in lock-step. A `ReadonlyMap<rule, guid>` built once and read by both passes replaces the pair of
 parallel counters whose only guarantee was that they iterated in the same order, which is the
 fragile kind of coupling that survives until someone reorders one pass.

@@ -13,8 +13,8 @@ authors declare "unless overridden, cells in this sheet use this style" and then
 deviations.
 
 > Spec note, not a corpus case: this is a missing authoring surface, not a current-behavior bug. It is
-> the umbrella over two facet-specific notes already recorded, a default *font*
-> (`default-font-workbook-worksheet-level`) and default *cell protection*
+> the umbrella over two facet-specific notes already recorded, a default _font_
+> (`default-font-workbook-worksheet-level`) and default _cell protection_
 > (`worksheet-default-cell-protection-unlock`), generalizing the same defaulting mechanism to the
 > whole style surface. It becomes corpus-covered once the surface exists and a case can assert a
 > default-styled sheet renders correctly with no per-cell style stamping.
@@ -47,7 +47,7 @@ deviations.
 - Granularity: worksheet-level only, or also a workbook-level default? The request is phrased at
   worksheet level, but the underlying Normal-style default is workbook-wide, so likely both, with
   worksheet overriding workbook.
-- Which facets are defaultable at each level? Is a default *border* or *fill* meaningful at the
+- Which facets are defaultable at each level? Is a default _border_ or _fill_ meaningful at the
   `<col>` and `<sheetFormatPr>` level, or only font, numFmt and alignment, with fill and border
   requiring a real per-column style span?
 - Precedence order when workbook default, worksheet default, column style, row style, and cell style

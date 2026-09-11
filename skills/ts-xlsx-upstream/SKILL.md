@@ -5,7 +5,7 @@ description: Report a ts-xlsx (@shbernal/ts-xlsx) bug, gap, or wrong output to i
 
 # Reporting a ts-xlsx problem upstream
 
-You are in a project that *uses* `@shbernal/ts-xlsx`, not the project that builds it.
+You are in a project that _uses_ `@shbernal/ts-xlsx`, not the project that builds it.
 This skill is how a defect you hit here becomes a permanent regression test there.
 
 The library's maintainers turn reports with a minimal reproduction into corpus cases,
@@ -20,12 +20,12 @@ builds its own input.** Everything below is in service of that.
 Catch the error and read `code` — the taxonomy is deliberately coarse and each answer
 means something different about whose bug it is.
 
-| `error.code`          | Whose bug        | Report it?                                                     |
-| --------------------- | ---------------- | -------------------------------------------------------------- |
-| `internal`            | **ts-xlsx**      | Always. The library says so itself in the message.              |
-| `unsupported-format`  | usually the file | Only if the file opens **cleanly in Excel**. Then it's our gap. |
-| `malformed-input`     | usually the file | Same test: clean in Excel but rejected here means it's ours.    |
-| `authoring`           | usually you      | Only if the document it refused is one Excel can express.       |
+| `error.code`         | Whose bug        | Report it?                                                      |
+| -------------------- | ---------------- | --------------------------------------------------------------- |
+| `internal`           | **ts-xlsx**      | Always. The library says so itself in the message.              |
+| `unsupported-format` | usually the file | Only if the file opens **cleanly in Excel**. Then it's our gap. |
+| `malformed-input`    | usually the file | Same test: clean in Excel but rejected here means it's ours.    |
+| `authoring`          | usually you      | Only if the document it refused is one Excel can express.       |
 
 Not every defect throws. These are ours too, and are worth reporting:
 
@@ -34,7 +34,7 @@ Not every defect throws. These are ours too, and are worth reporting:
 - Types that make correct code fail to compile, or admit code that throws at runtime.
 - Documented behaviour that does not match observed behaviour.
 
-If the problem is that ts-xlsx does not *have* a feature, that is still worth filing —
+If the problem is that ts-xlsx does not _have_ a feature, that is still worth filing —
 as a feature request rather than a bug.
 
 ## 2. Collect the facts
@@ -54,7 +54,7 @@ salaries, customer lists, and unreleased numbers. Treat every file in this repo 
 confidential unless the user tells you otherwise, and never upload one to a public
 tracker — including "just a screenshot of the sheet".
 
-Instead, write a self-contained script that *constructs* its input and fails:
+Instead, write a self-contained script that _constructs_ its input and fails:
 
 ```ts
 import {Workbook, writeXlsx, readXlsx} from '@shbernal/ts-xlsx';
@@ -72,13 +72,13 @@ Then cut it down: remove rows, styles, sheets, and options one at a time, re-run
 after each cut, until removing anything more makes the failure disappear. What is left
 is the report.
 
-If the failure only reproduces with a *specific file* you cannot share, do not ask for
+If the failure only reproduces with a _specific file_ you cannot share, do not ask for
 permission to share it — file without the file. Say exactly that in the report and describe
 the structural feature you believe is responsible (a shared formula, a pivot cache, an
 inline string, a particular namespace prefix). A maintainer can usually synthesize a file
 from that description; they can never unsee an attachment.
 
-If you need a file attached, build one: reproduce the *structure* you suspect in a workbook
+If you need a file attached, build one: reproduce the _structure_ you suspect in a workbook
 you generate, with invented values. A synthesized file is always safe to attach. A redacted
 one is not yours to judge — redaction fails quietly, and a public tracker is permanent.
 
@@ -105,7 +105,7 @@ file from this project is attached. When you cannot manage a self-contained repr
 the answer is a thinner report — the prose description from step 3 — not a question and not
 an attachment.
 
-`gh` defaults to the *current* repository — which here is the consumer's, not ts-xlsx's.
+`gh` defaults to the _current_ repository — which here is the consumer's, not ts-xlsx's.
 Always pass `--repo shbernal/ts-xlsx` explicitly, or you will file the bug into the wrong
 tracker.
 
@@ -121,31 +121,39 @@ issue forms, so mirror its sections in the body file so both routes land the sam
 
 ````markdown
 ### ts-xlsx version
+
 <x.y.z>
 
 ### Node version
+
 <vXX.Y.Z>
 
 ### Error code and class
-<code> / <ClassName>   (or: no error thrown — wrong output)
+
+<code> / <ClassName> (or: no error thrown — wrong output)
 
 ### What happened
+
 <observed>
 
 ### What should have happened
+
 <expected, and why you believe that — a spec clause, Excel's own behaviour, or the docs>
 
 ### Minimal reproduction
+
 ```ts
 <the script from step 3>
 ```
 
 ### Error output
+
 ```
 <verbatim message and stack>
 ```
 
 ### Attached file
+
 <none / synthesized — describe how it was generated>
 ````
 

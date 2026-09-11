@@ -9,7 +9,7 @@ forcing consumer" clause of ADR 0016 (and the parallel gate in ADR 0014) for the
 
 ## Context
 
-ADRs 0013/0014/0016 share one governing move: an authoring API stays *deferred* until a concrete
+ADRs 0013/0014/0016 share one governing move: an authoring API stays _deferred_ until a concrete
 **forcing consumer** exists, meaning a caller whose real use pins down the API shape, the invariants, and
 the edge cases. The reasoning (CLAUDE.md §4, no premature abstraction) is sound: you cannot validate the
 ergonomics of a write path in a vacuum, and a guessed-at API is a guaranteed future break. For VBA
@@ -24,7 +24,7 @@ It satisfies its underlying requirement by a different, and arguably stronger, m
 ## Decision
 
 1. **A crafted fixture under the strict test suite is an accepted substitute for a forcing consumer.**
-   The gate exists to guarantee an authoring API is *validated against real use before it sets*. A
+   The gate exists to guarantee an authoring API is _validated against real use before it sets_. A
    fixture that must survive read→write→re-read byte-faithfully, and where feasible pass Excel's own
    open/repair check or the OOXML validator (ADR 0012/0013 tiers), exercises that API at least as
    hard as a casual caller would. Feature work no longer waits on an external consumer appearing.
@@ -34,7 +34,7 @@ It satisfies its underlying requirement by a different, and arguably stronger, m
    - **§2.1 attach-blob (this slice, done):** `Workbook.vbaProjectBytes`, a get/set accessor pair over
      the raw `vbaProject.bin`. The getter returns a defensive copy of the attached blob (or `undefined`
      for a macro-free workbook); the setter attaches or replaces it, or removes the project when set to
-     `undefined`. A set is **validated fail-closed** (`parseVbaProject` must accept the bytes *before*
+     `undefined`. A set is **validated fail-closed** (`parseVbaProject` must accept the bytes _before_
      any state changes) so a malformed blob is rejected with `VbaParseError` and never half-applied.
      Replacing or removing drops the previous blob's whole closure, so a now-stale `vbaProjectSignature`
      over the old bytes is discarded rather than left advertising a broken signature. The attached
@@ -44,12 +44,12 @@ It satisfies its underlying requirement by a different, and arguably stronger, m
    - **§2.3 first-class authoring (in progress):** synthesize a valid `vbaProject.bin` from
      edited or created module source. This makes `VbaProject` (or a sibling authoring API) an **emission
      authority**, which reverses ADR 0016's "read-only view, not a source of truth" core. It therefore
-     gets its own ADR amending 0016 when the *authoring API* lands (§2.3d), not a silent extension of
+     gets its own ADR amending 0016 when the _authoring API_ lands (§2.3d), not a silent extension of
      this one. It is built as internal encode primitives first, each provable in isolation before any
      public shape changes:
      - **§2.3a CFB writer (`writeCompoundFile`, done):** the encode counterpart to `cfb.ts`, turning a
        hierarchy of storages and streams into a v3 [MS-CFB] container. It emits each storage's children
-       as the name-ordered balanced tree a host *navigates*, not just the linear scan our own reader
+       as the name-ordered balanced tree a host _navigates_, not just the linear scan our own reader
        uses, so the modules resolve under the `VBA` storage in Excel. Proven by re-encoding a real 156 KB
        Excel-authored project stream-identical, by an independent directory-tree walk reaching every
        entry, and by `parseVbaProject` decoding the result. Internal to `src/vba`; not on the public
@@ -79,16 +79,16 @@ It satisfies its underlying requirement by a different, and arguably stronger, m
        shift: the workbook now emits macros authored from source, not only bytes a read preserved**,
        amending ADR 0016 (decisions 2 and 5). Verified through the full public path (`setVbaProject`,
        then `writeXlsx`, then Excel opens clean). The read view and the preserved-bytes emission authority
-       for *un-re-authored* projects are unchanged.
+       for _un-re-authored_ projects are unchanged.
 
 3. **The read/attach path stays the safety floor.** §2.1 leaves ADR 0016's read invariant intact:
-   preservation is still the sole emission authority, and `vbaProjectBytes` simply lets a caller *supply*
+   preservation is still the sole emission authority, and `vbaProjectBytes` simply lets a caller _supply_
    those preserved bytes instead of only receiving them from a read. Nothing about the read view or the
    byte-faithful passthrough regresses.
 
 4. **Executing VBA remains permanently out of scope** (ADR 0013): running macros needs a live host and
-   is never a document-library feature. "Authoring" here means *producing valid bytes*, not *running
-   them*.
+   is never a document-library feature. "Authoring" here means _producing valid bytes_, not _running
+   them_.
 
 ## Consequences
 
@@ -96,7 +96,7 @@ It satisfies its underlying requirement by a different, and arguably stronger, m
   accessor pair. `dst.vbaProjectBytes = src.vbaProjectBytes` copies macros between workbooks; setting
   `undefined` demotes an `.xlsm` to a plain package; an externally-produced `.bin` imports in one line.
   All validated fail-closed, all fixture-backed.
-- **Scope discipline preserved, not abandoned.** The gate's *intent*, not setting an unvalidated API,
+- **Scope discipline preserved, not abandoned.** The gate's _intent_, not setting an unvalidated API,
   still binds. It is now met by fixtures plus the strict suite rather than by waiting. Slices that would
   bound coverage still say so; nothing ships un-green.
 - **The big reversal is still ahead and still gets its own ADR.** §2.3 making an authoring API the

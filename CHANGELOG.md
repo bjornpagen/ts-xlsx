@@ -51,9 +51,11 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   alike and grows a range it lands in; a delete turns what it takes into `#REF!` and shrinks a range it
   cuts into; whole columns ignore a row edit, and 3-D spans, external references, structured references
   and strings are left alone. A shared-formula clone the edit sets apart from its master, or whose
-  master it deletes, becomes a plain formula. What an insert brings in is not rewritten. Table
-  formulas and pivot sources still do not move. A hyperlink's in-workbook location does not move
-  either, and neither does Excel's.
+  master it deletes, becomes a plain formula. What an insert brings in is not rewritten. A table's
+  calculated column formula and totals row formula move too, and so does an authored pivot's
+  `sourceRef`, which grows and shrinks with the lines it spans and stays as written when a delete takes
+  all of it. A loaded pivot's cache and a chart's series do not move yet. A hyperlink's in-workbook
+  location does not move either, and neither does Excel's.
 
 - **BREAKING: `duplicateRow` copies formulas as Excel copies a row.** A copy used to carry the source's
   formula text and cached result, so a line-item row `=B5*C5` duplicated down showed the first line's
@@ -194,7 +196,7 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   holds a number.
 
 - **A Strict workbook could not be written back out.** `writeXlsx` threw `InternalError: two package
-  parts claim the path "docProps/app.xml"` for any workbook read from an ISO/IEC 29500 Strict
+parts claim the path "docProps/app.xml"` for any workbook read from an ISO/IEC 29500 Strict
   package, because Strict names the app-properties relationship `extendedProperties` and the reader
   kept it as an unmodelled part. It is now recognised, and the workbook is written as Transitional.
 
@@ -265,7 +267,7 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   Inserting empty rows at row 1048576 (`spliceRows(1048576, 0, [], [])`) or duplicating a
   height-only last row left a line past the grid behind with the same result, a replacing
   `duplicateRow` near the bottom wrote some copies before throwing, and `spliceColumns(16384, 0, [],
-  [])` reported success for columns that cannot exist.
+[])` reported success for columns that cannot exist.
 
 - **`freeze`, `addRows` and `addColumns` no longer apply half of a refused call.** A `freeze` with
   nothing left to scroll set the frozen state before throwing, and a row wider than the grid wrote
@@ -440,7 +442,6 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   `<fill/>` took none. Each later `fillId` then resolved to a neighbouring fill. Exactly one slot is
   now committed per `<fill>`, from its first body; a body outside any `<fill>` is ignored.
 
-
 ## [3.1.0] — 2026-09-04
 
 Twenty-one fixes, most of them on the read path, and most of them cases where a file this
@@ -491,7 +492,7 @@ right. But the version number will not warn you the way it is supposed to, so th
   now renders what the cell shows. It did not: the CSV writer had its own case-sensitive token table
   in which the month is `MM` and lowercase `mm` is minutes, so passing this library's own format
   codes emitted `2024-45-dd` for every date cell, with no throw and no warning. The break is in the
-  *meaning* of the option rather than its type, so a consumer passing `"MM/DD/YYYY"` gets a different
+  _meaning_ of the option rather than its type, so a consumer passing `"MM/DD/YYYY"` gets a different
   string instead of a compile error -- but the common formats are unaffected, because the tokens
   differ from the codes only in case and a format code is case-insensitive. The formats that change
   are those containing a time, where `mm` moves from minutes to months. See
@@ -558,7 +559,7 @@ right. But the version number will not warn you the way it is supposed to, so th
   for the VBA project and nowhere else. The three failures are graded. A workbook part it cannot find
   opens nothing. A pool it cannot find is silent, and every `t="s"` cell reads as the empty string. A
   stylesheet it cannot find is worse than silent, because the date test reads `numFmt` off the
-  resolved style to tell `45000` from `2023-03-15`, so an empty style table changes cell *types* with
+  resolved style to tell `45000` from `2023-03-15`, so an empty style table changes cell _types_ with
   no error anywhere. Part names are also compared case-insensitively now, as OPC requires: a document
   at `XL/Workbook.xml` was reported as not a workbook, and an `<Override PartName>` cased differently
   from its zip entry fell through to `application/octet-stream` for a part being preserved verbatim.
@@ -726,7 +727,7 @@ right. But the version number will not warn you the way it is supposed to, so th
   blamed the caller.
 
 - **`workbook.properties.created` set to an Invalid Date threw a bare `RangeError: Invalid time
-  value`**, naming neither the property nor the document; a year outside 0000-9999 did not throw at
+value`**, naming neither the property nor the document; a year outside 0000-9999 did not throw at
   all and wrote a timestamp no `dcterms:W3CDTF` admits.
 
 - **The CSV writer accepted a delimiter the CSV reader refuses.** `{delimiter: '||'}` produced text
@@ -735,7 +736,6 @@ right. But the version number will not warn you the way it is supposed to, so th
 
 - **`TableStyleElement.size` set to `NaN` was written into an `xsd:unsignedInt`** as the four
   letters.
-
 
 ## [3.0.0] — 2026-08-30
 
@@ -851,7 +851,7 @@ changes. Everything else here is a fix or an internal change.
 - **An unregistered image id is refused once, with a message naming the sheet and the role.** Two
   places checked it, and the one that could actually fire carried the worse message: "a worksheet
   anchors image id 999", which named neither. It now reads `sheet "Sales" anchors image id 999,
-  which is not registered on the workbook`, or `sets background image id 999` for the other role.
+which is not registered on the workbook`, or `sets background image id 999` for the other role.
 
 - **`StreamedSheetReader.merges` hands back a copy, as its sibling `hiddenColumns` already did.**
   Beyond the ownership question, `rows()` assigns a fresh array at the start of each iteration, so
@@ -973,7 +973,7 @@ Everything else here is a fix or an internal change. The sections below carry th
 
 - **A conditional-formatting block with no rules is omitted rather than emitted empty.**
   `CT_ConditionalFormatting` requires at least one `<cfRule>`, so `addConditionalFormatting({ref,
-  rules: []})` used to write a schema-invalid element.
+rules: []})` used to write a schema-invalid element.
 - **A non-finite row `outlineLevel` no longer hangs the writer.** The scan that derives which
   summary rows terminate a fully-collapsed group walks outward comparing outline levels; against
   `-Infinity` every comparison held, so the walk ran off the sheet and never returned. It is now
@@ -986,7 +986,7 @@ place where the library was quietly doing the wrong thing and the honest fix is 
 caller.
 
 - **Seven scalar-validation throws became native errors.** `catch (e) { if (e instanceof
-  XlsxError) }` no longer catches them. See *Changed*, first entry, for the table.
+XlsxError) }` no longer catches them. See _Changed_, first entry, for the table.
 - **`Workbook.authoredThemeXml()` is now the `Workbook.themeOverrides` getter,** and
   `parseThemeColorScheme` moved from the `/core` subpath to `/xlsx`. The package root is
   unaffected either way.
@@ -1010,7 +1010,7 @@ the seven-character literal.
   `/core`. No existing type changed shape.
 
 - **`Workbook.exportImages(sheet)` / `Workbook.importImages(sheet, images)` — carry a sheet's
-  pictures to another workbook.** An anchored image holds a media *id* into one workbook's registry,
+  pictures to another workbook.** An anchored image holds a media _id_ into one workbook's registry,
   and that id names a different picture, or none, in the next. Copying a sheet has therefore always
   left its images behind: `dst.model = src.model` is a semantic copy by design
   ([ADR-0005](docs/decisions/0005-worksheet-model-is-semantic-only.md)), and there was no affordance
@@ -1029,7 +1029,7 @@ the seven-character literal.
   same direction a `model` assignment goes.
 
   `exportImages` throws `AuthoringError` for a sheet whose image ids this workbook never registered —
-  which is what a sheet belonging to *another* workbook looks like from here. That pairs with the
+  which is what a sheet belonging to _another_ workbook looks like from here. That pairs with the
   existing write-time check, so an anchor holding a foreign media id is refused by name at both ends
   instead of being emitted as a drawing relationship pointing at media that was never written.
 
@@ -1043,12 +1043,12 @@ the seven-character literal.
 
 - **A malformed frozen-pane split no longer surfaces from the writer.** A `<pane>` whose `xSplit`
   or `ySplit` spelled a fraction, a negative, or a word was stored verbatim, though `freeze()`
-  refuses all three. The read succeeded and the *serializer* then threw a `RangeError` naming a
+  refuses all three. The read succeeded and the _serializer_ then threw a `RangeError` naming a
   column the file never mentioned. A split that is not a non-negative integer is now dropped where
   it is read, leaving the rest of the sheet view intact.
 
 - **A `<col>` span wider than the sheet no longer hangs the reader.** `<col min="1"
-  max="99999999"/>` is one line of XML that named more columns than the format has, and the
+max="99999999"/>` is one line of XML that named more columns than the format has, and the
   buffered reader walked it verbatim: roughly 16.7 million column records, twenty-five seconds,
   and then `RangeError: Map maximum size exceeded`. A denial of service on a one-line input.
   The span is now clamped to the last real column and an element wholly outside the grid is
@@ -1101,7 +1101,7 @@ the seven-character literal.
   letter `A`. Text that only resembles an escape (`_`, `_x`, `_xZZZZ_`) is untouched.
 
   The reader undoes the same convention, which is what makes the round-trip claim above true
-  and also changes how *foreign* files read. A workbook Excel authored with a control character
+  and also changes how _foreign_ files read. A workbook Excel authored with a control character
   in a cell previously read back as the literal seven-character text `_x0001_`; it now reads
   back as the character. That applies to inline strings, the shared-strings pool, rich-text
   runs, legacy note text, and the cached result of a string formula, in both the buffered and
@@ -1128,21 +1128,21 @@ the seven-character literal.
   works in the same direction: assigning a normal-view model over a frozen sheet unfreezes it
   rather than leaving a stale pane.
 
-  This is additive to `WorksheetModel`. Code that *constructs* a model literal by hand rather
+  This is additive to `WorksheetModel`. Code that _constructs_ a model literal by hand rather
   than reading one from a sheet must now supply `view` (`{}` is a normal view); code that does
   the usual `dst.model = src.model` is unaffected.
 
   The boundary is now a rule rather than a list
   ([ADR-0005 amendment](docs/decisions/0005-worksheet-model-is-semantic-only.md)): **a field
   belongs in the model when its value means the same thing on any sheet of any workbook.** By
-  that test threaded comments stay out — a comment's author is an id into the *workbook's*
+  that test threaded comments stay out — a comment's author is an id into the _workbook's_
   `persons` registry — and they are now named on the out-of-scope side instead of being absent
   from both lists.
 
 - **A foreign file spelling an OOXML boolean `"false"` is read correctly.** `xsd:boolean`
   permits `true`/`false` alongside `1`/`0`. Excel writes the digit, so five readers that
   tested the attribute by hand against `'0'` had never been caught reading the long spelling
-  as *true*: a `<col customWidth="false">` gained a width it does not have, a
+  as _true_: a `<col customWidth="false">` gained a width it does not have, a
   `<row customHeight="false">` a height, an x14 data bar's `gradient="false"` stayed a
   gradient, and a `cfRule aboveAverage="false"` read as above-average. All five now go
   through the reader's existing `boolPresent`, which has handled both spellings all along.
@@ -1152,18 +1152,18 @@ the seven-character literal.
 
 - **Six scalar-validation sites now throw native errors, as `errors.ts` says they should.** The
   taxonomy draws the line explicitly: one argument out of range, unparseable, or the wrong type is
-  a native `RangeError`/`SyntaxError`/`TypeError`, and `AuthoringError` starts where a *composite*
+  a native `RangeError`/`SyntaxError`/`TypeError`, and `AuthoringError` starts where a _composite_
   is inconsistent. Six sites were on the wrong side of it, so `catch (e) { if (e instanceof
-  XlsxError) }` caught some argument mistakes and not others, with no rule a caller could predict.
+XlsxError) }` caught some argument mistakes and not others, with no rule a caller could predict.
 
-  | What | Was | Now |
-  | --- | --- | --- |
-  | `Workbook.setDefaultFont` size / empty name | `AuthoringError` | `RangeError` |
-  | `Workbook.addTableStyle` band `size` | `AuthoringError` | `RangeError` |
-  | `readCsv` `delimiter` length | `AuthoringError` | `RangeError` |
-  | A table name's length | `AuthoringError` | `RangeError` |
+  | What                                         | Was              | Now           |
+  | -------------------------------------------- | ---------------- | ------------- |
+  | `Workbook.setDefaultFont` size / empty name  | `AuthoringError` | `RangeError`  |
+  | `Workbook.addTableStyle` band `size`         | `AuthoringError` | `RangeError`  |
+  | `readCsv` `delimiter` length                 | `AuthoringError` | `RangeError`  |
+  | A table name's length                        | `AuthoringError` | `RangeError`  |
   | A table name that is not an Excel identifier | `AuthoringError` | `SyntaxError` |
-  | A theme colour that is not `RRGGBB` | `AuthoringError` | `SyntaxError` |
+  | A theme colour that is not `RRGGBB`          | `AuthoringError` | `SyntaxError` |
   | An ARGB colour that is not 6 or 8 hex digits | `AuthoringError` | `SyntaxError` |
 
   Every message string is unchanged, and no other throw moved: the composite claims stay where they
@@ -1172,7 +1172,7 @@ the seven-character literal.
   unaffected; code branching on `XlsxError` for these seven needs the native type instead.
 
 - **`Workbook.authoredThemeXml()` is now `Workbook.themeOverrides`.** The old method handed back
-  theme part *text*, which made the model the place that knew how a theme is spelled. The getter
+  theme part _text_, which made the model the place that knew how a theme is spelled. The getter
   returns the colour slots and typefaces {@link setTheme} authored, or `undefined` when none were,
   and the serializer composes them onto the part it is about to write. Same result in the file;
   a caller who needs the text can compose it with `applyThemeOverrides`.
@@ -1185,7 +1185,7 @@ the seven-character literal.
   escape, weaker than the library's: it handled `& < > "` and left the apostrophe, the newline, the
   carriage return and the tab raw, and it did not refuse a character XML 1.0 cannot represent. A
   typeface carrying any of those produced a malformed part. It now uses the same escape as every
-  other attribute in the package. A custom number format code, whose escape *deliberately* differs
+  other attribute in the package. A custom number format code, whose escape _deliberately_ differs
   (a bare apostrophe round-trips), gained the representability guard it was also missing.
 
 - **A row or column addressed by number is now bounded by the grid, as one addressed by letters
@@ -1200,11 +1200,11 @@ the seven-character literal.
   Reading is unaffected: a file declaring an out-of-grid position is bounded on read rather than
   refused, so no file that opened before stops opening.
 
-- **Error messages no longer contain em dashes.** Where a message used ` — ` to weld two
+- **Error messages no longer contain em dashes.** Where a message used `—` to weld two
   clauses together it now uses a colon, a semicolon, or a pair of commas, whichever the
   sentence wanted: `column 16385 is out of bounds: Excel supports 1..16384` rather than
   `column 16385 is out of bounds — Excel supports 1..16384`. No message changed meaning, none grew,
-  and the error *types* and `code` values are untouched, so anything branching on the
+  and the error _types_ and `code` values are untouched, so anything branching on the
   taxonomy is unaffected. Code that matched on message text is not: match on the class or
   on `code` instead, which is what they are for.
 
@@ -1226,7 +1226,7 @@ the seven-character literal.
   `src/` moved and nothing a consumer installs changed — this is development and CI
   tooling, as it always was.
 
-  The point is that `ts-pptx` used to carry a *different* validator on a different Open XML
+  The point is that `ts-pptx` used to carry a _different_ validator on a different Open XML
   SDK version, so two sibling projects were enforcing two rule sets while both calling it
   "Microsoft's validator". They now share one oracle, one pin, and one report contract.
 
@@ -1259,10 +1259,10 @@ the line and carries what was staged for it as well as the fix below.
 
 - **`SheetView.showGridLines` turns the on-screen grid off**, the one sheet-view attribute an
   authoring consumer reaches for first and the only facet of `<sheetView>` this library could not
-  express. A workbook built as a *deliverable* — its own fills, its own borders, a title band —
+  express. A workbook built as a _deliverable_ — its own fills, its own borders, a title band —
   reads as a spreadsheet rather than a document while Excel's grey grid shows through it, and
   there was no way to say so:
-  [`PrintOptions.gridLines`](docs/api/page-setup.md) is the neighbouring question about *printing*
+  [`PrintOptions.gridLines`](docs/api/page-setup.md) is the neighbouring question about _printing_
   and Excel exposes the two as separate checkboxes because the answers differ.
 
   ```js
@@ -1291,7 +1291,7 @@ the line and carries what was staged for it as well as the fix below.
   ```
 
   `title` is `dc:title` in `docProps/core.xml`, emitted **before** `dc:creator` because
-  `cp:coreProperties` is a schema *sequence* and Excel repairs a file whose children are out of
+  `cp:coreProperties` is a schema _sequence_ and Excel repairs a file whose children are out of
   order. `company` is `<Company>` in `docProps/app.xml` — the one document property OOXML keeps
   outside the core part, which is why `appPropsXml` now takes the properties at all. Both are
   omitted entirely when unset, and both now read back.
@@ -1346,9 +1346,9 @@ implementation comments no longer addressed to anyone.
   So the report never happens, the corpus never gets the case, and the next consumer rediscovers
   the same defect. Three layers answer three different reasons the report dies.
   `skills/ts-xlsx-upstream/` is now in `files`, so `npx skills add
-  ./node_modules/@shbernal/ts-xlsx` works offline and always matches the installed version. The
+./node_modules/@shbernal/ts-xlsx` works offline and always matches the installed version. The
   skill covers triage (is this ours or your file's?) and spends most of its length on reducing a
-  failure to a script that *builds its own input* — a spreadsheet in a real project holds
+  failure to a script that _builds its own input_ — a spreadsheet in a real project holds
   salaries and customer lists and the tracker is public, so the rule is synthesize or describe in
   prose, never redact. It files without interrupting you once the reproduction stands on its own,
   and passes `--repo shbernal/ts-xlsx` on every `gh` call, because `gh` in a consumer's checkout
@@ -1430,10 +1430,9 @@ are recorded below.
   companions to `MAX_ROW`/`MAX_COLUMN`: how large a line may be set, where those two bound where
   a cell may be. `ht` and `width` are a bare `xsd:double` in the schema, so the ceiling is Excel's
   own, and it is not the one Microsoft's specifications table publishes — Excel Desktop accepts a
-  row height of 409.5 and refuses 409.6, against a documented "409 points". Column width is exactly
-  255. Both were measured over COM rather than quoted; the probe and its numbers are in
+  row height of 409.5 and refuses 409.6, against a documented "409 points". Column width is exactly 255. Both were measured over COM rather than quoted; the probe and its numbers are in
   [`docs/knowledge/specs/grid-geometry-limits-are-excels-not-the-schemas.md`](docs/knowledge/specs/grid-geometry-limits-are-excels-not-the-schemas.md).
-  They bound *assignment*, not a file, and the two behave differently once one exceeds them: Excel
+  They bound _assignment_, not a file, and the two behave differently once one exceeds them: Excel
   opens an over-limit package clean, silently clamping a row to 409.6 (a tick above what it lets
   you set) while honouring a `width` of 1000 and re-saving it verbatim. Nothing enforces them at
   either end, therefore — `Row.height` and `Column.width` are the reader's path into a foreign
@@ -1446,13 +1445,13 @@ are recorded below.
   no rectangle. It replaces the `` `A1:${numberToColumn(sheet.columnCount)}${sheet.rowCount}` ``
   every caller was assembling by hand, and it is what an auto-filter over a whole sheet wants —
   `sheet.autoFilter = sheet.usedRange.address`, where a header-only ref yields dropdowns that
-  filter nothing. Anchored at `A1` and inheriting both counts' definition of *used*, so it is not
+  filter nothing. Anchored at `A1` and inheriting both counts' definition of _used_, so it is not
   the tight `<dimension>` box a written package records; the doc comment states the difference.
 - **`cellValueToText` and `Cell.text` — one plain-text rendering of a value, for everyone.**
   `cellValueToText` is total over `CellValue`: the empty cell and an invalid `Date` give `""`, a
   boolean gives Excel's `TRUE`/`FALSE`, an error its literal, rich text its runs concatenated, a
   hyperlink its label, and any of the three formula kinds the text of its cached result. It is the
-  value's text, not the cell's *displayed* text — no number format is applied, because the format
+  value's text, not the cell's _displayed_ text — no number format is applied, because the format
   lives on the style. `cell.text` is the same answer for the cell you are holding. The CSV writer
   now renders its fields through it rather than through a private near-copy, so a CSV field and
   `cell.text` cannot disagree about the same cell; `dateFormat`/`dateUTC` remain a CSV-only
@@ -1554,7 +1553,7 @@ error is — and `dist/` built by a different compiler.
 
   1.0.2's own first attempt then failed too, for a second and unrelated reason — this one
   outside the repository. The trusted publisher configured on npmjs.com named
-  `environment.yml`, the workflow that *provisions* the deployment environment, where it had
+  `environment.yml`, the workflow that _provisions_ the deployment environment, where it had
   to name the environment itself, `npm-publish`. npm answers a rejected identity with a 404,
   which reads as "no such package" and hides which claim failed to match. With the publisher
   corrected on npm, this tag publishes on a re-run; nothing here changed for it.
@@ -1623,13 +1622,13 @@ author a new one ([ADR-0014](docs/decisions/0014-charts-shapes-slicers-are-round
   `{...sheet.getRow(2)}` is no longer that row's properties.
 
 - **`getRow` and `getColumn` no longer extend the used range.** They created a format record on
-  access, so merely *asking* about row 500 made `rowCount` 500 and put an empty record in the
+  access, so merely _asking_ about row 500 made `rowCount` 500 and put an empty record in the
   worksheet model. The record is now created on first write. Reading a `<row r="5"/>` that states no
   attributes likewise leaves nothing behind, which is the honest reading of an element that says
   nothing.
 
 - **`Cell.setRichText` — rich-text runs that inherit the cell's font.** A run's `<rPr>` is a
-  *complete* character format: a facet it omits falls back to the workbook default font, **not** to
+  _complete_ character format: a facet it omits falls back to the workbook default font, **not** to
   the cell's. Verified against Excel — a cell set to Courier New 16 whose first run carries only
   `<b/>` renders that run in the workbook default face at the default size. So authoring
   `{bold: true}` on a run beside a styled cell silently loses the typeface, and the only fix was to
@@ -1660,7 +1659,6 @@ author a new one ([ADR-0014](docs/decisions/0014-charts-shapes-slicers-are-round
   `Workbook.defaultFont` reports the resolved, complete result, and `Workbook.declaredDefaultFont`
   reports what a source package stated (`undefined` when it stated nothing).
 
-
 - **Seven subpath entry points, and `"sideEffects": false`.** `@shbernal/ts-xlsx/core`, `/xlsx`,
   `/xlsb`, `/csv`, `/vba`, `/customui` and `/errors` are published alongside the bare package name,
   which still exports everything it did. Additive — nothing moves or breaks. With a bundler the
@@ -1676,7 +1674,6 @@ author a new one ([ADR-0014](docs/decisions/0014-charts-shapes-slicers-are-round
 - **`tools/vba-compiler`** — an offline build tool that produces genuinely compiled, source-matched VBA
   p-code by driving a real headless Excel (VBIDE). Emits a `vbaProject.bin` (attach via
   `Workbook.vbaProjectBytes`) or a whole edited `.xlsm`. Windows + licensed Excel only; never in CI.
-
 
 - **BREAKING: every deliberate failure now descends from one `XlsxError`, and carries a `code`.**
   `catch (e) { if (e instanceof XlsxError) … }` is the whole answer to "was that this library?" —
@@ -1695,7 +1692,7 @@ author a new one ([ADR-0014](docs/decisions/0014-charts-shapes-slicers-are-round
   gain the ancestry.
 
   What did **not** change: scalar argument validation stays native `RangeError` / `SyntaxError` /
-  `TypeError`, and every error message is byte-identical. The break is the *type* of a caught error,
+  `TypeError`, and every error message is byte-identical. The break is the _type_ of a caught error,
   which matters if you catch `SyntaxError` around XML parsing or switch on `constructor`.
 
 - **`Workbook.addTableStyle({name, elements})` — custom table styles are authorable.** A workbook can
@@ -1721,7 +1718,7 @@ author a new one ([ADR-0014](docs/decisions/0014-charts-shapes-slicers-are-round
   only way to recolour a workbook without touching a cell. Any subset of the twelve colour-scheme
   slots and either of the two typefaces can be set, and calls merge.
 
-  It generates *over* the existing theme rather than replacing it. The format scheme — the gradient,
+  It generates _over_ the existing theme rather than replacing it. The format scheme — the gradient,
   line and effect styles a designer authored — rides through untouched, a slot left unnamed keeps its
   source encoding (`dk1`/`lt1` stay `<a:sysClr>`, so they still follow the viewer's window colours),
   and a theme that references a picture keeps that relationship. `Workbook.themeColors` and
@@ -1731,14 +1728,14 @@ author a new one ([ADR-0014](docs/decisions/0014-charts-shapes-slicers-are-round
 - **`Workbook.resolveColor(color)` — a themed or indexed colour now resolves to a concrete ARGB.**
   A `Color` read from a file often carries no colour at all, only a reference: `{theme: 4}` into the
   workbook theme's scheme, or `{indexed: 2}` into the legacy 64-entry palette, either optionally with
-  a `tint`. Resolution follows the workbook's *own* theme and its own custom `<indexedColors>` when it
+  a `tint`. Resolution follows the workbook's _own_ theme and its own custom `<indexedColors>` when it
   declares one, and applies the tint last. `Workbook.themeColors` exposes the scheme it resolves
   against. Two things it deliberately does not do: `indexed="64"`/`65` (the system foreground and
   background) resolve to `undefined` rather than to invented black and white, and nothing is written
   back into the model — the `Color` keeps the encoding its file used, so a round-trip still emits
   `theme="4" tint="0.4"` and the cell keeps its link to the theme.
 
-  Note the index order: `theme="0"` is `lt1` and `theme="1"` is `dk1`, which is *not* the order the
+  Note the index order: `theme="0"` is `lt1` and `theme="1"` is `dk1`, which is _not_ the order the
   slots appear in the theme part. Verified against Excel Desktop; see
   `docs/knowledge/specs/theme-color-index-order.md`.
 
@@ -1750,10 +1747,10 @@ author a new one ([ADR-0014](docs/decisions/0014-charts-shapes-slicers-are-round
 
   A themed workbook rendered every unstyled cell in the wrong face: `setTheme({fonts: {minor}})`
   wrote the theme part correctly and could not reach a cell, because font 0 went on claiming
-  `scheme="minor"` — *I am the theme's body face* — while naming Calibri outright, and Excel resolves
+  `scheme="minor"` — _I am the theme's body face_ — while naming Calibri outright, and Excel resolves
   the explicit name. Working around it meant setting `font` on every column and naming the face in
   every rich-text run. And reading a package whose font 0 was Aptos Narrow and writing it back
-  *unmodified* replaced the declared default with Calibri, re-adding the real face as a redundant
+  _unmodified_ replaced the declared default with Calibri, re-adding the real face as a redundant
   custom entry — so populated cells still rendered right while empty cells, and the metric every
   character-unit `<col width>` is expressed in, quietly changed.
 
@@ -1769,18 +1766,17 @@ author a new one ([ADR-0014](docs/decisions/0014-charts-shapes-slicers-are-round
 
 - **BREAKING: a corrupt or truncated package is a `PackageReadError`, not an unsupported format.** A
   `PK`-headed archive the zip layer rejects used to surface as `UnsupportedFormatError` with format
-  `'unknown'`, whose message reads *"not a valid .xlsx package: no OOXML workbook part was found"* —
+  `'unknown'`, whose message reads _"not a valid .xlsx package: no OOXML workbook part was found"_ —
   a check that never ran, since nothing inflated. It now carries `code: 'malformed-input'` alongside
   the zip-bomb refusal, which is what the taxonomy already said it was: the container is the right
   kind of thing and we cannot unpack it. Code branching on `format === 'unknown'` for a truncated
   file must catch `PackageReadError` instead.
 
   Two messages get honest with it. A non-ZIP blob now says the input is not a ZIP rather than blaming
-  a missing part, and *"no OOXML workbook part was found"* is left to the one case where it is true —
+  a missing part, and _"no OOXML workbook part was found"_ is left to the one case where it is true —
   a package that inflated and carries neither `xl/workbook.xml` nor `xl/workbook.bin`. Unchanged: the
   zip library's own text is discarded, never folded into the message and never attached as `cause`,
   because it can name internals or an absolute filesystem path.
-
 
 - `removeVbaModule` and `addVbaReference` (and their `Workbook`/`editXlsxVba*` wrappers) no longer reset
   the `_VBA_PROJECT` stream — that reset crashed the VBA load on a project with real p-code. They now

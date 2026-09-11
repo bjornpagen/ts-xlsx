@@ -6,7 +6,7 @@ In a browser a user reads a file input into memory and hands the bytes to the wo
 loader. The idiomatic browser paths (`File.arrayBuffer()`, `FileReader`'s
 `readAsArrayBuffer`, `fetch(...).then(r => r.arrayBuffer())`) all yield an
 `ArrayBuffer`, or a `Uint8Array` view over one. Passing that directly to the loader
-fails with *"Chunk must be one of type String, Buffer or StringBuf"*, because the
+fails with _"Chunk must be one of type String, Buffer or StringBuf"_, because the
 load path only accepts a Node `Buffer` or string. The user must know to wrap the bytes
 in `Buffer.from(...)` first, a Node-ism that has no place in browser code and that
 drags a `Buffer` polyfill into the bundle.

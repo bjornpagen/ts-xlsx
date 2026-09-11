@@ -11,7 +11,7 @@ link is dead, because those consumers do not resolve it. The cause is how the in
 serialized: if it is emitted like an external link, with an `r:id` relationship, instead of with an
 in-workbook `location`, stricter consumers silently ignore it.
 
-> Spec note, not a corpus case: the correct serialization is knowable, but the *observable* defect is
+> Spec note, not a corpus case: the correct serialization is knowable, but the _observable_ defect is
 > cross-application navigation, a rendering behavior in third-party apps that the corpus cannot
 > exercise. The durable value is the OOXML shape an internal link must take.
 

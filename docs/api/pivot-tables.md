@@ -202,25 +202,17 @@ unsupported request throws at authoring time rather than emitting a corrupt file
 class PivotTable {
   readonly metric: PivotMetric;
   readonly sourceSheetName: string;
-  readonly sourceRef: string;
   readonly cacheFields: readonly PivotCacheField[];
   readonly records: readonly (readonly PivotRecordCell[])[];
   readonly rowFields: readonly number[];
   readonly columnFields: readonly number[];
   readonly valueField: number;
+  get sourceRef(): string;
   get valueFieldName(): string;
 }
 ```
 
 **Members**
-
-#### `PivotTable.sourceRef`
-
-```ts
-readonly sourceRef: string;
-```
-
-The `A1:C4` source range: the header row through the last data row, across the field columns.
 
 #### `PivotTable.rowFields`
 
@@ -229,6 +221,19 @@ readonly rowFields: readonly number[];
 ```
 
 Indices into `cacheFields` of the row-axis, column-axis, and value fields.
+
+#### `PivotTable.sourceRef`
+
+```ts
+get sourceRef(): string;
+```
+
+The `A1:C4` source range: the header row through the last data row, across the field columns.
+
+It moves with a row or column splice of the source sheet, as Excel moves a pivot's source: an
+insert inside it grows it and a delete shrinks it, while a delete that takes the whole range leaves
+it as it was. The cache captured at construction does not change; Excel rebuilds it from this range
+when it opens the file.
 
 #### `PivotTable.valueFieldName`
 

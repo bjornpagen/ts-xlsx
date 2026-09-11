@@ -8,11 +8,11 @@ An author protects a worksheet where most cells are locked, but wants end users 
 filter the data range without unprotecting the sheet. They enable the `sort` and `autoFilter`
 permissions when turning on protection and expect sorting to work. It doesn't: the application still
 refuses to sort, because sorting rewrites cell values and the cells are locked. A sheet protected
-*manually* in Excel behaves differently only because the user typically also left the sortable range
+_manually_ in Excel behaves differently only because the user typically also left the sortable range
 unlocked, or used Allow-Edit-Ranges. The reported "programmatic against manual" gap is not a hidden
 format quirk. It is which cells are left unlocked and which protection surface is emitted.
 
-> Spec note, not a corpus case: the flag *encoding* is already correct and locked by
+> Spec note, not a corpus case: the flag _encoding_ is already correct and locked by
 > `sheet-protection-permits-requested-operations`, where granting sort emits `sort="0"`. What is
 > missing is the higher-level semantics: the flag alone is insufficient, and the fix requires either
 > per-cell unlock state or a `<protectedRanges>` editable window, neither of which the library models

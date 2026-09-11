@@ -13,8 +13,8 @@ recover the workbook and then drops the affected sheet. Setting either property 
 valid file, and the corruption arises only from their combination, a sign of a child-ordering bug.
 
 > Spec note, not a corpus case. Update: the writer **does** now emit `<outlinePr summaryBelow="0"
-> summaryRight="0"/>` from the outline-summary settings, and those flags round-trip, locked
-> by the `worksheet-outline-summary-position-round-trips` case. What remains for *this* note is the
+summaryRight="0"/>` from the outline-summary settings, and those flags round-trip, locked
+> by the `worksheet-outline-summary-position-round-trips` case. What remains for _this_ note is the
 > **child-order** guard: when `<outlinePr>` and `<pageSetUpPr>` are emitted together they must follow
 > the CT_SheetPr sequence (`tabColor`, `outlinePr`, `pageSetUpPr`), and a wrong order corrupts the
 > file. That combined-emission ordering is the residual value here; the earlier assumption that
@@ -30,12 +30,12 @@ valid file, and the corruption arises only from their combination, a sign of a c
   outline summary setting.
 - **The summary-placement settings are precisely typed on the public worksheet-properties surface.**
   The worksheet properties type must fully type an `outlineProperties` field with its two booleans,
-  one for whether outline summary rows appear *below* their detail rows rather than above, one for
-  whether summary columns appear to the *right* of their detail columns rather than left, which map
+  one for whether outline summary rows appear _below_ their detail rows rather than above, one for
+  whether summary columns appear to the _right_ of their detail columns rather than left, which map
   to the `<outlinePr>` attributes `summaryBelow` and `summaryRight`. Reports of the runtime honoring
   these values while the public TypeScript declaration omitted `outlineProperties`, forcing an
   untyped index-access workaround, are the type-surface face of the same outline feature: the types
-  *are* the docs, so a supported outline property that is settable at runtime but absent from the
+  _are_ the docs, so a supported outline property that is settable at runtime but absent from the
   type is a defect. Absence of the setting corresponds to the format default, summary below and to
   the right.
 

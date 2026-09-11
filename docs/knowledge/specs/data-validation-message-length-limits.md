@@ -12,7 +12,7 @@ indication of why. The author's question ("what is the maximum limit?") is reall
 library let them cross a hard format limit silently and emitted a broken file.
 
 This is a distinct field and a distinct failure from the inline list-validation formula limit
-(`list-validation-inline-formula-length-limit`, whose overflow yields a *structurally valid* file
+(`list-validation-inline-formula-length-limit`, whose overflow yields a _structurally valid_ file
 with a silently-missing dropdown). Here the overflow corrupts the package outright.
 
 > Spec note, not a corpus case: the durable value is the set of limits and the "never emit a corrupt

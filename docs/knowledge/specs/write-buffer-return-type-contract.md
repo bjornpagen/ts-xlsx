@@ -27,7 +27,7 @@ because the declared type hides the real backing `ArrayBuffer`.
   strongest candidate: it is the common denominator between Node and browser, exposes `.buffer` for
   structured-clone and `postMessage` transfer, and wraps trivially with `Buffer.from(...)` in Node.
 - The surface must **not** declare `interface Buffer extends ArrayBuffer`, or any equivalent. A
-  `Buffer` or `Uint8Array` is a view *over* an `ArrayBuffer`, not a subtype of it, and declaring
+  `Buffer` or `Uint8Array` is a view _over_ an `ArrayBuffer`, not a subtype of it, and declaring
   inheritance breaks structural typing and invites the file-corrupting misuse above.
 - A type-level test pins the exact return type so a future refactor cannot silently regress it back
   to an `ArrayBuffer`-shaped lie.

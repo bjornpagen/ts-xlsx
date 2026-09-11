@@ -7,13 +7,13 @@ Cluster: streaming
 A user reads a workbook with the streaming reader and finds that date cells come back as raw serial
 numbers instead of dates, or that number formats are missing. The cause is non-obvious: the streaming
 reader defaults some caching options **off** for memory reasons, and, critically, a cell's date-ness
-is carried by its *style*, the `numFmt`, not by the cell value. So without style caching enabled the
+is carried by its _style_, the `numFmt`, not by the cell value. So without style caching enabled the
 reader has no way to know a numeric cell is a date, and every date silently reads as a bare number.
 The option name (`styles`) does not hint that turning it off also disables date interpretation, and the
 published docs and types disagreed with the implementation about what the defaults even are.
 
 > Spec note, not a corpus case: the streaming-read-with-styles behavior is already exercised elsewhere
-> in the corpus. The durable value here is the *option contract*, meaning precise names, precise
+> in the corpus. The durable value here is the _option contract_, meaning precise names, precise
 > defaults, and the documented consequence of each, which is an API-design decision to settle in
 > Phase 3 rather than a current-behavior assertion.
 

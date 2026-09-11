@@ -51,11 +51,11 @@ the harness's options are written down.
 
 Re-measuring the type-aware surface with the linter and the typechecker finally agreeing:
 
-| | before the configs | after them | after the fixes |
-| --- | --- | --- | --- |
-| `no-unnecessary-type-assertion`, `test/corpus/**` | 301 | 22 | 0 |
-| findings in `scripts/`, `tools/`, `src/**/*.test.ts`, `test/` outside the corpus | 36 | 31 | 0 |
-| type-aware rules switched off across the harness | 16 | 16 | 6 |
+|                                                                                  | before the configs | after them | after the fixes |
+| -------------------------------------------------------------------------------- | ------------------ | ---------- | --------------- |
+| `no-unnecessary-type-assertion`, `test/corpus/**`                                | 301                | 22         | 0               |
+| findings in `scripts/`, `tools/`, `src/**/*.test.ts`, `test/` outside the corpus | 36                 | 31         | 0               |
+| type-aware rules switched off across the harness                                 | 16                 | 16         | 6               |
 
 The 279 assertions that stopped being reported were never unnecessary; the linter could not
 see the flag that made them necessary. What survived the correction was real, and fixing it

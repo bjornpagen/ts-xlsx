@@ -40,14 +40,14 @@ that counts the balance.
 The boundary stands. The exemption it earns is narrowed to what it actually reaches:
 `test/corpus/**` only, and six rules rather than sixteen.
 
-| rule | findings | why it is off |
-| --- | --- | --- |
-| `no-unsafe-member-access` | 803 | a case reads its report through `Record<string, Untyped>` |
-| `await-thenable` | 699 | cases `await` every capability so one can turn async without touching 282 call sites |
-| `no-unsafe-assignment` | 373 | destructuring that report |
-| `no-unsafe-argument` | 122 | handing a spec back into a capability |
-| `no-unsafe-call` | 66 | calling through the untyped surface on purpose |
-| `no-unsafe-return` | 48 | an adapter capability returning its accumulator |
+| rule                      | findings | why it is off                                                                        |
+| ------------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `no-unsafe-member-access` | 803      | a case reads its report through `Record<string, Untyped>`                            |
+| `await-thenable`          | 699      | cases `await` every capability so one can turn async without touching 282 call sites |
+| `no-unsafe-assignment`    | 373      | destructuring that report                                                            |
+| `no-unsafe-argument`      | 122      | handing a spec back into a capability                                                |
+| `no-unsafe-call`          | 66       | calling through the untyped surface on purpose                                       |
+| `no-unsafe-return`        | 48       | an adapter capability returning its accumulator                                      |
 
 2111 findings, and the sample checked by hand traces where the table says: a case's
 `(await api.roundtripWorkbook(SPEC)).sheets.S.cells.A1` is three of them at once. None is
@@ -82,5 +82,5 @@ the ones that exist to complain about exactly that.
 - The case-spec DSL is written down as a type for some other reason. Then the largest of
   the two remaining classes is already paid for and the balance changes.
 - The count in `untyped.ts` starts climbing. It is 288 today, and the module comment
-  carries the command that measures it. A boundary that is being *spent* rather than held
+  carries the command that measures it. A boundary that is being _spent_ rather than held
   is a different decision from this one.

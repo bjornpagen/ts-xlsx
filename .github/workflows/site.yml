@@ -19,9 +19,9 @@ name: Site
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ '**' ]
+    branches: ['**']
 
 # A queued run is only ever publishing the tip, so an older one in the queue has nothing to
 # say. In-progress runs are not cancelled: a half-finished upload is worse than a stale one.

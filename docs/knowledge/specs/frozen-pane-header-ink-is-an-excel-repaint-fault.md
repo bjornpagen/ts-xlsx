@@ -18,7 +18,7 @@ the fault is not reproducible by any means this repo can automate.
 
 ## The control: an Excel-authored package reproduces it
 
-The decisive test is not "does our file do this" but "does a file *Excel wrote* do this".
+The decisive test is not "does our file do this" but "does a file _Excel wrote_ do this".
 `tools/excel-oracle/observe.ps1` opened the reported workbook over COM and re-saved it, giving
 `openThrew: false` and `repaired: false`, so Excel took the package as given rather than recovering
 it, producing a copy whose every byte is Excel's own serialization of the same content.
@@ -34,16 +34,16 @@ frozen at `ySplit="2"` (one also `xSplit="1"`), 13 and 18 columns, each a table 
 `autoFilter` across the header row, header cells bold 9pt `FFFFFFFF` on a solid `FF009EE0` fill,
 row height 34 with `wrapText`.
 
-| Hypothesis | Check | Result |
-| --- | --- | --- |
-| Malformed `<pane>` | Diff ours against Excel's re-save | **Identical.** `<pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/>`, and the four-pane `xSplit="1" ySplit="2"` variant, come back byte-for-byte. Excel adds only empty `<selection>` elements for the panes it does not sit in. |
-| Ink collapsing into the fill | Sample the rendered pixels in the frozen header band | Fill `#009EE0`, ink `#FFFFFF`, exactly what `styles.xml` states, at every position captured. |
-| Header clipped by row height | `estimateWrappedLines` per header against its column width, less 2 character units for the dropdown button | Widest label needs 2 lines; 34pt holds 2. No header is clipped. |
-| Fault visible under automation | 9 capture positions: COM `ScrollColumn`, `{RIGHT}` walks, `%{PGDN}`/`%{PGUP}` paging, both directions | White ink present in the header band at **every** position it was on screen (2.35% to 4.73% of band pixels). Never blank. |
+| Hypothesis                     | Check                                                                                                      | Result                                                                                                                                                                                                                                                  |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Malformed `<pane>`             | Diff ours against Excel's re-save                                                                          | **Identical.** `<pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/>`, and the four-pane `xSplit="1" ySplit="2"` variant, come back byte-for-byte. Excel adds only empty `<selection>` elements for the panes it does not sit in. |
+| Ink collapsing into the fill   | Sample the rendered pixels in the frozen header band                                                       | Fill `#009EE0`, ink `#FFFFFF`, exactly what `styles.xml` states, at every position captured.                                                                                                                                                            |
+| Header clipped by row height   | `estimateWrappedLines` per header against its column width, less 2 character units for the dropdown button | Widest label needs 2 lines; 34pt holds 2. No header is clipped.                                                                                                                                                                                         |
+| Fault visible under automation | 9 capture positions: COM `ScrollColumn`, `{RIGHT}` walks, `%{PGDN}`/`%{PGUP}` paging, both directions      | White ink present in the header band at **every** position it was on screen (2.35% to 4.73% of band pixels). Never blank.                                                                                                                               |
 
 ## Why the automation cannot see it, and why that is not a refutation
 
-The symptom is *stateful*: clicking one header paints it and unpaints another. No property of a
+The symptom is _stateful_: clicking one header paints it and unpaints another. No property of a
 package can make two cells mutually exclusive, because a file describes cells, not a budget of them.
 That signature belongs to the repaint path, and the repaint path is the one thing synthetic
 navigation does not exercise faithfully. A COM `ScrollColumn` assignment and a `SendKeys` keystroke
@@ -51,8 +51,8 @@ each force a clean, settled repaint; the fault lives in incremental invalidation
 under real scrolling.
 
 This is the same boundary `rows-with-no-stated-height-are-autofitted-on-open` states about its own
-"no blank bands" result: that note excluded blank bands *on an unfrozen sheet, under synthetic
-navigation*, and explicitly could not exclude a frame shorter than its capture latency. The two
+"no blank bands" result: that note excluded blank bands _on an unfrozen sheet, under synthetic
+navigation_, and explicitly could not exclude a frame shorter than its capture latency. The two
 notes do not conflict. This one adds the case that method cannot reach, a frozen pane with a
 human scrolling it.
 

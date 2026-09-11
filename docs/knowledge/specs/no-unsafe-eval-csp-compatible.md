@@ -9,6 +9,7 @@ Reported as "Uncaught EvalError: 'unsafe-eval' is not an allowed source of scrip
 The library must run correctly in browser-adjacent environments (web pages, Manifest V3 extensions, Electron renderers) under a strict Content Security Policy, specifically `script-src 'self'` with **no** `'unsafe-eval'` allowance. Loading and using any public entry point (read, write, CSV, zip) must not trigger `EvalError`.
 
 Concretely:
+
 - The shipped source and every bundled artifact must contain **zero** dynamic code evaluation: no `eval`, no `new Function(...)`, no `Function(...)` call constructor, no `setTimeout("string", …)`, no bundler-injected module-globals via `new Function`.
 - This must hold for all published entry points and bundles, not just an opt-in "bare" build. There must be no configuration where the default import path pulls in eval-based polyfills.
 
@@ -25,7 +26,7 @@ Community workarounds, all unsatisfactory: widen CSP to allow `unsafe-eval`, whi
 
 ## Why this is (mostly) obsolete-by-construction for ts-xlsx
 
-ts-xlsx is a TypeScript-first rewrite targeting native async/await, with no regenerator runtime, a small modern dependency tree and a modern bundler, so there is no browserify module-globals injection. Choosing an eval-free zip/deflate dependency and an eval-free CSV parser eliminates every historical source of the problem. The remaining work is to make CSP-safety a *guarded invariant* rather than an accident.
+ts-xlsx is a TypeScript-first rewrite targeting native async/await, with no regenerator runtime, a small modern dependency tree and a modern bundler, so there is no browserify module-globals injection. Choosing an eval-free zip/deflate dependency and an eval-free CSV parser eliminates every historical source of the problem. The remaining work is to make CSP-safety a _guarded invariant_ rather than an accident.
 
 ## Concrete requirements to carry forward
 

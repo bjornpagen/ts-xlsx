@@ -10,7 +10,7 @@ through the streaming writer in `src/io/xlsx/write-stream.ts`. Reaching only `re
 `writeXlsx` and `Workbook` still reached `node:crypto`, because `Worksheet.protect()` needs it.
 
 None of that is a runtime problem in Node, and none of it is reached by anything a browser
-would call. It is a *bundling* problem, and the distinction is the whole point: a bundler
+would call. It is a _bundling_ problem, and the distinction is the whole point: a bundler
 resolves imports, not call graphs. Webpack 5 stopped auto-polyfilling Node core modules, so a
 browser build reported a module it could not resolve; Vite externalised the three with a
 warning and a stub that throws only when called. Either way the failure arrived at a consumer
@@ -24,7 +24,7 @@ workaround themselves.
 
 `docs/knowledge/specs/browser-safe-io-boundary.md` had asked for the opposite arrangement
 since the harvest: no Node built-in statically reachable from a browser entry, Node-only
-conveniences behind an export condition a browser never resolves, and no Node-only *global*
+conveniences behind an export condition a browser never resolves, and no Node-only _global_
 (`process`, `Buffer`) on a path ordinary in-memory use reaches. Nothing had been built for it.
 
 ## Decision
@@ -59,7 +59,7 @@ therefore links something that says what happened, rather than failing on `node:
 **The boundary is a gate, not a comment.** `scripts/check-browser-safe.ts` walks the module
 graph from all eight browser-facing entries and fails on any `node:` specifier and on any
 Node-only global, with the file, the line and the entry that reaches it. It also fails if
-`/node` reaches *no* Node built-in, because an entry that carries nothing has stopped being a
+`/node` reaches _no_ Node built-in, because an entry that carries nothing has stopped being a
 boundary. `scripts/check-entries.ts` gained two rules: the root barrel must not union `/node`,
 and the browser stub's value exports must equal the entry's. `scripts/smoke-dist.ts` re-checks
 the same property on the emitted JavaScript, which is the only form a consumer's bundler sees.
@@ -73,7 +73,7 @@ the same property on the emitted JavaScript, which is the only form a consumer's
   pipe contract the corpus locks are all as they were.
 - **ADR 0023 said streaming would not get its own entry point,** on the measured ground that
   its closure is the codec's closure plus three modules, so an entry costing what the codec
-  costs is an alias rather than a packaging boundary. That reasoning was about *size* and it
+  costs is an alias rather than a packaging boundary. That reasoning was about _size_ and it
   still holds; this entry exists for a different reason, and the size figures confirm it is not
   a size boundary (`/node` is 358 KB against `/xlsx`'s 490 KB).
 - **The site stopped needing a workaround.** The Vite alias and `www/node-absent.ts` are gone,
@@ -83,6 +83,6 @@ the same property on the emitted JavaScript, which is the only form a consumer's
   implementation and a base64 encoder instead of importing them. `/customui` went over its
   budget by 0.7 KB on the strength of that, and the budgets were re-baselined to the tenth of
   headroom their comment describes.
-- **What is still open:** a browser-native streaming *writer* (`browser-streaming-workbook-write`,
+- **What is still open:** a browser-native streaming _writer_ (`browser-streaming-workbook-write`,
   `web-streams-io-surface`) is unaffected by this record. When one exists it belongs on `/xlsx`
   with the rest of the codec, and `/node` keeps whatever genuinely needs a filesystem.

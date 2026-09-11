@@ -11,7 +11,7 @@ metadata:
 # Validating OOXML output
 
 The corpus (`pnpm run corpus`) proves well-formedness, package structure, and no
-regression — but it is *our* assertions. The **authoritative** schema + semantic check
+regression — but it is _our_ assertions. The **authoritative** schema + semantic check
 is Microsoft's own `OpenXmlValidator`, reached through `ooxml-validate` (ADR-0002) — the
 shared oracle this repo and `ts-pptx` both validate against, so the two enforce one rule
 set. It is the independent oracle: if it says a package is clean, Excel's own conformance
@@ -31,7 +31,7 @@ let CI's `ooxml-validation` workflow run the oracle on your PR. See
 
 The `ooxml-lookup` skill is the other half of this loop, not a replacement for it: it does
 not validate anything, but given a diagnostic's `id`, `description` and `xpath` its
-`explain` subcommand says what *would* have been legal at that position.
+`explain` subcommand says what _would_ have been legal at that position.
 
 ## Validate a file you already have
 
@@ -67,7 +67,7 @@ ws.addRow(['Name', 'Value']);
 ws.addRow(['alpha', 42]);
 // …exercise the exact path you touched: styles, tables, formulas, images, CF…
 
-writeFileSync('.tmp/repro.xlsx', writeXlsx(wb));   // writeXlsx → Uint8Array; cwd is the repo root
+writeFileSync('.tmp/repro.xlsx', writeXlsx(wb)); // writeXlsx → Uint8Array; cwd is the repo root
 ```
 
 ```bash
@@ -85,9 +85,9 @@ workbooks and control cases, then compares each package's errors to the frozen s
 `test/ooxml-validation/allowed-errors.json`.
 
 - A **new** diagnostic that isn't baselined → the gate fails. Fix the writer; do not add
-  it to the baseline to silence it. The baseline is a record of *known-open* writer bugs
+  it to the baseline to silence it. The baseline is a record of _known-open_ writer bugs
   we've chosen to track, not a mute button.
-- A **stale** baseline (an error you *fixed*) also fails the gate — remove that entry in
+- A **stale** baseline (an error you _fixed_) also fails the gate — remove that entry in
   the same change so the file stays honest.
 - Match errors by the exact `{id, type, partUri, xpath}` fingerprint.
 
