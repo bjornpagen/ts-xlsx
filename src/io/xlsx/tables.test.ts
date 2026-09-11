@@ -3,8 +3,9 @@ import {test} from 'node:test';
 
 import type {TotalsRowFunction} from '../../core/table.ts';
 import {Workbook} from '../../core/workbook.ts';
-import {roundtrip} from './package.test-support.ts';
+import {partIn, partsWritten, roundtrip} from './package.test-support.ts';
 import {parseTable} from './tables.ts';
+import {writeXlsx} from './write.ts';
 
 // Author a workbook whose single sheet carries one table, round-trip it, and hand back the
 // reconstructed table for assertions.
@@ -432,4 +433,189 @@ test('a table part spelling its booleans "false" reads them off, as "0" does', (
       `every tableStyleInfo flag spelled "${value}" reads off`,
     );
   }
+});
+
+test('an empty-body table refs the full header row and writes a table part', () => {
+  const wb = new Workbook();
+  wb.addWorksheet('S').addTable({
+    name: 'T1',
+    ref: 'A1',
+    columns: [{name: 'Alpha'}, {name: 'Beta'}],
+    rowCount: 0,
+  });
+  const parts = partsWritten(wb);
+  const table = partIn(parts, 'xl/tables/table1.xml');
+  assert.match(table, /ref="A1:B1"/);
+  assert.match(table, /<tableColumns count="2">/);
+  assert.match(table, /<autoFilter ref="A1:B1"\/>/);
+  assert.match(partIn(parts, '[Content_Types].xml'), /\/xl\/tables\/table1\.xml/);
+  assert.match(
+    partIn(parts, 'xl/worksheets/_rels/sheet1.xml.rels'),
+    /Target="\.\.\/tables\/table1\.xml"/,
+  );
+  assert.match(
+    partIn(parts, 'xl/worksheets/sheet1.xml'),
+    /<tableParts count="1"><tablePart r:id="rId1"\/><\/tableParts>/,
+  );
+});
+
+test('a data row extends the table ref by one row', () => {
+  const wb = new Workbook();
+  wb.addWorksheet('S').addTable({
+    name: 'T',
+    ref: 'A1',
+    columns: [{name: 'A'}, {name: 'B'}],
+    rowCount: 1,
+  });
+  const table = partIn(partsWritten(wb), 'xl/tables/table1.xml');
+  assert.match(table, /ref="A1:B2"/);
+});
+
+test('a headerless table sets headerRowCount="0" and emits no autoFilter', () => {
+  const wb = new Workbook();
+  wb.addWorksheet('S').addTable({
+    name: 'H',
+    ref: 'A1',
+    columns: [{name: 'A'}, {name: 'B'}],
+    rowCount: 2,
+    headerRow: false,
+  });
+  const table = partIn(partsWritten(wb), 'xl/tables/table1.xml');
+  assert.match(table, /headerRowCount="0"/);
+  assert.doesNotMatch(table, /<autoFilter/);
+});
+
+test('a totals-row column serialises its function and keeps every column', () => {
+  const wb = new Workbook();
+  wb.addWorksheet('S').addTable({
+    name: 'T',
+    ref: 'A1',
+    columns: [
+      {name: 'Item', totalsRowLabel: 'Total'},
+      {name: 'Amount', totalsRowFunction: 'sum'},
+    ],
+    rowCount: 2,
+    totalsRow: true,
+  });
+  const table = partIn(partsWritten(wb), 'xl/tables/table1.xml');
+  assert.match(table, /ref="A1:B4"/);
+  assert.match(table, /totalsRowCount="1"/);
+  assert.match(table, /<tableColumn id="1" name="Item" totalsRowLabel="Total"\/>/);
+  assert.match(table, /<tableColumn id="2" name="Amount" totalsRowFunction="sum"\/>/);
+});
+
+test('a no-totals table omits totalsRowShown unless the flag is set explicitly', () => {
+  const wb = new Workbook();
+  wb.addWorksheet('S').addTable({name: 'T', ref: 'A1', columns: [{name: 'A'}], rowCount: 1});
+  const table = partIn(partsWritten(wb), 'xl/tables/table1.xml');
+  assert.doesNotMatch(
+    table,
+    /totalsRowShown/,
+    'an unset flag emits no attribute: Excel must not see a spurious one',
+  );
+});
+
+test('an explicit totalsRowShown flag is written as "0" or "1"', () => {
+  const off = new Workbook();
+  off
+    .addWorksheet('S')
+    .addTable({name: 'T', ref: 'A1', columns: [{name: 'A'}], rowCount: 1, totalsRowShown: false});
+  assert.match(partIn(partsWritten(off), 'xl/tables/table1.xml'), /totalsRowShown="0"/);
+
+  const on = new Workbook();
+  on.addWorksheet('S').addTable({
+    name: 'T',
+    ref: 'A1',
+    columns: [{name: 'A'}],
+    rowCount: 1,
+    totalsRowShown: true,
+  });
+  assert.match(partIn(partsWritten(on), 'xl/tables/table1.xml'), /totalsRowShown="1"/);
+});
+
+test("a table with no explicit style is written with Excel's default TableStyleMedium2", () => {
+  const wb = new Workbook();
+  wb.addWorksheet('S').addTable({name: 'T', ref: 'A1', columns: [{name: 'A'}], rowCount: 1});
+  const table = partIn(partsWritten(wb), 'xl/tables/table1.xml');
+  assert.match(table, /<tableStyleInfo name="TableStyleMedium2"[^>]*showRowStripes="1"[^>]*\/>/);
+});
+
+test('an explicit table style is emitted verbatim, omitting the attributes it leaves unset', () => {
+  const wb = new Workbook();
+  wb.addWorksheet('S').addTable({
+    name: 'T',
+    ref: 'A1',
+    columns: [{name: 'A'}],
+    rowCount: 1,
+    style: {name: 'Assignment schedule', showRowStripes: false},
+  });
+  const table = partIn(partsWritten(wb), 'xl/tables/table1.xml');
+  assert.match(
+    table,
+    /name="Assignment schedule"/,
+    'a custom style name survives instead of being rewritten',
+  );
+  assert.match(
+    table,
+    /showRowStripes="0"/,
+    'the source\'s stripe choice is preserved, not forced to "1"',
+  );
+  assert.doesNotMatch(table, /showFirstColumn/, 'an unset banding flag emits no attribute');
+});
+
+test('an illegal table name is rejected at definition time', () => {
+  const s = new Workbook().addWorksheet('S');
+  assert.throws(
+    () => s.addTable({name: "Bob's Accounts", ref: 'A1', columns: [{name: 'A'}], rowCount: 1}),
+    /identifier/,
+  );
+  assert.throws(
+    () => s.addTable({name: '1Digit', ref: 'A1', columns: [{name: 'A'}], rowCount: 1}),
+    /identifier/,
+  );
+  assert.throws(
+    () => s.addTable({name: 'test-name', ref: 'A1', columns: [{name: 'A'}], rowCount: 1}),
+    /identifier/,
+  );
+});
+
+test('a valid identifier table name is written verbatim', () => {
+  const wb = new Workbook();
+  wb.addWorksheet('S').addTable({
+    name: 'Valid_Name',
+    ref: 'A1',
+    columns: [{name: 'A'}],
+    rowCount: 1,
+  });
+  const table = partIn(partsWritten(wb), 'xl/tables/table1.xml');
+  assert.match(table, /name="Valid_Name"/);
+  assert.match(table, /displayName="Valid_Name"/);
+});
+
+test('tables are numbered globally across sheets with sheet-local rel ids', () => {
+  const wb = new Workbook();
+  wb.addWorksheet('One').addTable({name: 'Ta', ref: 'A1', columns: [{name: 'A'}], rowCount: 1});
+  wb.addWorksheet('Two').addTable({name: 'Tb', ref: 'A1', columns: [{name: 'A'}], rowCount: 1});
+  const parts = partsWritten(wb);
+  assert.ok(parts['xl/tables/table1.xml'], 'first table part');
+  assert.ok(parts['xl/tables/table2.xml'], 'second table part (globally numbered)');
+  assert.match(
+    partIn(parts, 'xl/worksheets/_rels/sheet2.xml.rels'),
+    /Target="\.\.\/tables\/table2\.xml"/,
+  );
+});
+
+test('a merge overlapping a table is rejected; a disjoint merge is written', () => {
+  const overlap = new Workbook();
+  const s1 = overlap.addWorksheet('S');
+  s1.addTable({name: 'T', ref: 'A1', columns: [{name: 'A'}, {name: 'B'}], rowCount: 2});
+  s1.mergeCells('A2:B2');
+  assert.throws(() => writeXlsx(overlap), /overlaps table/);
+
+  const disjoint = new Workbook();
+  const s2 = disjoint.addWorksheet('S');
+  s2.addTable({name: 'T', ref: 'A1', columns: [{name: 'A'}, {name: 'B'}], rowCount: 2});
+  s2.mergeCells('D5:E5');
+  const xml = partIn(partsWritten(disjoint), 'xl/worksheets/sheet1.xml');
+  assert.match(xml, /<mergeCells count="1"><mergeCell ref="D5:E5"\/><\/mergeCells>/);
 });
