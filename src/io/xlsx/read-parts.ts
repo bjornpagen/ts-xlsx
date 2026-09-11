@@ -308,8 +308,19 @@ export function readRootPreservedReferences(context: PackageReadContext): void {
 // The three root relationships the writer regenerates from the model on every write: the office
 // document and the core/extended document properties. Every other root relationship is unmodeled and
 // is preserved verbatim by {@link readRootPreservedReferences} rather than dropped.
+//
+// The extended properties have two spellings: ISO/IEC 29500 Strict renamed the segment to
+// `extendedProperties` (under `purl.oclc.org`), where Transitional keeps `extended-properties`. Missing
+// the Strict one preserved a Strict package's `docProps/app.xml` beside the part the writer generates
+// at that same path, so no Strict workbook could be written back out.
 function isRegeneratedRootRelType(type: string): boolean {
-  return isAnyRelType(type, 'officeDocument', 'core-properties', 'extended-properties');
+  return isAnyRelType(
+    type,
+    'officeDocument',
+    'core-properties',
+    'extended-properties',
+    'extendedProperties',
+  );
 }
 
 // A workbook relationship the model does not consume but must round-trip: a pivot cache, a slicer

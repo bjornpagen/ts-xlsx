@@ -40,5 +40,20 @@ export default {
         assert.strictEqual(A1.value, 'Date', 'the shared-string value is intact');
       },
     },
+    {
+      // A Strict package spells the app-properties relationship `extendedProperties`, where
+      // Transitional spells it `extended-properties`. A reader that recognises only the second keeps
+      // the Strict one as an unmodelled part, and the writer then emits it beside the properties part
+      // it generates, at the same path.
+      name: 'a Strict-mode workbook writes back out and reads again with the same cells',
+      async expect(api: CorpusApi, assert: Assert) {
+        const report = api.dateSystemReport(FIXTURE, ['A1', 'A2']);
+        assert.deepStrictEqual(
+          report.roundtrip,
+          report.eager,
+          'the re-read cells match the first read',
+        );
+      },
+    },
   ],
 } satisfies Case;
