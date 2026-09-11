@@ -15,7 +15,7 @@ import {
   type RichTextValue,
 } from '../../core/value.ts';
 import {decodeSpreadsheetText, numFinite, numInteger} from '../../xml/xml-attrs.ts';
-import {boolStrict, boolTristate} from '../../xml/xml-scan.ts';
+import {boolTristate} from '../../xml/xml-scan.ts';
 
 /**
  * One entry of the shared-strings pool. A `<si>` built from a bare `<t>` is a plain string; a `<si>`
@@ -103,8 +103,8 @@ function decodeValue(raw: RawCell, sharedStrings: readonly SharedString[]): Cell
       return boolTristate(valueText) ?? null;
     case 'e':
       if (valueText === '') return null;
-      // A code this library does not list keeps its text: Excel adds codes (`#BUSY!`, `#FIELD!`), and
-      // a newer workbook's error is data, not a malformed token.
+      // A code this library does not list keeps its text: an error Excel stores only beside a rich value
+      // (`#SPILL!`, `#FIELD!`) is not a literal, and a producer that writes one anyway wrote data.
       return isErrorCode(valueText) ? {error: valueText} : valueText;
     default:
       // Not a bare `Number()`, which reads an unparseable token as `NaN`, a number that satisfies every
@@ -129,6 +129,12 @@ export function decodeFormulaResult(
 // The formula-result subset of `decodeValue`: a cached result is only ever a string, boolean,
 // error, or number, never a shared-string index, inline string, or Strict-mode date, so this
 // handles just those cases rather than the full cell-value grammar.
+//
+// `undefined` is "no cached result", and an empty `<v>` is one, whatever `t` says. With calculation
+// set to manual, so it shows the cache, Excel 16.0 (build 20326) showed an empty cached result under
+// `t="b"`, `t="e"` and a number exactly as it showed a formula with no `<v>`: an empty string, not
+// FALSE, an error or 0 (`test/corpus/fixtures/excel-oracle/formula-empty-cached-result.json`). Under
+// `t="str"` a present `<v>` is text, as it is on a plain cell.
 function decodeResult(type: string, valueText: string): FormulaResult | undefined {
   switch (type) {
     case 'str':
@@ -138,8 +144,9 @@ function decodeResult(type: string, valueText: string): FormulaResult | undefine
       // their grammars, so only this branch decodes.
       return decodeSpreadsheetText(valueText);
     case 'b':
-      return boolStrict(valueText);
+      return boolTristate(valueText);
     case 'e':
+      if (valueText === '') return undefined;
       return isErrorCode(valueText) ? {error: valueText} : valueText;
     default:
       // Narrowed exactly as a plain numeric cell is: an unparseable cached result is no cached

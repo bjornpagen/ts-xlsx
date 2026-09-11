@@ -130,6 +130,12 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Fixed
 
+- **A formula whose cached result was an empty boolean read as `FALSE`.** `<c t="b"><f>…</f><v></v></c>`
+  read with `result: false`, which a save wrote back as a real FALSE, and an empty result under
+  `t="e"` read as `""`. Excel shows an empty cached result under either type, and under a number, as it
+  shows a formula with no cached result at all, so both now read with no `result`, as the number
+  already did. A string formula's empty `<v>` still reads as `""`.
+
 - **An `.xlsb` workbook read without its sheet protection.** The binary reader ignored the protection
   records, so a protected sheet read as unprotected and was saved unguarded. It now reads which
   operations stay allowed, a legacy password hash, and a password's credential, into the same model the

@@ -1,0 +1,80 @@
+{
+  "invariant": "formula-empty-cached-result",
+  "description": "What Excel makes of a formula cell whose cached <v> is empty, or absent, under each type. The package is one Excel saved with manual calculation (calcMode=\"manual\", calcId=\"191029\"), its row 1 patched: A1 <f>1+1</f><v>5</v> is the control (a stale 5 shown means the cache is read, not recomputed), B1 t=\"b\" <f>TRUE</f><v></v>, C1 t=\"e\" <f>1/0</f><v></v>, D1 t=\"str\" <f>\"x\"</f><v></v>, E1 t=\"b\" <f>TRUE</f> with no <v>, F1 <f>1+1</f><v></v>.",
+  "probeSpecRef": "tools/excel-oracle/probes/formula-empty-cached-result.json",
+  "xlsxRef": "test/corpus/fixtures/formula-empty-cached-result/cells.xlsx",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-11",
+  "openClass": "automation-open (DisplayAlerts=false, AutomationSecurity=ForceDisable)",
+  "open": {
+    "threw": false,
+    "error": null,
+    "repairedMarker": false
+  },
+  "cells": [
+    {
+      "address": "A1",
+      "hasFormula": true,
+      "formula": "=1+1",
+      "value": "5",
+      "valueType": "Double",
+      "text": "5",
+      "isBlank": false
+    },
+    {
+      "address": "B1",
+      "hasFormula": true,
+      "formula": "=TRUE",
+      "value": "",
+      "valueType": "String",
+      "text": "",
+      "isBlank": false
+    },
+    {
+      "address": "C1",
+      "hasFormula": true,
+      "formula": "=1/0",
+      "value": "",
+      "valueType": "String",
+      "text": "",
+      "isBlank": false
+    },
+    {
+      "address": "D1",
+      "hasFormula": true,
+      "formula": "=\"x\"",
+      "value": "",
+      "valueType": "String",
+      "text": "",
+      "isBlank": false
+    },
+    {
+      "address": "E1",
+      "hasFormula": true,
+      "formula": "=TRUE",
+      "value": "",
+      "valueType": "String",
+      "text": "",
+      "isBlank": false
+    },
+    {
+      "address": "F1",
+      "hasFormula": true,
+      "formula": "=1+1",
+      "value": "",
+      "valueType": "String",
+      "text": "",
+      "isBlank": false
+    }
+  ],
+  "resave": {
+    "attempted": false,
+    "threw": false,
+    "error": null,
+    "canonicalSharedFormulasBySheet": {}
+  },
+  "verdict": "The control shows 5, so Excel shows the cache. Every empty or absent cached result shows as an empty String Value2 with empty Text, whatever its type: not FALSE under t=\"b\", not an error under t=\"e\", not 0 for a number. Excel draws no line between an empty cached result and none, so the reader reads both as no cached result, except under t=\"str\", where a present <v> is the empty string as it is on a plain cell."
+}
