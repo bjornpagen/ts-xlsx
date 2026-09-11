@@ -3,7 +3,8 @@ import {test} from 'node:test';
 
 import type {TotalsRowFunction} from '../../core/table.ts';
 import {Workbook} from '../../core/workbook.ts';
-import {partIn, partsWritten, roundtrip} from './package.test-support.ts';
+import {partIn, partsWritten, patchParts, roundtrip} from './package.test-support.ts';
+import {readXlsx} from './read.ts';
 import {parseTable} from './tables.ts';
 import {writeXlsx} from './write.ts';
 
@@ -11,7 +12,6 @@ import {writeXlsx} from './write.ts';
 // reconstructed table for assertions.
 function roundtripTable(options: {
   name: string;
-  displayName?: string;
   ref: string;
   columns: {name: string; totalsRowLabel?: string; totalsRowFunction?: TotalsRowFunction}[];
   rowCount: number;
@@ -251,25 +251,22 @@ test("a table authored without a style reads back with Excel's default style", (
   assert.equal(table.options.style?.showRowStripes, true);
 });
 
-test('a distinct display name round-trips independently of the internal name', () => {
+test("a table's one name is written as both its name and its displayName", () => {
   const wb = new Workbook();
-  wb.addWorksheet('S').addTable({
-    name: 'MyTable',
-    displayName: 'My Display Name',
-    ref: 'A1',
-    columns: [{name: 'C'}],
-    rowCount: 1,
-  });
-  const table = roundtrip(wb).getWorksheet('S')?.tables[0];
-  assert.ok(table !== undefined);
-  assert.equal(table.name, 'MyTable', 'the internal identifier is unaffected');
-  assert.equal(table.displayName, 'My Display Name', 'the display label survives the round-trip');
+  wb.addWorksheet('S').addTable({name: 'Sales', ref: 'A1', columns: [{name: 'C'}], rowCount: 1});
+  const table = partIn(partsWritten(wb), 'xl/tables/table1.xml');
+  assert.match(table, /<table [^>]*name="Sales" displayName="Sales"/);
 });
 
-test('a display name defaults to the table name when unset', () => {
-  const [table] = roundtripTable({name: 'Plain', ref: 'A1', columns: [{name: 'C'}], rowCount: 1});
-  assert.ok(table !== undefined);
-  assert.equal(table.displayName, 'Plain');
+test('a table part whose two names differ reads under its displayName, the one formulas resolve', () => {
+  // Excel 16.0 computes `SUM(Shown[h])` over this table and makes `SUM(Internal[h])` a `#REF!`.
+  const wb = new Workbook();
+  wb.addWorksheet('S').addTable({name: 'Shown', ref: 'A1', columns: [{name: 'h'}], rowCount: 1});
+  const patched = patchParts(writeXlsx(wb), {
+    'xl/tables/table1.xml': (xml) =>
+      xml.replace('name="Shown" displayName', 'name="Internal" displayName'),
+  });
+  assert.equal(readXlsx(patched).getWorksheet('S')?.tables[0]?.name, 'Shown');
 });
 
 test('a header table read without an autoFilter does not gain one on round-trip', () => {

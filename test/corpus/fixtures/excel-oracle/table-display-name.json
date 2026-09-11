@@ -1,0 +1,19 @@
+{
+  "invariant": "table-display-name",
+  "description": "Which of a table part's two names is the table's name? Packages this library wrote were opened in Excel Desktop: one table named MyTable with displayName 'My Display Name' and one with displayName MyDisplay, interactively; and one with name Internal and displayName Shown beside the formulas SUM(Shown[h]) and SUM(Internal[h]), through the Excel oracle (tools/excel-oracle/run.ts --xlsx), which reads each formula cell back and re-saves.",
+  "probe": ".claude/skills/excel-gui-automation/scripts/open-verdict.ps1; node tools/excel-oracle/run.ts --xlsx",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-11",
+  "openVerdicts": {
+    "displayName 'My Display Name'": "repair-prompt",
+    "displayName MyDisplay": "clean"
+  },
+  "structuredReferences": {
+    "SUM(Shown[h])": {"formula": "=SUM(Shown[h])", "text": "3"},
+    "SUM(Internal[h])": {"formula": "=SUM(#REF!)", "text": "#REF!"}
+  },
+  "verdict": "displayName is the table's name: the identifier structured references resolve and the one Excel requires to be a valid name. name carries nothing a model needs apart from it."
+}

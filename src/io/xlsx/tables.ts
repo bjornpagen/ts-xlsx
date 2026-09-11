@@ -24,8 +24,9 @@ import {boolAttr, checkedToken, escapeAttr, escapeText, XML_DECLARATION} from '.
 import {NS} from './relationships.ts';
 
 export function tableXml(table: Table, id: number): string {
+  // One name, in both attributes: `displayName` is the one Excel resolves a structured reference against,
+  // and `name` has no meaning of its own the model could hold.
   const name = escapeAttr(table.name);
-  const displayName = escapeAttr(table.displayName);
   // headerRowCount defaults to 1 in OOXML, so only a headerless table needs it stated.
   const headerRowCount = table.headerRow ? '' : ' headerRowCount="0"';
   // A present totals row implies it is shown, so it only needs the count. Without a totals row the
@@ -40,7 +41,7 @@ export function tableXml(table: Table, id: number): string {
   const columns = table.columns.map((column, i) => tableColumnXml(column, i + 1)).join('');
   return (
     XML_DECLARATION +
-    `<table xmlns="${NS.main}" id="${id}" name="${name}" displayName="${displayName}" ` +
+    `<table xmlns="${NS.main}" id="${id}" name="${name}" displayName="${name}" ` +
     `ref="${table.range}"${headerRowCount}${totals}>` +
     autoFilter +
     `<tableColumns count="${table.columns.length}">${columns}</tableColumns>` +
@@ -98,7 +99,6 @@ function tableColumnXml(column: TableColumn, id: number): string {
  */
 export function parseTable(xml: string): TableOptions | undefined {
   let name: string | undefined;
-  let displayName: string | undefined;
   let ref: string | undefined;
   let headerRowCount = 1; // OOXML default: a table carries a header row unless it says otherwise.
   let totalsRowCount = 0; // OOXML default: no totals row.
@@ -119,11 +119,10 @@ export function parseTable(xml: string): TableOptions | undefined {
     onOpen(elementName, attrs, selfClosing) {
       switch (localName(elementName)) {
         case 'table':
-          // OOXML makes `displayName` the required identifier and `name` an optional alias; the
-          // model inverts the roles (`name` is the formula identifier, `displayName` the label),
-          // so read each from its own attribute and fall back across the pair when one is absent.
-          name = attrs.name ?? attrs.displayName;
-          displayName = attrs.displayName ?? attrs.name;
+          // `displayName` is the table's name: over a part whose `name` said `Internal` and whose
+          // `displayName` said `Shown`, Excel 16.0 computed `SUM(Shown[h])` and made `SUM(Internal[h])`
+          // a `#REF!`. `name` stands in only for a part that leaves `displayName` out.
+          name = attrs.displayName ?? attrs.name;
           ref = attrs.ref;
           headerRowCount = numInteger(attrs.headerRowCount, 0) ?? headerRowCount;
           totalsRowCount = numInteger(attrs.totalsRowCount, 0) ?? totalsRowCount;
@@ -210,7 +209,6 @@ export function parseTable(xml: string): TableOptions | undefined {
 
   const options: TableOptions = {
     name,
-    displayName: displayName ?? name,
     ref: encodeAddress(left, top),
     columns,
     rowCount: Math.max(0, dataRows),

@@ -207,12 +207,16 @@ export interface TableColumn {
 }
 
 export interface TableOptions {
-  /** Table name: a valid Excel identifier, unique across the workbook. This is the name used in
-   * structured formula references (`Table1[Column]`). */
+  /**
+   * Table name: a valid Excel identifier, unique across the workbook. It is the one name a table has:
+   * the name structured references use (`Table1[Column]`) and the one Excel shows, written as both the
+   * table part's `name` and its `displayName`.
+   *
+   * There is no separate display label. OOXML's `displayName` is the identifier Excel resolves a
+   * structured reference against and shows in the UI, and a package whose `displayName` carries a space
+   * opens with Excel's repair prompt.
+   */
   name: string;
-  /** Human-facing display name shown in the UI. A free-form label (spaces allowed) that need not
-   * be a valid identifier. Defaults to {@link name} when omitted. */
-  displayName?: string;
   /** A1 reference of the table's top-left cell (an anchor, e.g. `"A1"`, not the full range). */
   ref: string;
   /** The table's columns, left to right. At least one is required. */
@@ -289,7 +293,6 @@ export type TableRegion = GridRect;
 
 export class Table {
   readonly name: string;
-  readonly displayName: string;
   readonly columns: readonly TableColumn[];
   readonly headerRow: boolean;
   readonly totalsRow: boolean;
@@ -333,7 +336,6 @@ export class Table {
     const {col, row} = anchor;
 
     this.name = options.name;
-    this.displayName = options.displayName ?? options.name;
     this.columns = disambiguateColumnNames(options.columns);
     this.headerRow = options.headerRow ?? true;
     this.totalsRow = options.totalsRow ?? false;
@@ -555,7 +557,6 @@ export class Table {
   get options(): TableOptions {
     const options: TableOptions = {
       name: this.name,
-      displayName: this.displayName,
       ref: encodeAddress(this.#anchorCol, this.#anchorRow),
       columns: this.columns.map((column) => ({...column})),
       rowCount: this.#dataRowCount,

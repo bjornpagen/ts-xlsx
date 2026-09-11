@@ -3,7 +3,7 @@
 
 import {messageOf} from '../../thrown.ts';
 import type {Untyped} from '../../untyped.ts';
-import {type PartMap, partMapOf, roundtrip} from './package-facts.ts';
+import {type PartMap, partMapOf, patchedPackage, roundtrip} from './package-facts.ts';
 import {
   fixtureBytes,
   readFixture,
@@ -442,26 +442,31 @@ export const tables = {
     };
   },
 
-  // Author a table whose display name differs from its internal name, then report the displayName
-  // written into the table part and the internal/display names read back from the reloaded model:
-  // a serializer that mis-keys the property drops the display name to the internal default.
-  tableDisplayNameReport(display: string) {
-    const wb = new Workbook();
-    wb.addWorksheet('S').addTable({
-      name: 'MyTable',
-      displayName: display,
-      ref: 'A1',
-      columns: [{name: 'C'}],
-      rowCount: 1,
-    });
-    const buffer = writeXlsx(wb);
-    const part = partMapOf(buffer)['xl/tables/table1.xml'] || '';
-    const writtenDisplayName = (part.match(/\bdisplayName="([^"]*)"/) || [])[1] ?? null;
-    const table = readXlsx(buffer).getWorksheet('S')!.tables[0];
+  // A table's two name attributes, both ways → { written, readDiffering, readNameOnly }. `written` is
+  // the `name` and `displayName` of the part a table authored as `Sales` is written with. The other two
+  // are the model name read back from that part patched to say `name="Internal" displayName="Shown"`,
+  // and patched to carry `name="OnlyName"` and no `displayName` at all.
+  tableNamesReport() {
+    const workbook = new Workbook();
+    workbook
+      .addWorksheet('S')
+      .addTable({name: 'Sales', ref: 'A1', columns: [{name: 'h'}], rowCount: 1});
+    const bytes = writeXlsx(workbook);
+    const PART = 'xl/tables/table1.xml';
+    const part = partMapOf(bytes)[PART] ?? '';
+    const attribute = (name: string) =>
+      new RegExp(`<table [^>]* ${name}="([^"]*)"`).exec(part)?.[1] ?? null;
+    const readAs = (patch: (xml: string) => string) =>
+      readXlsx(patchedPackage(bytes, {edit: {[PART]: patch}})).getWorksheet('S')?.tables[0]?.name ??
+      null;
     return {
-      writtenDisplayName,
-      reloadedDisplayName: table ? table.displayName : null,
-      reloadedName: table ? table.name : null,
+      written: {name: attribute('name'), displayName: attribute('displayName')},
+      readDiffering: readAs((xml) =>
+        xml.replace('name="Sales" displayName="Sales"', 'name="Internal" displayName="Shown"'),
+      ),
+      readNameOnly: readAs((xml) =>
+        xml.replace('name="Sales" displayName="Sales"', 'name="OnlyName"'),
+      ),
     };
   },
   // Splice columns against a two-column table and report what is left → { wholeDelete, leftInsert,

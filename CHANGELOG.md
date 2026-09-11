@@ -111,6 +111,13 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   A file carrying such a table reads without it. `TABLE_NAME_PATTERN` still states only the character
   grammar.
 
+- **BREAKING: a table has one name; `TableOptions.displayName` and `Table.displayName` are gone.** The
+  model treated `displayName` as a free-form label beside the formula name, but it is the name Excel
+  resolves structured references against and shows: a `displayName` with a space opened with Excel's
+  repair prompt, and over a part naming a table `Internal` with `displayName` `Shown`, Excel computes
+  `SUM(Shown[h])` and makes `SUM(Internal[h])` a `#REF!`. `name` is now written as both attributes, and
+  a file's table reads under its `displayName`, falling back to `name` when that is absent.
+
 - **BREAKING: `ERROR_CODES` holds the error literals Excel reads, which drops `#SPILL!` and `#CALC!`
   and adds `#BUSY!`.** A cell written with `{error: '#SPILL!'}` or `{error: '#CALC!'}` opened with
   Excel's repair prompt: Excel stores those errors as `#VALUE!` beside a rich value, never literally.

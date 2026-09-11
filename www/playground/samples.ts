@@ -118,7 +118,6 @@ function buildStructure(): Workbook {
   }
   sheet.addTable({
     name: 'Regions',
-    displayName: 'Regions',
     ref: 'A2',
     columns: [{name: 'Region'}, {name: 'Units'}, {name: 'Revenue'}],
     rowCount: regions.length,
