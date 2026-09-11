@@ -15,7 +15,7 @@
 
 import {readFileSync} from 'node:fs';
 
-import {resolveSpecifier, sourceFiles, toPosix, withoutComments} from './module-graph.ts';
+import {resolveSpecifier, sourceFiles, specifiers, toPosix} from './module-graph.ts';
 import {ROOT as REPO_ROOT} from './repo.ts';
 import {reportCrash, verdict} from './verdict.ts';
 
@@ -23,26 +23,13 @@ const ROOT = toPosix(REPO_ROOT);
 const CASES = 'test/corpus/cases';
 const ALLOWED = new Set(['test/corpus/case.ts', 'test/corpus/untyped.ts']);
 
-// Anchored to the start of a statement, where `module-graph.ts`'s `specifiers` matches `from '…'`
-// anywhere. Cases are mostly prose in string literals, and one of them splits a sentence across a
-// concatenation right after the word "from": `'… from ' + '…'` reads to the unanchored pattern as an
-// import of ` + `. The dynamic form keeps no anchor, since `import(` is a call wherever it appears.
-const IMPORT =
-  /(?:^|;)\s*(?:import|export)\b[^;'"]*?\bfrom\s*["']([^"']*)["']|(?:^|;)\s*import\s*["']([^"']*)["']|\bimport\s*\(\s*["']([^"']*)["']/gm;
-
-function importsOf(source: string): string[] {
-  return [...withoutComments(source).matchAll(IMPORT)].map(
-    (match) => match[1] ?? match[2] ?? match[3] ?? '',
-  );
-}
-
 const repoRelative = (path: string): string => toPosix(path).slice(ROOT.length + 1);
 
 function main(): void {
   const problems: string[] = [];
   const files = sourceFiles(`${ROOT}/${CASES}`, '.ts');
   for (const file of files) {
-    for (const specifier of importsOf(readFileSync(file, 'utf8'))) {
+    for (const specifier of specifiers(readFileSync(file, 'utf8'))) {
       if (specifier.startsWith('node:')) continue;
       const target = specifier.startsWith('.')
         ? repoRelative(resolveSpecifier(file, specifier))

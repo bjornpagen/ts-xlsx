@@ -59,6 +59,18 @@ test('a `*/` inside a string does not close a block comment early', () => {
   assert.deepEqual(specifiers(source), ['./here.ts']);
 });
 
+test('the word `from` or `import` inside a string is not an import', () => {
+  // A corpus case split a sentence right after "from", and `'… from ' + '…'` read as an import of
+  // ` + `: the keyword and the quote after it were both there, only inside two strings.
+  assert.deepEqual(
+    specifiers("const s = 'reads from ' + 'a book';\nimport {x} from './here.ts';\n"),
+    ['./here.ts'],
+  );
+  assert.deepEqual(specifiers('const s = "call import " + "(x)";\nexport * from "./d.ts";\n'), [
+    './d.ts',
+  ]);
+});
+
 test('every spelling that carries a specifier is seen', () => {
   const source = [
     "import a from './a.ts';",

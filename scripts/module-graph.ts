@@ -59,13 +59,22 @@ function startsRegex(previous: string): boolean {
 // The dynamic form is matched too, and `src/` has none today. That is the point: a graph that could
 // not see `import('…')` would report a clean answer the day one appeared, and the four gates built on
 // this would all be wrong at once. A hole nothing records is not a known limitation.
-const SPECIFIER = /\b(?:from|import)\s+["']([^"']*)["']|\bimport\s*\(\s*["']([^"']*)["']/g;
+const SPECIFIER = /\b(?:from|import)\s+["']([^"']*)["']|\bimport\s*\(\s*["']([^"']*)["']/dg;
 
-/** Every specifier a module imports or re-exports from, in source order, comments excluded. */
+/**
+ * Every specifier a module imports or re-exports from, in source order, comments excluded.
+ *
+ * The pattern runs over the source with string contents blanked too, so `from` or `import` followed by
+ * a quote only counts where both are code: `'… from ' + '…'` used to read as an import of ` + `. The
+ * specifier is then read at the same offsets from the source with only comments blanked, which is
+ * where its text still is.
+ */
 export function specifiers(source: string): string[] {
-  return [...withoutComments(source).matchAll(SPECIFIER)].map(
-    (match) => match[1] ?? match[2] ?? '',
-  );
+  const text = withoutComments(source);
+  return [...blanked(source, true).matchAll(SPECIFIER)].map((match) => {
+    const [start, end] = match.indices?.[1] ?? match.indices?.[2] ?? [0, 0];
+    return text.slice(start, end);
+  });
 }
 
 /** Only the relative specifiers: a bare one names a dependency, which is not part of this graph. */
@@ -134,6 +143,14 @@ export function closure(entry: string, imports: (file: string) => string[]): Set
  * opens one. `if (x) /re/.test(y)` is the shape that defeats it, and there is none in this tree.
  */
 export function withoutComments(source: string): string {
+  return blanked(source, false);
+}
+
+// The scanner behind both views of a module. With `strings` set, a single- or double-quoted string
+// keeps its quotes and loses its contents, so offsets still line up with the source. A template literal
+// keeps its contents either way: blanking one would also blank an `import('…')` in a `${}` inside it,
+// and a graph that misses an import reports a clean answer, where a false one only raises an alarm.
+function blanked(source: string, strings: boolean): string {
   let out = '';
   // The last character that was not whitespace, which is all the context deciding regex-or-division
   // needs. Comments are already blanked by the time it is read, so a comment between the operand and
@@ -180,15 +197,20 @@ export function withoutComments(source: string): string {
     if (!/\s/.test(char)) previous = char;
     if (char !== "'" && char !== '"' && char !== '`') continue;
     // Inside a string literal: copy to its close, honouring backslash escapes.
+    const blank = strings && char !== '`';
+    const copy = (text: string) => (blank && text !== '\n' ? ' '.repeat(text.length) : text);
     for (i += 1; i < source.length; i++) {
       const inner = source[i] as string;
-      out += inner;
       if (inner === '\\') {
-        out += source[i + 1] ?? '';
+        out += copy(inner) + copy(source[i + 1] ?? '');
         i += 1;
         continue;
       }
-      if (inner === char) break;
+      if (inner === char) {
+        out += inner;
+        break;
+      }
+      out += copy(inner);
     }
     previous = char;
   }
