@@ -9,6 +9,7 @@
 
 import {strToU8, zip, zipSync} from 'fflate';
 
+import type {Person} from '../../core/comment-thread.ts';
 import type {Workbook} from '../../core/workbook.ts';
 import {refuseImagesBesideKeptDrawing, type Worksheet} from '../../core/worksheet.ts';
 import {AuthoringError, InternalError, quoted} from '../../errors.ts';
@@ -608,7 +609,7 @@ function emitPackageParts(context: {
   for (const part of media.parts) {
     files.add(mediaPart(part.number, part.extension), part.data);
   }
-  emitSheetParts(files, perSheet, sheetXml);
+  emitSheetParts(files, perSheet, sheetXml, (id) => workbook.getPerson(id));
   for (const {table, number} of allTables) {
     files.add(tablePart(number), strToU8(tableXml(table, number)));
   }
@@ -707,11 +708,13 @@ class PackageFiles {
 
 // Emit each sheet's own parts: the sheet XML, its rels part (only when the sheet references something),
 // and the drawing/comment/printer-settings parts those relationships point at. `sheetXml[i]` is the
-// already-serialised body for `perSheet[i]`, indexed in lockstep.
+// already-serialised body for `perSheet[i]`, indexed in lockstep. `personById` is the workbook's
+// registry, which every message's author has to be in.
 function emitSheetParts(
   files: PackageFiles,
   perSheet: readonly SheetPlan[],
   sheetXml: readonly string[],
+  personById: (id: string) => Person | undefined,
 ): void {
   perSheet.forEach((plan, i) => {
     const {relationships, drawing, comments, threadedComments, printerSettings} = plan;
@@ -734,7 +737,7 @@ function emitSheetParts(
     if (threadedComments !== null) {
       files.add(
         threadedCommentsPart(threadedComments.number),
-        strToU8(threadedCommentsXml(threadedComments.threads)),
+        strToU8(threadedCommentsXml(threadedComments.threads, personById)),
       );
     }
   });

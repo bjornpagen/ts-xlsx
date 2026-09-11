@@ -229,21 +229,25 @@ test('an escape split across two text events by an entity still decodes', () => 
 });
 
 test('a character XML cannot carry is written into a message as its escape', () => {
-  const xml = threadedCommentsXml([
-    {
-      ref: 'A1',
-      resolved: false,
-      comments: [{id: '{A}', text: 'a\u0001b\uD800', mentions: []}],
-    },
-  ]);
+  const xml = threadedCommentsXml(
+    [
+      {
+        ref: 'A1',
+        resolved: false,
+        comments: [{id: '{A}', text: 'a\u0001b\uD800', mentions: []}],
+      },
+    ],
+    ANYONE,
+  );
   assert.ok(xml.includes('<text>a_x0001_b_xD800_</text>'));
 });
 
 test('a message that already reads like an escape round-trips as itself, not as its character', () => {
   const text = 'a_x0041_b';
-  const xml = threadedCommentsXml([
-    {ref: 'A1', resolved: false, comments: [{id: '{A}', text, mentions: []}]},
-  ]);
+  const xml = threadedCommentsXml(
+    [{ref: 'A1', resolved: false, comments: [{id: '{A}', text, mentions: []}]}],
+    ANYONE,
+  );
   assert.ok(xml.includes('<text>a_x005F_x0041_b</text>'), 'the underscore is escaped in front');
   assert.strictEqual(parseThreadedComments(xml)[0]?.text, text);
 });
@@ -251,9 +255,10 @@ test('a message that already reads like an escape round-trips as itself, not as 
 test('the two comment systems now agree on a control character in the same string', () => {
   // The asymmetry this closed: a threaded comment refused what a legacy note carried happily.
   const text = 'before\u0001after';
-  const xml = threadedCommentsXml([
-    {ref: 'A1', resolved: false, comments: [{id: '{A}', text, mentions: []}]},
-  ]);
+  const xml = threadedCommentsXml(
+    [{ref: 'A1', resolved: false, comments: [{id: '{A}', text, mentions: []}]}],
+    ANYONE,
+  );
   assert.strictEqual(parseThreadedComments(xml)[0]?.text, text);
 });
 
@@ -316,6 +321,8 @@ const lookupOver = (personsXml: string) => {
   return (id: string) => byId.get(id);
 };
 const NO_PERSONS = () => undefined;
+// A registry holding every id, for a serialisation test that is not about who wrote the message.
+const ANYONE = (id: string) => ({id, displayName: ''});
 
 test('messages group into one thread per head, each reply following the head it answers', () => {
   const threads = buildCommentThreads(
@@ -355,11 +362,34 @@ test('every message resolves its author through the registry, keeping its timest
   );
 });
 
-test('an author the registry does not hold leaves the id readable instead of blanking it', () => {
+test('an author the registry does not hold reads as no recorded author, as Excel repairs it', () => {
+  // Written back, the id would make Excel offer to repair the package, and its repair forgets the id.
   const [thread] = buildCommentThreads(parseThreadedComments(THREADED_COMMENTS), NO_PERSONS);
   const head = thread?.comments[0];
   assert.strictEqual(head?.author, undefined, 'nothing is fabricated for a missing entry');
-  assert.strictEqual(head?.personId, ADA, 'but who was meant stays recoverable');
+  assert.strictEqual(head?.personId, undefined, 'and the id is not kept to be written back');
+  assert.strictEqual(head?.text, 'Is this gross or net of tax?', 'the message itself is kept');
+});
+
+test('a message with no author is written under the null GUID, which reads back as no author', () => {
+  const thread = {ref: 'A1', resolved: false, comments: [{id: '{H}', text: 'hi', mentions: []}]};
+  const xml = threadedCommentsXml([thread], NO_PERSONS);
+  assert.match(xml, /personId="\{00000000-0000-0000-0000-000000000000\}" id="\{H\}"/);
+  const [back] = buildCommentThreads(parseThreadedComments(xml), NO_PERSONS);
+  assert.strictEqual(back?.comments[0]?.personId, undefined);
+});
+
+test('a message whose author is not a registered person is refused rather than written', () => {
+  const thread = {
+    ref: 'A1',
+    resolved: false,
+    comments: [{id: '{H}', personId: ADA, text: 'hi', mentions: []}],
+  };
+  assert.throws(() => threadedCommentsXml([thread], NO_PERSONS), {
+    name: 'AuthoringError',
+    message: new RegExp(`its author "\\${ADA.slice(0, -1)}\\}" is not a registered person`),
+  });
+  assert.doesNotThrow(() => threadedCommentsXml([thread], lookupOver(PERSONS)));
 });
 
 test('a mention resolves to the entry it names: the PeoplePicker one, not its author twin', () => {
@@ -506,22 +536,31 @@ test('a thread whose anchor names no single cell is dropped rather than left una
 // ── Serialisation ────────────────────────────────────────────────────────────────────────────────────
 
 test('a conversation is written flat: the head first, then its replies naming it as their parent', () => {
-  const xml = threadedCommentsXml([
-    {
-      ref: 'B1',
-      resolved: false,
-      comments: [
-        {
-          id: '{HEAD}',
-          personId: ADA,
-          date: '2026-07-26T10:54:00.01',
-          text: 'Gross or net?',
-          mentions: [],
-        },
-        {id: '{R1}', personId: GRACE, date: '2026-07-26T10:54:00.04', text: 'Gross.', mentions: []},
-      ],
-    },
-  ]);
+  const xml = threadedCommentsXml(
+    [
+      {
+        ref: 'B1',
+        resolved: false,
+        comments: [
+          {
+            id: '{HEAD}',
+            personId: ADA,
+            date: '2026-07-26T10:54:00.01',
+            text: 'Gross or net?',
+            mentions: [],
+          },
+          {
+            id: '{R1}',
+            personId: GRACE,
+            date: '2026-07-26T10:54:00.04',
+            text: 'Gross.',
+            mentions: [],
+          },
+        ],
+      },
+    ],
+    ANYONE,
+  );
   assert.ok(
     xml.includes(
       `<threadedComment ref="B1" dT="2026-07-26T10:54:00.01" personId="${ADA}" id="{HEAD}">` +
@@ -541,14 +580,17 @@ test('a conversation is written flat: the head first, then its replies naming it
 test('done marks the head alone, and an open thread says nothing rather than done="0"', () => {
   const head = {id: '{HEAD}', text: 'q', mentions: []};
   const reply = {id: '{R1}', text: 'a', mentions: []};
-  const resolved = threadedCommentsXml([{ref: 'A1', resolved: true, comments: [head, reply]}]);
+  const resolved = threadedCommentsXml(
+    [{ref: 'A1', resolved: true, comments: [head, reply]}],
+    ANYONE,
+  );
   assert.strictEqual(
     (resolved.match(/\bdone="1"/g) ?? []).length,
     1,
     'exactly one done, on the head',
   );
   assert.match(resolved, /id="\{HEAD\}" done="1"/);
-  const open = threadedCommentsXml([{ref: 'A1', resolved: false, comments: [head, reply]}]);
+  const open = threadedCommentsXml([{ref: 'A1', resolved: false, comments: [head, reply]}], ANYONE);
   assert.ok(!open.includes('done='), 'Excel omits the attribute entirely on an open thread');
 });
 
@@ -557,32 +599,38 @@ test('an authored conversation round-trips through the parser as itself', () => 
   // that neither invents nor drops a field.
   const threads = buildCommentThreads(parseThreadedComments(THREADED_COMMENTS), NO_PERSONS);
   assert.deepStrictEqual(
-    buildCommentThreads(parseThreadedComments(threadedCommentsXml(threads)), NO_PERSONS),
+    buildCommentThreads(parseThreadedComments(threadedCommentsXml(threads, ANYONE)), NO_PERSONS),
     threads,
   );
 });
 
 test('a message that names nobody writes no mentions block at all', () => {
-  const xml = threadedCommentsXml([
-    {ref: 'A1', resolved: false, comments: [{id: '{H}', text: 'plain', mentions: []}]},
-  ]);
+  const xml = threadedCommentsXml(
+    [{ref: 'A1', resolved: false, comments: [{id: '{H}', text: 'plain', mentions: []}]}],
+    ANYONE,
+  );
   assert.ok(!xml.includes('<mentions'));
 });
 
 test('a mention is written with all four attributes Excel requires, lower-case p included', () => {
-  const xml = threadedCommentsXml([
-    {
-      ref: 'B2',
-      resolved: false,
-      comments: [
-        {
-          id: '{H}',
-          text: '@Grace Hopper Where does this figure come from?',
-          mentions: [{personId: MENTION_PERSON, mentionId: MENTION_ID, startIndex: 0, length: 13}],
-        },
-      ],
-    },
-  ]);
+  const xml = threadedCommentsXml(
+    [
+      {
+        ref: 'B2',
+        resolved: false,
+        comments: [
+          {
+            id: '{H}',
+            text: '@Grace Hopper Where does this figure come from?',
+            mentions: [
+              {personId: MENTION_PERSON, mentionId: MENTION_ID, startIndex: 0, length: 13},
+            ],
+          },
+        ],
+      },
+    ],
+    ANYONE,
+  );
   assert.ok(
     xml.includes(
       `<mentions><mention mentionpersonId="${MENTION_PERSON}" mentionId="${MENTION_ID}" ` +
@@ -601,39 +649,45 @@ test('a mention with no id of its own is dropped, but the text it named is not',
   // writer has no id generator, so an invalid part would risk Excel repairing the whole conversation
   // away, where dropping the chip costs only the highlight. Excel always writes the id; this needs a
   // foreign generator.
-  const xml = threadedCommentsXml([
-    {
-      ref: 'B2',
-      resolved: false,
-      comments: [
-        {
-          id: '{H}',
-          text: '@Grace Hopper who owns this?',
-          mentions: [{personId: MENTION_PERSON, startIndex: 0, length: 13}],
-        },
-      ],
-    },
-  ]);
+  const xml = threadedCommentsXml(
+    [
+      {
+        ref: 'B2',
+        resolved: false,
+        comments: [
+          {
+            id: '{H}',
+            text: '@Grace Hopper who owns this?',
+            mentions: [{personId: MENTION_PERSON, startIndex: 0, length: 13}],
+          },
+        ],
+      },
+    ],
+    ANYONE,
+  );
   assert.ok(!xml.includes('<mention'));
   assert.ok(xml.includes('<text>@Grace Hopper who owns this?</text>'));
 });
 
 test('a thread with no messages writes nothing, having neither text nor a head to reply to', () => {
-  const xml = threadedCommentsXml([{ref: 'A1', resolved: true, comments: []}]);
+  const xml = threadedCommentsXml([{ref: 'A1', resolved: true, comments: []}], ANYONE);
   assert.ok(!xml.includes('<threadedComment'));
   assert.match(xml, /<ThreadedComments xmlns="[^"]*threadedcomments"><\/ThreadedComments>$/);
 });
 
 test('markup-significant characters in a message and its ids are escaped', () => {
-  const xml = threadedCommentsXml([
-    {
-      ref: 'A1',
-      resolved: false,
-      comments: [
-        {id: '{"&<>}', personId: 'p"&', date: '"&', text: '5 < 6 & "quoted"', mentions: []},
-      ],
-    },
-  ]);
+  const xml = threadedCommentsXml(
+    [
+      {
+        ref: 'A1',
+        resolved: false,
+        comments: [
+          {id: '{"&<>}', personId: 'p"&', date: '"&', text: '5 < 6 & "quoted"', mentions: []},
+        ],
+      },
+    ],
+    ANYONE,
+  );
   assert.ok(!/&(?!amp;|lt;|gt;|quot;|apos;|#)/.test(xml), 'no raw ampersand survives');
   assert.ok(xml.includes('<text>5 &lt; 6 &amp; "quoted"</text>'));
   assert.ok(
@@ -704,22 +758,25 @@ test('a mention offset beyond what the wire can express is dropped, chip lost an
 test('the writer cannot emit an out-of-range span even from a model that was handed one', () => {
   // `restoreCommentThreads` takes a model wholesale, so the serialiser refuses the span itself rather
   // than trusting that every path into the model already checked it.
-  const xml = threadedCommentsXml([
-    {
-      ref: 'A1',
-      resolved: false,
-      comments: [
-        {
-          id: '{H}',
-          text: '@x hi',
-          mentions: [
-            {personId: MENTION_PERSON, mentionId: MENTION_ID, startIndex: 0, length: 1e21},
-            {personId: MENTION_PERSON, mentionId: MENTION_ID, startIndex: 1.5, length: 2},
-          ],
-        },
-      ],
-    },
-  ]);
+  const xml = threadedCommentsXml(
+    [
+      {
+        ref: 'A1',
+        resolved: false,
+        comments: [
+          {
+            id: '{H}',
+            text: '@x hi',
+            mentions: [
+              {personId: MENTION_PERSON, mentionId: MENTION_ID, startIndex: 0, length: 1e21},
+              {personId: MENTION_PERSON, mentionId: MENTION_ID, startIndex: 1.5, length: 2},
+            ],
+          },
+        ],
+      },
+    ],
+    ANYONE,
+  );
   assert.ok(!xml.includes('<mention'), 'neither span is written');
   assert.ok(!xml.includes('e+'), 'so no exponent-form number reaches the part');
   assert.ok(xml.includes('<text>@x hi</text>'), 'and the message survives without its chips');

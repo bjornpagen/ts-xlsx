@@ -67,6 +67,14 @@ Facts that are easy to get subtly wrong, each established by a probe:
   oracle that could: Excel draws the chip over exactly that span.
 - **`startIndex` and `length` are `xsd:unsignedInt`**: `4294967295` validates, `4294967296` fails as
   "not a valid 'UInt32' value".
+- **A message's `personId` is required and must name a registered person.** Leaving it out is
+  `Sch_MissRequiredAttribute`, and Excel offers to repair the package; an id the registry does not
+  hold validates but gets the same repair prompt (open verdict, Excel 16.0 build 20326, 2026-09-11).
+  Excel's repair of the second rewrites the id to the null GUID
+  `{00000000-0000-0000-0000-000000000000}` and shows the message by "Author", and a package carrying
+  the null GUID opens clean with a registry or without one. That is the wire's only spelling of an
+  unknown author, so the writer writes a message with no author under it and refuses an authored id
+  nobody registered, and the reader reads an unregistered id as no author.
 - **A mentioned identity gets its own `<person>` entry with `providerId="PeoplePicker"`**, distinct
   from the same human's `providerId="AD"` authoring entry: same `displayName` and `userId`, different
   `id`. So `providerId` is not always `"AD"`, the registry legitimately holds several entries per
@@ -122,9 +130,10 @@ loop, since the sheets resolve through the registry.
   (`commentThreads`, `commentThreadAt(ref)`), mirroring `loadedPivotTables`. `commentThreadAt`
   canonicalises the ref **without** going through `getCell`, which would materialise a cell and
   change written output on a read-only query.
-- **Both the resolved object and the raw id are carried** (`Comment.author` plus `personId`,
-  `Mention.person` plus `personId`), so an id the registry does not hold stays diagnosable instead of
-  reading as blank. `mentionId` is carried for the same reason: the writer cannot invent one.
+- **A mention carries both the resolved object and the raw id** (`Mention.person` plus `personId`), so
+  an id the registry does not hold stays diagnosable instead of reading as blank. `mentionId` is carried
+  for the same reason: the writer cannot invent one. A message's author does not keep an unresolved id:
+  written back it would be the package Excel repairs, and Excel's repair forgets it.
 
 **Write.** `threadedCommentsXml` and `personsXml`, exact inverses of the parsers, carrying **no clock
 and no id generator**: every guid and timestamp comes from the model, so one workbook always

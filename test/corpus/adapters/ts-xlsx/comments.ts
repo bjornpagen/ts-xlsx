@@ -90,6 +90,64 @@ export const comments = {
     };
   },
 
+  // Three ways a threaded comment can reach the writer without a registered author, each reported as
+  // → { writeError, writtenPersonIds, readPersonIds }: `writtenPersonIds` is every `personId` the thread
+  // part carries (null when the write was refused), `readPersonIds` what the written package reads back
+  // as. `authorless` is a message authored with no personId. `unregistered` names an id no person
+  // carries. `foreign` is a package whose thread names an id its registry does not hold, read and
+  // written again, which is the damage a producer other than Excel leaves.
+  threadAuthorReport() {
+    const ADA = '{39236F6F-643D-4654-8264-DD21C8472F7F}';
+    const STRANGER = '{99999999-2222-4333-8444-555555555555}';
+    const threadedWorkbook = (personId: string | undefined) => {
+      const workbook = new Workbook();
+      workbook.addPerson({id: ADA, displayName: 'Ada Lovelace', providerId: 'AD'});
+      workbook.addWorksheet('Review').addCommentThread({
+        ref: 'B2',
+        resolved: false,
+        comments: [
+          {
+            id: '{11111111-2222-3333-4444-555555555555}',
+            date: '2026-09-11T10:00:00.00',
+            text: 'hello',
+            mentions: [],
+            ...(personId === undefined ? {} : {personId}),
+          },
+        ],
+      });
+      return workbook;
+    };
+    const THREAD_PART = 'xl/threadedComments/threadedComment1.xml';
+    const personIdsIn = (bytes: Uint8Array) =>
+      [...(partMapOf(bytes)[THREAD_PART] ?? '').matchAll(/\bpersonId="([^"]*)"/g)].map(
+        (match) => match[1] ?? '',
+      );
+    const readPersonIdsOf = (workbook: WorkbookInstance) =>
+      (workbook.worksheets[0]?.commentThreadAt('B2')?.comments ?? []).map(
+        (comment) => comment.personId ?? null,
+      );
+    const report = (workbook: WorkbookInstance) => {
+      try {
+        const bytes = writeXlsx(workbook);
+        return {
+          writeError: null,
+          writtenPersonIds: personIdsIn(bytes),
+          readPersonIds: readPersonIdsOf(readXlsx(bytes)),
+        };
+      } catch (error) {
+        return {writeError: messageOf(error), writtenPersonIds: null, readPersonIds: null};
+      }
+    };
+    const foreign = reloadPatched(writeXlsx(threadedWorkbook(ADA)), {
+      [THREAD_PART]: (xml) => xml.replace(`personId="${ADA}"`, `personId="${STRANGER}"`),
+    });
+    return {
+      authorless: report(threadedWorkbook(undefined)),
+      unregistered: report(threadedWorkbook(STRANGER)),
+      foreign: {readAs: readPersonIdsOf(foreign), ...report(foreign)},
+    };
+  },
+
   // Write a noted cell, relocate its comments part to a non-canonical path (xl/sheet1_comments.xml)
   // reachable only through the worksheet rels, and reload → { ok, error, note }. The reader locates the
   // comments part by relationship *type*, not by filename glob, so the moved part still loads and its

@@ -608,7 +608,8 @@ one cell, and a cell carrying both is written back as the conversation alone.
 Every message supplies its own [`Comment.id`](./comment-thread.md#comment) and [`Comment.date`](./comment-thread.md#comment), and names its author by
 [`Comment.personId`](./comment-thread.md#comment) into the workbook registry ([`Workbook.addPerson`](./workbook.md#workbookaddperson)): the writer has no
 clock and no id generator, so nothing here is invented and the same workbook always serialises to the
-same bytes. Every id is normalised to the brace-wrapped upper-case GUID form the format requires, so a
+same bytes. An author id nobody registered is refused when the workbook is written, where the
+registry is complete; a message with no `personId` is written as Excel writes an unknown author. Every id is normalised to the brace-wrapped upper-case GUID form the format requires, so a
 `crypto.randomUUID()` is accepted as-is.
 
 Message ids must be unique **within this sheet**, because that is the scope in which they mean

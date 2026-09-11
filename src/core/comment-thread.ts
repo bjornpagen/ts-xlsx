@@ -71,11 +71,15 @@ export interface Comment {
   /** Brace-wrapped GUID identifying this message, preserved verbatim from the file. */
   readonly id: string;
   /**
-   * Who wrote it, resolved through the workbook registry. Absent when the file recorded no author or
-   * named an id the registry does not hold; {@link personId} distinguishes those two cases.
+   * Who wrote it, resolved through the workbook registry. Absent when the file recorded no author, or
+   * named an id the registry does not hold, which Excel treats the same way.
    */
   readonly author?: Person;
-  /** The author's {@link Person.id} exactly as written; absent when the file recorded no author. */
+  /**
+   * The author's {@link Person.id}, which must be registered ({@link Workbook.addPerson}) by the time
+   * the workbook is written. Absent for a message with no recorded author, which is written under the
+   * null GUID Excel uses for one and shown by Excel as "Author".
+   */
   readonly personId?: string;
   /**
    * When it was written, verbatim. Excel writes local wall-clock with fractional seconds and no

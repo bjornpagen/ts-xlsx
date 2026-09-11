@@ -618,7 +618,8 @@ export class Worksheet {
    * Every message supplies its own {@link Comment.id} and {@link Comment.date}, and names its author by
    * {@link Comment.personId} into the workbook registry ({@link Workbook.addPerson}): the writer has no
    * clock and no id generator, so nothing here is invented and the same workbook always serialises to the
-   * same bytes. Every id is normalised to the brace-wrapped upper-case GUID form the format requires, so a
+   * same bytes. An author id nobody registered is refused when the workbook is written, where the
+   * registry is complete; a message with no `personId` is written as Excel writes an unknown author. Every id is normalised to the brace-wrapped upper-case GUID form the format requires, so a
    * `crypto.randomUUID()` is accepted as-is.
    *
    * Message ids must be unique **within this sheet**, because that is the scope in which they mean

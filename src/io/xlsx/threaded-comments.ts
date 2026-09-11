@@ -10,6 +10,12 @@
 // the first message of a thread has no `parentId`, every reply carries the head's `id`. Only the head
 // carries `done`, so a thread's resolved state is its head's; a reply never says.
 //
+// `personId` is required, and it has to name a registered person: Excel 16.0 offers to repair a package
+// whose message leaves it out or names an id the registry does not hold. Its own repair of the second
+// rewrites the id to the null GUID, which it then opens clean with or without a registry and shows as
+// "Author". That is the one spelling of "no recorded author" the wire has, so the reader reads an
+// author it cannot resolve as no author, and the writer writes no author as the null GUID.
+//
 // These parsers describe a file that already exists, so they read leniently: an unrecognised or
 // missing attribute yields a sensible default rather than a throw, and a message too incomplete to
 // anchor is skipped instead of crashing the read. Optional wire attributes stay optional in the
@@ -42,6 +48,7 @@ import {
   type MentionRef,
   type Person,
 } from '../../core/comment-thread.ts';
+import {AuthoringError, quoted} from '../../errors.ts';
 import {decodeSpreadsheetText, numInteger} from '../../xml/xml-attrs.ts';
 import {parseXml, TextCapture} from '../../xml/xml-read.ts';
 import {boolStrict, localName, type XmlAttributes} from '../../xml/xml-scan.ts';
@@ -265,6 +272,8 @@ function anchorRef(reference: string): string | undefined {
   return cell === undefined ? undefined : encodeAddress(cell.col, cell.row);
 }
 
+// An author id the registry does not hold is not kept: written back it would be the package Excel repairs,
+// and Excel's repair is to forget who it was.
 function commentFrom(
   message: ParsedThreadedComment,
   personById: (id: string) => Person | undefined,
@@ -274,8 +283,7 @@ function commentFrom(
     id: message.id,
     text: message.text,
     mentions: message.mentions.map((mention) => mentionOf(mention, personById)),
-    ...(author !== undefined ? {author} : {}),
-    ...(message.personId !== undefined ? {personId: message.personId} : {}),
+    ...(author !== undefined ? {author, personId: author.id} : {}),
     ...(message.date !== undefined ? {date: message.date} : {}),
   };
 }
@@ -305,15 +313,23 @@ function mentionOf(
  *
  * A thread with no messages writes nothing: it has neither text to say nor a head id for its replies and
  * its legacy fallback to hang off.
+ *
+ * A message with no author is written under the null GUID, Excel's own spelling for one. `personById` is
+ * the workbook's registry, and a message naming an id it does not hold is refused.
+ *
+ * @throws {AuthoringError} if a message's author is not a registered person.
  */
-export function threadedCommentsXml(threads: readonly CommentThread[]): string {
+export function threadedCommentsXml(
+  threads: readonly CommentThread[],
+  personById: (id: string) => Person | undefined,
+): string {
   const messages = threads.flatMap((thread) => {
     const [head, ...replies] = thread.comments;
     if (head === undefined) return [];
     return [
-      threadedCommentXml(thread.ref, head, thread.resolved ? ' done="1"' : ''),
+      threadedCommentXml(thread.ref, head, thread.resolved ? ' done="1"' : '', personById),
       ...replies.map((reply) =>
-        threadedCommentXml(thread.ref, reply, ` parentId="${escapeAttr(head.id)}"`),
+        threadedCommentXml(thread.ref, reply, ` parentId="${escapeAttr(head.id)}"`, personById),
       ),
     ];
   });
@@ -324,17 +340,30 @@ export function threadedCommentsXml(threads: readonly CommentThread[]): string {
 }
 
 // One `<threadedComment>`. `tail` is the attribute that distinguishes the message's role: `done` for a
-// resolved head, `parentId` for a reply, nothing for an open head. A `dT` or `personId` the model never
-// held is omitted rather than written empty, so "the file did not say" stays distinguishable from "the
-// file said nothing". Every value is escaped: an authored message's text and a foreign file's ids alike
+// resolved head, `parentId` for a reply, nothing for an open head. A `dT` the model never held is
+// omitted rather than written empty, so "the file did not say" stays distinguishable from "the file said
+// nothing". `personId` is required, so an absent author is written as the null GUID instead. Every value is escaped: an authored message's text and a foreign file's ids alike
 // are untrusted, and an unescaped `"` would end the attribute and reshape the part.
 //
 // The body gets the stronger `escapeSpreadsheetText`, which the ids and the timestamp do not: it is the
 // one field here that carries what a human typed, so it is the one that can hold a character XML has no
 // syntax for. An id or a `dT` that held one is malformed input, and refusing it is the honest answer.
-function threadedCommentXml(ref: string, comment: Comment, tail: string): string {
+function threadedCommentXml(
+  ref: string,
+  comment: Comment,
+  tail: string,
+  personById: (id: string) => Person | undefined,
+): string {
   const date = textAttr('dT', comment.date);
-  const person = textAttr('personId', comment.personId);
+  const personId = comment.personId ?? UNKNOWN_AUTHOR;
+  if (personId !== UNKNOWN_AUTHOR && personById(personId) === undefined) {
+    throw new AuthoringError(
+      `cannot write the threaded comment ${quoted(comment.id)}: its author ${quoted(personId)} is not ` +
+        'a registered person. Register it with Workbook.addPerson, or leave personId out for a ' +
+        'comment with no recorded author',
+    );
+  }
+  const person = textAttr('personId', personId);
   return (
     `<threadedComment ref="${escapeAttr(ref)}"${date}${person} id="${escapeAttr(comment.id)}"${tail}>` +
     `<text>${escapeSpreadsheetText(comment.text)}</text>` +
@@ -342,6 +371,9 @@ function threadedCommentXml(ref: string, comment: Comment, tail: string): string
     '</threadedComment>'
   );
 }
+
+// The null GUID: Excel's `personId` for a message whose author it does not know.
+const UNKNOWN_AUTHOR = '{00000000-0000-0000-0000-000000000000}';
 
 // The `<mentions>` block, which follows `<text>` in the message. All four `<mention>` attributes are
 // required, verified by dropping each in turn and getting `Sch_MissRequiredAttribute`, so a mention the

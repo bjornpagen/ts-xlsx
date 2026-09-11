@@ -111,6 +111,13 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   A file carrying such a table reads without it. `TABLE_NAME_PATTERN` still states only the character
   grammar.
 
+- **BREAKING: a threaded comment's author must be registered by the time the workbook is written.** A
+  message whose `personId` names no person added with `Workbook.addPerson` now makes `writeXlsx` throw
+  `AuthoringError`; Excel opened such a package with its repair prompt. A message with no `personId` was
+  written without the attribute the schema requires, which drew the same prompt, and is now written
+  under the null GUID Excel itself uses for an unknown author. A file's message naming an unregistered
+  author reads with no `personId`, as Excel's repair leaves it.
+
 - **`addPivotTable` binds a field name to its header ignoring case.** `rows: ['name']` over a `Name`
   header was refused as not a column header. Headers are already unique ignoring case, so a name in
   any case binds exactly one; naming the same field in two cases is refused as naming it twice.
