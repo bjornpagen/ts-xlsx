@@ -44,7 +44,10 @@ const DIST = join(ROOT, 'dist');
 //
 // Raised again, from 586, when the CSV reader began refusing a file that does not fit the grid with its
 // own `CsvParseError`, and checking a date and a number's digits before coercing them, four tenths over.
-const TOTAL_BUDGET_BYTES = 587 * 1024;
+//
+// Raised again, from 587, when the CSV writer began keeping row positions and refusing delimiters it
+// cannot round-trip, three tenths over.
+const TOTAL_BUDGET_BYTES = 588 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -110,7 +113,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // entry sitting on its budget.
   //
   // Raised again, from 575, by the same CSV reader bounds as `/csv`, two tenths over.
-  '.': 576,
+  //
+  // Raised again, from 576, by the same CSV writer row positions and delimiter refusals as `/csv`, which
+  // left this entry sitting on its budget.
+  '.': 577,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -177,7 +183,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 223, when the reader began refusing a record wider than the grid, or more
   // records than it has rows, with `CsvParseError` rather than the grid's `RangeError`, and checking an
   // ISO date and a number's significant digits before coercing. Three tenths over.
-  './csv': 224,
+  //
+  // Raised again, from 224, when the writer began placing row N on line N and refusing a quote, CR or
+  // LF as a delimiter and a row delimiter it cannot keep apart from the data. Two tenths over.
+  './csv': 225,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //

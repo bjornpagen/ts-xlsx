@@ -37,7 +37,7 @@ export const csv = {
   // silent in the worst direction: `field.includes('')` holds for every field, so an empty delimiter
   // quoted every field and produced a file with no separators in it that parses as one column.
   csvDelimiterAgreement() {
-    const candidates = [',', ';', '\t', '||', ''];
+    const candidates = [',', ';', '\t', '||', '', '"', '\r', '\n'];
     return candidates.map((delimiter) => {
       const written = this.csvWrite({
         spec: {
@@ -82,6 +82,32 @@ export const csv = {
     } catch (e) {
       return {ok: false, error: messageOf(e), text: null};
     }
+  },
+
+  // Write a sheet from addressed cells, optionally with formatting-only rows, then read the text back
+  // -> { text, cells: {address: value} } over the read-back cells that hold a value. Addresses rather
+  // than a row array, because a row array is exactly the shape that cannot show a row moving up.
+  csvRowPositionsRoundTrip({
+    cells,
+    hiddenRows = [],
+  }: {
+    readonly cells: Readonly<Record<string, string>>;
+    readonly hiddenRows?: readonly number[];
+  }) {
+    const wb = new Workbook();
+    const sheet = wb.addWorksheet('S');
+    for (const [address, value] of Object.entries(cells)) sheet.getCell(address).value = value;
+    for (const row of hiddenRows) sheet.getRow(row).hidden = true;
+    const text = writeCsvText(wb);
+    const back = readCsv(text).worksheets[0];
+    const readBack = Object.fromEntries(
+      [...(back?.rows() ?? [])].flatMap((row) =>
+        row.cells
+          .filter((cell) => cell.value !== null)
+          .map((cell) => [cell.address, normalizeCsvValue(cell.value)]),
+      ),
+    );
+    return {text, cells: readBack};
   },
 
   // `undefined` is a case the corpus exercises, not an oversight: it asks the writer to pick a sheet

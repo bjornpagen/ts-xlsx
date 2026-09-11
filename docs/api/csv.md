@@ -57,9 +57,10 @@ interface CsvWriteOptions {
   /** Which worksheet to write; defaults to the first. A name matching no sheet throws rather than
    * silently emitting an empty file. */
   readonly sheetName?: string;
-  /** Field separator; defaults to a comma. */
+  /** Field separator; defaults to a comma. A single character other than a quote, CR or LF. */
   readonly delimiter?: string;
-  /** Line separator between rows; defaults to `"\n"`. */
+  /** Line separator between rows; defaults to `"\n"`. Not empty, and containing neither the field
+   * delimiter nor a quote. A field that contains it is quoted. */
   readonly rowDelimiter?: string;
   /**
    * An Excel number-format code (e.g. `"yyyy-mm-dd"`, `"d mmm yy hh:mm"`) for Date cells; without it
@@ -113,6 +114,7 @@ function writeCsv(workbook: Workbook, options: CsvWriteOptions = {}): Uint8Array
 
 **Throws:** [`AuthoringError`](./errors.md#authoringerror) if a field holds an unpaired surrogate and the encoding is UTF-8, which
 cannot represent one. The alternative is a silent U+FFFD substitution.
+**Throws:** `RangeError` on a delimiter [`writeCsvText`](./csv.md#writecsvtext) refuses.
 
 ---
 
@@ -120,8 +122,11 @@ cannot represent one. The alternative is a silent U+FFFD substitution.
 
 <sub>function</sub>
 
-The logical CSV text of one worksheet: no BOM, no byte encoding.
+The logical CSV text of one worksheet: no BOM, no byte encoding. Line N holds row N, so an empty
+row before the last populated one is an empty line.
 
 ```ts
 function writeCsvText(workbook: Workbook, options: CsvWriteOptions = {}): string;
 ```
+
+**Throws:** `RangeError` if `delimiter` or `rowDelimiter` is one the output could not be split on.

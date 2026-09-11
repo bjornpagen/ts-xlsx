@@ -38,6 +38,13 @@ test('a non-single-character delimiter is rejected rather than silently collapsi
   );
 });
 
+test('a quote, CR or LF is rejected as a delimiter rather than read as two things at once', () => {
+  // `a"b"c` with `"` as the delimiter read as the single field `abc`.
+  for (const delimiter of ['"', '\r', '\n']) {
+    assert.throws(() => readCsv('a"b"c', {delimiter}), {name: 'RangeError'});
+  }
+});
+
 test('an over-precision numeric string is preserved verbatim; in-range numbers coerce', () => {
   const big = '56343416020533614003';
   assert.deepEqual(rowsOf(`${big},42\n1.5,7`), [

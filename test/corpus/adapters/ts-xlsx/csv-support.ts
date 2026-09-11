@@ -35,6 +35,7 @@ export const translateCsvWriteOptions = (options: Untyped = {}) => {
   const formatter = options.formatterOptions || {};
   const translated: Record<string, Untyped> = {};
   if (formatter.delimiter !== undefined) translated.delimiter = formatter.delimiter;
+  if (formatter.rowDelimiter !== undefined) translated.rowDelimiter = formatter.rowDelimiter;
   if (options.dateFormat !== undefined) translated.dateFormat = options.dateFormat;
   if (options.dateUTC !== undefined) translated.dateUTC = options.dateUTC;
   return translated;

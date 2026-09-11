@@ -12,6 +12,11 @@
 // a file that parses cleanly as a single column and loses the shape of the data with nothing
 // reported anywhere.
 //
+// The same audit found the single characters the length check let through. A quote, CR or LF is a
+// single character the parser already gives a meaning to, so as a delimiter it is two things at once.
+// And the row delimiter was not checked at all, nor was a field containing a custom one quoted: under
+// `rowDelimiter: '|'` the fields `a|b` and `c` went out as `a|b,c`.
+//
 // The rule this locks: one validator, called from both entry points. Whatever the writer accepts,
 // the reader reads back.
 
@@ -59,6 +64,41 @@ export default {
             'and says what a delimiter may be',
           );
         }
+      },
+    },
+    {
+      name: 'a quote, CR or LF is refused as a delimiter, because the reader gives each its own meaning',
+      async expect(api: CorpusApi, assert: Assert) {
+        // With `"` as the delimiter, `a"b"c` read back as the single field `abc`: the character is a
+        // separator and a quote at once, and the parser can only take it as one of them.
+        const rows = new Map(
+          (await api.csvDelimiterAgreement()).map((row) => [row.delimiter, row]),
+        );
+        for (const delimiter of ['"', '\r', '\n']) {
+          const row = rows.get(delimiter);
+          assert.equal(row?.wroteOk, false, `${JSON.stringify(delimiter)}: the write is refused`);
+          assert.match(String(row?.writeError), /reserved/, 'and says why');
+        }
+      },
+    },
+    {
+      name: 'a row delimiter no consumer could split on is refused rather than written',
+      expect(api: CorpusApi, assert: Assert) {
+        const spec = {rows: [['a', 'b']]};
+        for (const rowDelimiter of ['', ',', '"']) {
+          const written = api.csvWrite({spec, options: {formatterOptions: {rowDelimiter}}});
+          assert.equal(written.ok, false, `${JSON.stringify(rowDelimiter)}: the write is refused`);
+        }
+      },
+    },
+    {
+      name: 'a field containing a custom row delimiter is quoted, so it is not split into two rows',
+      expect(api: CorpusApi, assert: Assert) {
+        const written = api.csvWrite({
+          spec: {rows: [['a|b', 'c'], ['d']]},
+          options: {formatterOptions: {rowDelimiter: '|'}},
+        });
+        assert.equal(written.text, '"a|b",c|d');
       },
     },
     {

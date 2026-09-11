@@ -28,7 +28,7 @@ import {
 import type {Workbook} from '../../core/workbook.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
 import {AuthoringError, unrepresentable} from '../../errors.ts';
-import {assertDelimiter} from './delimiter.ts';
+import {assertDelimiter, assertRowDelimiter} from './delimiter.ts';
 
 /**
  * A byte encoding {@link writeCsv} can produce, spelled the way Node's `Buffer` spells it and
@@ -53,9 +53,10 @@ export interface CsvWriteOptions {
   /** Which worksheet to write; defaults to the first. A name matching no sheet throws rather than
    * silently emitting an empty file. */
   readonly sheetName?: string;
-  /** Field separator; defaults to a comma. */
+  /** Field separator; defaults to a comma. A single character other than a quote, CR or LF. */
   readonly delimiter?: string;
-  /** Line separator between rows; defaults to `"\n"`. */
+  /** Line separator between rows; defaults to `"\n"`. Not empty, and containing neither the field
+   * delimiter nor a quote. A field that contains it is quoted. */
   readonly rowDelimiter?: string;
   /**
    * An Excel number-format code (e.g. `"yyyy-mm-dd"`, `"d mmm yy hh:mm"`) for Date cells; without it
@@ -81,27 +82,40 @@ export interface CsvWriteOptions {
 
 const UTF8_BOM = Uint8Array.of(0xef, 0xbb, 0xbf);
 
-/** The logical CSV text of one worksheet: no BOM, no byte encoding. */
+/**
+ * The logical CSV text of one worksheet: no BOM, no byte encoding. Line N holds row N, so an empty
+ * row before the last populated one is an empty line.
+ *
+ * @throws {RangeError} if `delimiter` or `rowDelimiter` is one the output could not be split on.
+ */
 export function writeCsvText(workbook: Workbook, options: CsvWriteOptions = {}): string {
   const sheet = selectSheet(workbook, options.sheetName);
   const delimiter = options.delimiter ?? ',';
   assertDelimiter(delimiter);
   const rowDelimiter = options.rowDelimiter ?? '\n';
+  assertRowDelimiter(rowDelimiter, delimiter);
 
+  // A line's position is its row number. `rows()` skips a row with nothing in it, so a gap is filled
+  // with empty lines; otherwise A1 and A3 wrote `a\nc` and `c` read back in row 2. A row holding only
+  // formatting (a hidden or resized row) writes nothing of its own: the gap fill gives it its empty
+  // line when a later row needs one, and past the last row with cells it adds no trailing lines. The
+  // output therefore depends on the cells alone, never on formatting a CSV cannot show.
   const lines: string[] = [];
-  for (const {cells} of sheet.rows()) {
+  for (const row of sheet.rows()) {
     let width = 0;
     const byColumn = new Map<number, Cell>();
-    for (const cell of cells) {
+    for (const cell of row.cells) {
       byColumn.set(cell.col, cell);
       if (cell.col > width) width = cell.col;
     }
+    if (width === 0) continue;
     const fields: string[] = [];
     for (let column = 1; column <= width; column++) {
       const value = byColumn.get(column)?.value ?? null;
       const text = options.map ? options.map(value, column - 1) : csvFieldText(value, options);
-      fields.push(quoteField(text, delimiter));
+      fields.push(quoteField(text, delimiter, rowDelimiter));
     }
+    while (lines.length < row.number - 1) lines.push('');
     lines.push(fields.join(delimiter));
   }
   return lines.join(rowDelimiter);
@@ -112,6 +126,7 @@ export function writeCsvText(workbook: Workbook, options: CsvWriteOptions = {}):
  *
  * @throws {AuthoringError} if a field holds an unpaired surrogate and the encoding is UTF-8, which
  * cannot represent one. The alternative is a silent U+FFFD substitution.
+ * @throws {RangeError} on a delimiter {@link writeCsvText} refuses.
  */
 export function writeCsv(workbook: Workbook, options: CsvWriteOptions = {}): Uint8Array {
   const text = writeCsvText(workbook, options);
@@ -203,9 +218,12 @@ function csvFieldText(value: CellValue, options: CsvWriteOptions): string {
   return cellValueToText(value);
 }
 
-function quoteField(field: string, delimiter: string): string {
+// CR and LF are quoted whatever the row delimiter is, because a reader splits records on them either
+// way; a custom row delimiter is quoted as well, or `a|b` under `rowDelimiter: '|'` reads as two rows.
+function quoteField(field: string, delimiter: string, rowDelimiter: string): string {
   if (
     field.includes(delimiter) ||
+    field.includes(rowDelimiter) ||
     field.includes('"') ||
     field.includes('\n') ||
     field.includes('\r')

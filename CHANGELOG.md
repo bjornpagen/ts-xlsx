@@ -33,6 +33,19 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   `3.141592653589793` and a 16-digit card number became a number Excel cannot show exactly. Such a
   field is now the string it was. Leading and trailing zeros do not count.
 
+- **BREAKING: `writeCsv` and `writeCsvText` put row N on line N.** A row with nothing in it wrote no
+  line, so A1 and A3 went out as `a\nc` and `c` read back in row 2, and a sheet whose only cell is B3
+  went out as `,x`. Empty rows before the last populated one are now empty lines. A row holding only
+  formatting writes nothing of its own, so a hidden or resized empty row no longer adds a blank line
+  that an unformatted one would not.
+
+- **BREAKING: the CSV codec refuses delimiters that produced corrupt output.** `readCsv`,
+  `writeCsv` and `writeCsvText` throw `RangeError` for a `delimiter` of `"`, CR or LF, which the
+  parser already reads as a quote or a line break: with `"`, `a"b"c` read back as `abc`. The writer
+  also throws for a `rowDelimiter` that is empty or contains the field delimiter or a quote, and it
+  now quotes a field containing a custom row delimiter, which under `rowDelimiter: '|'` wrote the
+  fields `a|b` and `c` as `a|b,c`.
+
 - **BREAKING: `readCsv` throws `CsvParseError` for a CSV that does not fit a worksheet.** A record
   with more than 16,384 fields threw the grid's native `RangeError`, which is the error for a caller's
   mistake, not a file's. It now throws `CsvParseError` naming the record, as soon as the scan reaches

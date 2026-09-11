@@ -183,3 +183,59 @@ test('a delimiter the reader cannot honour is refused by the writer too', () => 
   assert.throws(() => writeCsvText(wb, {delimiter: ''}), RangeError);
   assert.equal(writeCsvText(wb, {delimiter: ';'}), 'a;b');
 });
+
+test('a quote, CR or LF is refused as a delimiter: the reader gives each its own meaning', () => {
+  // With `"` as the delimiter, `a"b"c` read back as the single field `abc`.
+  const wb = new Workbook();
+  wb.addWorksheet('S').addRow(['a', 'b']);
+  for (const delimiter of ['"', '\r', '\n']) {
+    assert.throws(() => writeCsvText(wb, {delimiter}), /reserved/, JSON.stringify(delimiter));
+  }
+});
+
+test('a row delimiter that is empty, holds the field delimiter, or holds a quote is refused', () => {
+  const wb = new Workbook();
+  wb.addWorksheet('S').addRow(['a', 'b']);
+  for (const rowDelimiter of ['', ',', ';,', '"']) {
+    assert.throws(() => writeCsvText(wb, {rowDelimiter}), RangeError, JSON.stringify(rowDelimiter));
+  }
+  assert.equal(writeCsvText(wb, {rowDelimiter: '\r\n'}), 'a,b');
+});
+
+test('a field containing a custom row delimiter is quoted', () => {
+  const wb = new Workbook();
+  const sheet = wb.addWorksheet('S');
+  sheet.addRow(['a|b', 'c']);
+  sheet.addRow(['d']);
+  assert.equal(writeCsvText(wb, {rowDelimiter: '|'}), '"a|b",c|d');
+});
+
+test('an empty row between populated ones is an empty line, so row positions survive', () => {
+  const wb = new Workbook();
+  const sheet = wb.addWorksheet('S');
+  sheet.getCell('A1').value = 'a';
+  sheet.getCell('A3').value = 'c';
+  assert.equal(writeCsvText(wb), 'a\n\nc');
+});
+
+test('empty rows before the first populated one are empty lines too', () => {
+  const wb = new Workbook();
+  wb.addWorksheet('S').getCell('B3').value = 'x';
+  assert.equal(writeCsvText(wb), '\n\n,x');
+});
+
+test('a row holding only formatting writes the same text as a row holding nothing', () => {
+  const plain = new Workbook();
+  const plainSheet = plain.addWorksheet('S');
+  plainSheet.getCell('A1').value = 'a';
+  plainSheet.getCell('A3').value = 'c';
+
+  const formatted = new Workbook();
+  const formattedSheet = formatted.addWorksheet('S');
+  formattedSheet.getCell('A1').value = 'a';
+  formattedSheet.getCell('A3').value = 'c';
+  formattedSheet.getRow(2).hidden = true;
+  formattedSheet.getRow(5).height = 30;
+
+  assert.equal(writeCsvText(formatted), writeCsvText(plain));
+});
