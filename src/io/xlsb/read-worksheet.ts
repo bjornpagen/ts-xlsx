@@ -36,7 +36,7 @@ import type {CellValue, ErrorCode, ErrorValue, FormulaResult} from '../../core/v
 import type {Worksheet} from '../../core/worksheet.ts';
 import type {CellMetadataIndex} from '../cell-metadata/metadata.ts';
 import {ColumnRecordBudget, clampColumnSpan} from '../read-policy/column-budget.ts';
-import {admitting} from '../read-policy/read-repair.ts';
+import {admitArrayRanges, admitting} from '../read-policy/read-repair.ts';
 import {CellStyleResolver} from '../style/cell-style-resolution.ts';
 import {applyXfToCell, type XfStyle} from '../style/xf-style.ts';
 import {decodeFormula, type FormulaScope, formulaAnchor} from './formula.ts';
@@ -236,6 +236,8 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
             member.dynamic,
           );
   }
+  // As the XML reader does, an array formula the sheet cannot hold reads as its plain formula.
+  admitArrayRanges(sheet);
 }
 
 /**

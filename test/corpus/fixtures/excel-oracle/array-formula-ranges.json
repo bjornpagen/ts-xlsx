@@ -1,0 +1,53 @@
+{
+  "invariant": "array-formula-ranges",
+  "description": "What Excel does with an array formula's range holding another formula, with two array formulas' ranges sharing a cell, and with the edits that make either. ts-xlsx wrote each shape, authored directly and produced by its own row edits, and every package was opened interactively. Separately, Excel performed the same edits over COM on a workbook of its own, reporting whether it refused each and what the sheet held after.",
+  "probe": ".claude/skills/excel-gui-automation/scripts/open-verdict.ps1 per package; a one-off COM script performing each edit (Rows.Insert, Rows.Delete, Columns.Insert, Columns.Delete, Range.Copy, Range.FormulaArray, Range.Formula) and reading HasArray, CurrentArray, HasSpill and SpillingToRange",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-12",
+  "openVerdicts": {
+    "legacy B1:B3, values in B2 and B3": "clean",
+    "legacy B1:B3 beside legacy B2:B4": "repair-prompt",
+    "legacy B1:B3 with a plain formula in B2": "repair-prompt",
+    "legacy B1:B3 with a one-cell array formula in B2": "repair-prompt",
+    "legacy B1:C2 beside legacy A2:B3, sharing B2 with neither's own cell in the other": "repair-prompt",
+    "dynamic B1:B3 with a plain formula in B2": "repair-prompt",
+    "dynamic B1:B3 beside dynamic B2:B4": "repair-prompt",
+    "legacy B1:B3, then duplicateRow(1)": "repair-prompt, written as B1:B4 beside B2:B5",
+    "legacy B1:B3 with B2 a value, then duplicateRow(2)": "clean, written as B1:B4 with values in B2 and B3",
+    "legacy B1:B3, then insertRow(2) carrying a formula in B2": "repair-prompt, written as B1:B4 with the formula in B2",
+    "legacy B1:B3, then insertRow(2) empty": "clean, written as B1:B4",
+    "dynamic B1:B3, then insertRow(2) carrying a formula in B2": "repair-prompt, written as dynamic B1:B4 with the formula in B2"
+  },
+  "excelEdits": {
+    "legacy B1:B3": {
+      "insert row 1, above": "allowed; the array moves to B2:B4",
+      "insert row 2 or rows 2:3, inside": "refused: You can't change part of an array.",
+      "insert row 4, below": "allowed; the array stays B1:B3",
+      "delete row 2, inside": "refused",
+      "delete rows 3:4, crossing its bottom edge": "refused",
+      "delete rows 1:3 or 1:4, the whole range": "allowed; the array is gone",
+      "insert column B, at its column": "allowed; the array moves to C1:C3",
+      "delete column B, its whole width": "allowed; the array is gone",
+      "copy row 1 onto row 2, or insert it at row 2": "refused",
+      "copy row 3 onto row 4, or insert it at row 4, below": "allowed; B4 becomes a one-cell array formula of its own",
+      "FormulaArray over B2:B4": "refused: Unable to set the FormulaArray property",
+      "Formula into B2": "reported no error and changed nothing: B2 is still a member of B1:B3"
+    },
+    "legacy B1:C3": {
+      "insert column C, inside": "refused",
+      "insert column B, its left edge": "allowed; the array moves to C1:D3",
+      "delete column C, part of its width": "refused",
+      "delete columns B:C, its whole width": "allowed; the array is gone"
+    },
+    "dynamic B1 spilling over B1:B3": {
+      "insert row 2": "allowed; the formula becomes A1:A4*2 and spills over B1:B4",
+      "Formula into B2": "allowed; B1 shows #SPILL!",
+      "insert row 1 copied at row 2": "allowed; B1 shows #SPILL!, B2 spills over B2:B5"
+    }
+  },
+  "repairs": "open-verdict.ps1 accepted each repair but could not save Excel's recovery: under pwsh 7 it has no Marshal.GetActiveObject, so what Excel recovers from these packages is unobserved",
+  "verdict": "An array formula's range, legacy or dynamic, may hold no other formula and share no cell with another array formula's range; a member cell holding a value is what the formula produced. Excel refuses any edit cutting through a legacy range: an insert strictly inside it, a delete taking part of it, a row copied onto or into it. It allows an edit that moves the whole range or removes it whole. It allows the same edits through a dynamic array, whose spill it then blocks. Locked by the corpus case an-array-formula-range-holds-no-other-formula."
+}

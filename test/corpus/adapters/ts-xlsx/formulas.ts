@@ -1,5 +1,7 @@
 // Formulas: shared formulas, data tables, and the values a formula cell reports.
 
+import {strToU8} from 'fflate';
+
 import {messageOf} from '../../thrown.ts';
 import type {Untyped} from '../../untyped.ts';
 import {partNamesOf, partOf, patchedPackage, roundtrip} from './package-facts.ts';
@@ -106,6 +108,89 @@ export const formulas = {
     };
     sheet.getCell('D1').value = {shareType: 'array', formula: 'A1:A3*2', ref: 'D1:D3'};
     return storedFormulas(writeXlsx(workbook));
+  },
+
+  // Excel's rules for an array formula's range, asked of the library → {authored, edits, foreign}.
+  // `authored` maps each shape to the writer's refusal message, or null when it writes it. `edits` maps
+  // each edit of a sheet holding one array formula (B1:B3, or B1:C3 for the column edits) to {refused,
+  // ref}: whether the edit threw, and the range the array formula holds after it, null when it is gone.
+  // `foreign` is a written package patched so B1:B3 holds a formula in B2, read → {B1, rewrites}: B1 as
+  // `arrayFormulaReport` reports a formula, and whether the reading writes back.
+  arrayRangeReport() {
+    const array = (ref: string, dynamic = false): Untyped => ({
+      shareType: 'array',
+      formula: 'A1:A3*2',
+      ref,
+      ...(dynamic ? {dynamic: true} : {}),
+    });
+    const refusal = (cells: Record<string, Untyped>) => {
+      const workbook = new Workbook();
+      const sheet = workbook.addWorksheet('S');
+      for (const [address, value] of Object.entries(cells)) sheet.getCell(address).value = value;
+      try {
+        writeXlsx(workbook);
+        return null;
+      } catch (error) {
+        return messageOf(error);
+      }
+    };
+    const edit = (value: Untyped, perform: (sheet: Untyped) => void) => {
+      const sheet: Untyped = new Workbook().addWorksheet('S');
+      sheet.getCell(String(value.ref).split(':')[0]).value = value;
+      let refused = false;
+      try {
+        perform(sheet);
+      } catch {
+        refused = true;
+      }
+      const kept = sheet.model.cells.find((cell: Untyped) => cell.value?.shareType === 'array');
+      return {refused, ref: kept?.value.ref ?? null};
+    };
+    const written = new Workbook();
+    const source = written.addWorksheet('S');
+    source.getCell('A1').value = 1;
+    source.getCell('B1').value = array('B1:B3');
+    source.getCell('B2').value = 4;
+    const bytes = writeXlsx(written);
+    const foreign = patchedPackage(bytes, {
+      put: {
+        'xl/worksheets/sheet1.xml': strToU8(
+          partOf(bytes, 'xl/worksheets/sheet1.xml').replace(
+            '<c r="B2"><v>4</v></c>',
+            '<c r="B2"><f>A2*10</f></c>',
+          ),
+        ),
+      },
+    });
+    const read = readXlsx(foreign);
+    let rewrites = true;
+    try {
+      writeXlsx(read);
+    } catch {
+      rewrites = false;
+    }
+    return {
+      authored: {
+        formulaInsideLegacy: refusal({B1: array('B1:B3'), B2: {formula: 'A2*10'}}),
+        formulaInsideDynamic: refusal({B1: array('B1:B3', true), B2: {formula: 'A2*10'}}),
+        cornerOverlap: refusal({B1: array('B1:C2'), A2: array('A2:B3')}),
+        valuesInside: refusal({B1: array('B1:B3'), B2: 4, B3: 6}),
+      },
+      edits: {
+        insertRowInside: edit(array('B1:B3'), (sheet) => sheet.insertRow(2, [])),
+        deleteRowInside: edit(array('B1:B3'), (sheet) => sheet.spliceRows(2, 1)),
+        deleteRowsCrossing: edit(array('B1:B3'), (sheet) => sheet.spliceRows(3, 2)),
+        duplicateAnchorRow: edit(array('B1:B3'), (sheet) => sheet.duplicateRow(1)),
+        insertRowAbove: edit(array('B1:B3'), (sheet) => sheet.insertRow(1, [])),
+        insertRowBelow: edit(array('B1:B3'), (sheet) => sheet.insertRow(4, [])),
+        deleteWholeRange: edit(array('B1:B3'), (sheet) => sheet.spliceRows(1, 3)),
+        insertColumnInside: edit(array('B1:C3'), (sheet) => sheet.insertColumn(3, [])),
+        insertColumnLeft: edit(array('B1:C3'), (sheet) => sheet.insertColumn(2, [])),
+        deleteColumnPart: edit(array('B1:C3'), (sheet) => sheet.spliceColumns(3, 1)),
+        dynamicInsertInside: edit(array('B1:B3', true), (sheet) => sheet.insertRow(2, [])),
+      },
+      foreign: {B1: formulaFacts(read.worksheets[0]?.getCell('B1').value), rewrites},
+    };
   },
 
   // Two readings of a data table whose input cell was deleted → { excel, spliced }. `excel` is the cell

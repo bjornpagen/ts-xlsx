@@ -12,6 +12,7 @@
 // surface that writer imports, which `write.ts` used to re-export on its behalf.
 
 import {encodeRect} from '../../core/address.ts';
+import {arrayRangeConflicts, formulaPlacement} from '../../core/array-formula-ranges.ts';
 import type {DateEpoch} from '../../core/date.ts';
 import {mergesOverlappingTables} from '../../core/merge.ts';
 import {pickStyleFacets} from '../../core/style.ts';
@@ -111,8 +112,10 @@ export function worksheetXml(inputs: WorksheetXmlInputs): string {
     flushed,
   } = inputs;
   // A merge overlapping a table is Excel-invalid geometry; reject it before serialising
-  // rather than emit a package a consumer repairs on open.
+  // rather than emit a package a consumer repairs on open. An array formula's range holding another
+  // formula, or sharing a cell with another's, is the same kind of geometry.
   validateMerges(sheet);
+  validateArrayRanges(sheet, flushed);
 
   const columnDefaults = buildColumnDefaults(sheet);
 
@@ -256,6 +259,27 @@ function validateMerges(sheet: Worksheet): void {
   const {merge, table} = conflict;
   throw new AuthoringError(
     `merged range ${merge} overlaps table ${quoted(table.name)} (${table.range}): Excel forbids a merge inside a table`,
+  );
+}
+
+// Excel 16.0 offers to repair a package whose array formula's range holds another formula or shares a
+// cell with another array formula's range (`core/array-formula-ranges.ts`). The rows a streaming writer
+// already flushed are gone from the sheet, so their formulas come from the flush record.
+function validateArrayRanges(sheet: Worksheet, flushed: FlushedSheet | undefined): void {
+  const placements = [...(flushed?.formulas ?? [])];
+  for (const {cells} of sheet.rows()) {
+    for (const cell of cells) {
+      const placement = formulaPlacement(cell.address, cell.col, cell.row, cell.value);
+      if (placement !== undefined) placements.push(placement);
+    }
+  }
+  const [conflict] = arrayRangeConflicts(placements);
+  if (conflict === undefined) return;
+  const {array, other, kind} = conflict;
+  throw new AuthoringError(
+    kind === 'formula-inside'
+      ? `the array formula in ${array.address} fills ${quoted(array.arrayRef ?? '')}, which holds the formula in ${other}: Excel repairs a package with a formula inside another array formula's range`
+      : `the array formula in ${array.address} fills ${quoted(array.arrayRef ?? '')}, which shares cells with the range of the array formula in ${other}: Excel repairs a package whose array formula ranges overlap`,
   );
 }
 

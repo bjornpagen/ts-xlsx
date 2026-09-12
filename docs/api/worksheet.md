@@ -937,6 +937,10 @@ edit and is not moved.
 **Throws:** `RangeError` if an inserted row would land past the last row of the grid. The sheet is
 left untouched, so this is a refused edit rather than half of one: a region pushed off the edge
 clamps and absorbs the loss, but content pushed off it is what Excel refuses outright.
+**Throws:** [`AuthoringError`](./errors.md#authoringerror) if the edit would cut through a Ctrl+Shift+Enter array formula's range: an
+insert strictly inside it, or a delete taking part of it. Excel refuses the same edit, as a change
+to part of an array, and the sheet is left untouched. An edit moving or deleting the whole range,
+and any edit through a dynamic array's range, goes ahead.
 
 #### `Worksheet.insertRow`
 
@@ -1019,6 +1023,9 @@ over the source's cells; an inserted copy is taken from the source as the insert
 
 **Throws:** `RangeError` if `start` is not a positive integer or `count` is negative, or if a copy
 would land past the last row. The sheet is left untouched.
+**Throws:** [`AuthoringError`](./errors.md#authoringerror) if a copy would land inside a Ctrl+Shift+Enter array formula's range, or
+replace part of one, which Excel refuses as a change to part of an array. The sheet is left
+untouched.
 
 #### `Worksheet.spliceColumns`
 
@@ -1039,6 +1046,8 @@ Formulas move with the columns, by the rules [`spliceRows`](./worksheet.md#works
 past the last row. The sheet is left untouched, so this is a refused edit rather than half of
 one: a region pushed off the edge clamps and absorbs the loss, but content pushed off it is
 what Excel refuses outright, and [`addColumn`](./worksheet.md#worksheetaddcolumn) refuses the same argument identically.
+**Throws:** [`AuthoringError`](./errors.md#authoringerror) if the edit would cut through a Ctrl+Shift+Enter array formula's range, by
+the rule [`spliceRows`](./worksheet.md#worksheetsplicerows) gives for rows. The sheet is left untouched.
 
 #### `Worksheet.insertColumn`
 

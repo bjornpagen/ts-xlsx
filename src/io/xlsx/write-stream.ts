@@ -55,6 +55,7 @@ import {Zip, ZipDeflate} from 'fflate';
 
 import {concat} from '../../bytes.ts';
 import {encodeAddress, tryDecodeCellRef} from '../../core/address.ts';
+import {type FormulaPlacement, formulaPlacement} from '../../core/array-formula-ranges.ts';
 import type {AutoFilter} from '../../core/autofilter.ts';
 import type {Cell} from '../../core/cell.ts';
 import type {ConditionalFormatting} from '../../core/conditional-formatting.ts';
@@ -214,6 +215,8 @@ export class WorksheetStreamWriter {
   readonly #rowOutline = new Map<number, {outlineLevel: number; hidden: boolean}>();
   // What a flushed row carried that is serialised outside its `<row>`, taken before eviction.
   readonly #notes: CommentCell[] = [];
+  // The formulas a flushed row carried, taken before eviction for the whole-sheet array range check.
+  readonly #formulas: FormulaPlacement[] = [];
 
   readonly #dateEpoch: DateEpoch;
   // The workbook's live list, read when a row flushes: a bare name in a formula resolves against the
@@ -330,6 +333,10 @@ export class WorksheetStreamWriter {
     // gathers notes by walking the sheet's rows at commit. Eviction is about to make that walk find
     // nothing, so they are taken here for the same reason the outline level is.
     this.#notes.push(...collectNotes(cells));
+    for (const cell of cells) {
+      const placement = formulaPlacement(cell.address, cell.col, cell.row, cell.value);
+      if (placement !== undefined) this.#formulas.push(placement);
+    }
     const {xml, attrs, minCol, maxCol} = renderRow(
       {number, cells, properties},
       {
@@ -358,6 +365,7 @@ export class WorksheetStreamWriter {
       extent: this.#extent,
       rowOutline: this.#rowOutline,
       notes: this.#notes,
+      formulas: this.#formulas,
     };
   }
 

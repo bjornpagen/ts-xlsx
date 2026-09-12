@@ -8,6 +8,7 @@
 // the honest way to say so.
 
 import {encodeRange, tryDecodeAnchoredRange} from '../../core/address.ts';
+import type {FormulaPlacement} from '../../core/array-formula-ranges.ts';
 import {type Cell, cellHasOwnStyle} from '../../core/cell.ts';
 import {type DateEpoch, DEFAULT_DATE_NUMFMT, dateToSerial} from '../../core/date.ts';
 import {mangleFormula} from '../../core/formula.ts';
@@ -130,6 +131,12 @@ export interface FlushedSheet {
    * already been evicted. A hyperlink needs no such record: it lives beside the grid, on the sheet.
    */
   readonly notes: readonly CommentCell[];
+  /**
+   * The formulas the flushed rows carried, on the same terms again: whether an array formula's range
+   * holds another formula, or shares a cell with another's, is a question about other rows, and the
+   * writer asks it of the whole sheet at commit.
+   */
+  readonly formulas: readonly FormulaPlacement[];
 }
 
 /**

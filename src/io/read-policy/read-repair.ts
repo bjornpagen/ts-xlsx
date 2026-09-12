@@ -28,7 +28,11 @@
 // catches exactly the three types a model method raises about its own input. Anything else goes
 // straight through: an `XlsxError` from a layer below, an `InternalError` of ours.
 
+import {encodeAddress} from '../../core/address.ts';
+import {arrayRangeConflicts, formulaPlacement} from '../../core/array-formula-ranges.ts';
 import {INVALID_SHEET_NAME_CHARS, MAX_SHEET_NAME_LENGTH} from '../../core/limits.ts';
+import {isArrayFormulaValue} from '../../core/value.ts';
+import type {Worksheet} from '../../core/worksheet.ts';
 import {AuthoringError} from '../../errors.ts';
 
 /** Every occurrence, where {@link INVALID_SHEET_NAME_CHARS} tests for the first. */
@@ -90,6 +94,34 @@ function firstFree(candidate: (n: number) => string, taken: ReadonlySet<string>,
 function withSuffix(base: string, suffix: string): string {
   const room = MAX_SHEET_NAME_LENGTH - suffix.length;
   return trimApostrophes(base.slice(0, room)) + suffix;
+}
+
+/**
+ * Read every array formula a sheet cannot hold as the plain formula its text is: one whose range holds
+ * another formula, or shares a cell with the range of an array formula kept (`core/array-formula-ranges.ts`).
+ *
+ * A file is free to carry either, and the writer refuses both, since Excel offers to repair a package
+ * carrying them. What Excel recovers from one is not known, so nothing is invented: the formula keeps its
+ * text and its cached result, and loses only the range it could not stand over. Every other cell of that
+ * range already holds what it held.
+ */
+export function admitArrayRanges(sheet: Worksheet): void {
+  const placements = [];
+  for (const {cells} of sheet.rows()) {
+    for (const cell of cells) {
+      const placement = formulaPlacement(cell.address, cell.col, cell.row, cell.value);
+      if (placement !== undefined) placements.push(placement);
+    }
+  }
+  for (const {array} of arrayRangeConflicts(placements)) {
+    const cell = sheet.getCell(encodeAddress(array.col, array.row));
+    const value = cell.value;
+    if (!isArrayFormulaValue(value)) continue;
+    cell.value =
+      value.result === undefined
+        ? {formula: value.formula}
+        : {formula: value.formula, result: value.result};
+  }
 }
 
 /**

@@ -14,6 +14,17 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Added
 
+- **An array formula's range holds no other formula.** Excel offers to repair a package whose array
+  formula's range holds another cell's formula, or shares a cell with another array formula's range,
+  dynamic arrays included, and refuses the edits that would make one out of a Ctrl+Shift+Enter formula.
+  The writer used to write both shapes, so duplicating the row an array formula starts on, or inserting a
+  row of formulas through its range, produced a package Excel repaired. The writer now refuses them,
+  naming both cells. `spliceRows`, `spliceColumns`, `insertRow`, `insertColumn` and `duplicateRow` throw
+  `AuthoringError` for an edit cutting through a Ctrl+Shift+Enter range, an insert strictly inside it or a
+  delete taking part of it, and leave the sheet untouched; an edit moving or deleting the whole range
+  goes ahead, as does any edit through a dynamic array. `readXlsx` and `readXlsb` read an array formula a
+  file places over another formula, or over another range, as its plain formula.
+
 - **Errors Excel has no literal for keep their kind.** `ErrorCode` gains `#SPILL!`, `#CONNECT!`,
   `#BLOCKED!`, `#UNKNOWN!`, `#FIELD!` and `#CALC!`, so an exhaustive switch over it needs six more arms.
   Excel stores each of them as `<v>#VALUE!</v>` with a `vm` pointing through `xl/metadata.xml` at a rich

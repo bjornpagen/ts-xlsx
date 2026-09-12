@@ -108,7 +108,11 @@ const DIST = join(ROOT, 'dist');
 //
 // Raised again, from 672, when the binary reader began reading a cell's metadata indices and the
 // metadata part they resolve through, 2.4 KB over.
-const TOTAL_BUDGET_BYTES = 676 * 1024;
+//
+// Raised again, from 676, when the writer began refusing, and both readers repairing, an array formula
+// whose range holds another formula or overlaps another's, and a splice began refusing to cut through a
+// Ctrl+Shift+Enter range, 5.0 KB over.
+const TOTAL_BUDGET_BYTES = 682 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -231,7 +235,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 650, by the same rich-value errors as `/xlsx`, 8.8 KB over.
   //
   // Raised again, from 660, by the same binary cell metadata as `/xlsb`, 2.7 KB over.
-  '.': 664,
+  //
+  // Raised again, from 664, by the same array formula range checks as `/xlsx`, 4.9 KB over.
+  '.': 670,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -273,7 +279,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // and the form it is stored in, 0.4 KB over.
   //
   // Raised again, from 240, when an array formula began reading and writing its range and the cell metadata that marks a dynamic array.
-  './core': 242,
+  //
+  // Raised again, from 242, when a row or column splice and `duplicateRow` began refusing an edit that
+  // cuts through a Ctrl+Shift+Enter array formula's range, 0.8 KB over.
+  './core': 244,
   // Raised from 554 by the same future-function registry as `.`, which put this entry nine tenths over.
   //
   // Raised again, from 555, by the same conditional-format boundaries as `.`, eight tenths over.
@@ -341,7 +350,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 642, by the same binary cell metadata as `/xlsb`, which `readXlsx` reaches for
   // an `.xlsb` package, 2.2 KB over.
-  './xlsx': 646,
+  //
+  // Raised again, from 646, when the writer began refusing an array formula whose range holds another
+  // formula or overlaps another's, and the readers began reading such a formula as a plain one, through
+  // `core/array-formula-ranges.ts` and the row-banded index merges already use, 4.5 KB over.
+  './xlsx': 652,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -403,7 +416,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 344, when the binary reader began reading a cell's metadata indices and
   // `xl/metadata.bin`, and resolving them through `io/cell-metadata/`, the rich-value XML parser
   // included, 6.8 KB over.
-  './xlsb': 352,
+  //
+  // Raised again, from 352, by the same array formula range repair as `/xlsx`, which the binary reader
+  // runs over every sheet, 3.9 KB over.
+  './xlsb': 357,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
@@ -446,7 +462,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 251, by the same data-bar facet model as `/xlsb`, 0.1 KB over.
   //
   // Raised again, from 252, when an array formula began reading and writing its range and the cell metadata that marks a dynamic array.
-  './csv': 254,
+  //
+  // Raised again, from 254, by the same splice refusal as `/core`, which left this entry sitting on its
+  // budget.
+  './csv': 256,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //
@@ -505,7 +524,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 467, when an array formula began reading and writing its range and the cell metadata that marks a dynamic array.
   //
   // Raised again, from 475, by the same rich-value errors as `/xlsx`, 8.6 KB over.
-  './node': 485,
+  //
+  // Raised again, from 485, by the same array formula range checks as `/xlsx`, which the streaming
+  // writer asks of the rows it flushes too, 5.1 KB over.
+  './node': 491,
   // Raised from 50 when the MS-OVBA encoder stopped rescanning its whole back-window for every
   // output byte. The hash chain that replaced the rescan is the cost, and it buys a time bound on a
   // path an untrusted `.xlsm` reaches through `removeVbaModule`; the CFB and `dir` guards landed

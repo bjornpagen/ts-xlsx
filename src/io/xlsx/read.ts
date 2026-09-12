@@ -31,7 +31,7 @@ import {
   readPartRelationships,
 } from '../opc/read-opc.ts';
 import type {ReadPackageOptions} from '../opc/read-options.ts';
-import {admitting, repairedSheetNames} from '../read-policy/read-repair.ts';
+import {admitArrayRanges, admitting, repairedSheetNames} from '../read-policy/read-repair.ts';
 import type {XfStyle} from '../style/xf-style.ts';
 import {readXlsbPackage} from '../xlsb/read.ts';
 import {readCellMetadata} from './cell-metadata.ts';
@@ -284,6 +284,7 @@ function readSheet(sheet: Worksheet, path: string | undefined, context: SheetRea
       formattings,
       references,
     ]);
+    admitArrayRanges(sheet);
   }
   if (path === undefined) return;
 

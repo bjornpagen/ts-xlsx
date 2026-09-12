@@ -14,6 +14,7 @@ import {
   encodeAddress,
   encodeRange,
   MAX_ROW,
+  tryDecodeAnchoredRange,
   tryDecodeCellRef,
   tryDecodeRange,
 } from './address.ts';
@@ -945,10 +946,15 @@ export class Worksheet {
    * @throws {RangeError} if an inserted row would land past the last row of the grid. The sheet is
    *   left untouched, so this is a refused edit rather than half of one: a region pushed off the edge
    *   clamps and absorbs the loss, but content pushed off it is what Excel refuses outright.
+   * @throws {AuthoringError} if the edit would cut through a Ctrl+Shift+Enter array formula's range: an
+   *   insert strictly inside it, or a delete taking part of it. Excel refuses the same edit, as a change
+   *   to part of an array, and the sheet is left untouched. An edit moving or deleting the whole range,
+   *   and any edit through a dynamic array's range, goes ahead.
    */
   spliceRows(start: number, count: number, ...inserts: RowInput[]): void {
     assertStartAndCount('splice', 'row', start, count);
     assertSpliceFits('row', start, inserts.length);
+    this.#assertArraysSurvive('row', start, count, inserts.length);
     const inserted = inserts.map((values, i) => buildRowCells(start + i, values, this.#columns));
     this.#edits.spliceRows(start, count, inserted);
     this.#afterStructuralEdit();
@@ -1059,11 +1065,17 @@ export class Worksheet {
    *
    * @throws {RangeError} if `start` is not a positive integer or `count` is negative, or if a copy
    *   would land past the last row. The sheet is left untouched.
+   * @throws {AuthoringError} if a copy would land inside a Ctrl+Shift+Enter array formula's range, or
+   *   replace part of one, which Excel refuses as a change to part of an array. The sheet is left
+   *   untouched.
    */
   duplicateRow(start: number, options: {count?: number; insert?: boolean} = {}): void {
     const {count = 1, insert = true} = options;
     assertStartAndCount('duplicate', 'row', start, count);
     assertSpliceFits('row', start + 1, count);
+    // An inserted copy is an insert below the source; a replacing one takes the rows it lands on.
+    if (insert) this.#assertArraysSurvive('row', start + 1, 0, count);
+    else this.#assertArraysSurvive('row', start + 1, count, count);
     const sourceProperties = this.#rowProperties.get(start);
     const snapshot = (destRow: number): Map<number, Cell> => {
       const row = new Map<number, Cell>();
@@ -1112,10 +1124,13 @@ export class Worksheet {
    *   past the last row. The sheet is left untouched, so this is a refused edit rather than half of
    *   one: a region pushed off the edge clamps and absorbs the loss, but content pushed off it is
    *   what Excel refuses outright, and {@link addColumn} refuses the same argument identically.
+   * @throws {AuthoringError} if the edit would cut through a Ctrl+Shift+Enter array formula's range, by
+   *   the rule {@link spliceRows} gives for rows. The sheet is left untouched.
    */
   spliceColumns(start: number, count: number, ...inserts: CellValue[][]): void {
     assertStartAndCount('splice', 'column', start, count);
     assertSpliceFits('column', start, inserts.length);
+    this.#assertArraysSurvive('column', start, count, inserts.length);
     this.#edits.spliceColumns(start, count, inserts);
     this.#afterStructuralEdit();
   }
@@ -1199,6 +1214,42 @@ export class Worksheet {
   // call: a splice replaces its rectangles through `replaceAll`, which resets it.
   #afterStructuralEdit(): void {
     this.#extent.invalidate();
+  }
+
+  // Refuse, before anything moves, an edit cutting through a Ctrl+Shift+Enter array formula's range on
+  // the spliced axis: a delete taking part of the range, or an insert strictly inside it. Excel 16.0
+  // refused exactly those as a change to part of an array, and allowed an edit moving the range whole
+  // (an insert at or before its first line, or after its last), or deleting it whole
+  // (`test/corpus/fixtures/excel-oracle/array-formula-ranges.json`). A dynamic array's range is where its
+  // last calculation spilled, and Excel lets the same edits through it.
+  #assertArraysSurvive(
+    axis: 'row' | 'column',
+    start: number,
+    count: number,
+    insertCount: number,
+  ): void {
+    if (count === 0 && insertCount === 0) return;
+    const end = start + count - 1;
+    for (const cols of this.#rows.values()) {
+      for (const cell of cols.values()) {
+        const value = cell.value;
+        if (!isArrayFormulaValue(value) || value.dynamic === true) continue;
+        const range = tryDecodeAnchoredRange(value.ref, cell.col, cell.row);
+        if (range === undefined) continue;
+        const lo = axis === 'row' ? range.top : range.left;
+        const hi = axis === 'row' ? range.bottom : range.right;
+        const cuts =
+          count > 0
+            ? start <= hi && end >= lo && !(start <= lo && end >= hi)
+            : lo < start && start <= hi;
+        if (cuts) {
+          const verb = count > 0 ? 'deleting' : 'inserting';
+          throw new AuthoringError(
+            `${verb} at ${axis} ${start} would cut through the array formula in ${cell.address}, which fills ${value.ref}: Excel refuses to change part of an array, so move or delete the whole range`,
+          );
+        }
+      }
+    }
   }
 
   // Empty every collection the model round-trips, so a subsequent replay leaves no residue from
