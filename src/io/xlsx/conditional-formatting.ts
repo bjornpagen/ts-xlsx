@@ -14,16 +14,17 @@
 // rather than by index. A set read from it is marked `extended` so it is written back there, and its
 // inline style is adopted into the workbook's table so the rule holds a `dxfId` as a classic one does.
 //
-// A data bar's richer facets (its gradient fill, its negative-value fill colour, its axis colour)
-// have no home in the classic `<dataBar>` element either. A classic data-bar rule carrying any of them
-// is written twice: the classic element (its anchors and bar colour, understood by every consumer)
-// plus an `<x14:dataBar>` in the extension carrying the extras, the two linked by a shared id. The
-// reader folds the extension back onto the classic rule.
+// A data bar's 2010 facets (its gradient, border, direction, axis, negative-bar colours and automatic
+// anchors) have no home in the classic `<dataBar>` element either. A classic data-bar rule carrying any
+// of them is written twice: the classic element (its anchors and bar colour, understood by every
+// consumer) plus an `<x14:dataBar>` in the extension carrying the rest, the two linked by a shared id.
+// The reader folds the extension back onto the classic rule.
 
 import {
   type CfIcon,
   type CfTimePeriod,
   type CfValueObject,
+  type CfValueObjectType,
   type ConditionalFormatting,
   type ConditionalFormattingOperator,
   type ConditionalFormattingRule,
@@ -34,6 +35,8 @@ import {
   isCfValueObjectType,
   isConditionalFormattingOperator,
   isConditionalFormattingType,
+  isDataBarAxisPosition,
+  isDataBarDirection,
   isIconSetType,
   ruleNeedsExtension,
 } from '../../core/conditional-formatting.ts';
@@ -50,7 +53,7 @@ import {
   type SaxHandlers,
   TextCapture,
 } from '../../xml/xml-read.ts';
-import {boolPresent, boolStrict, boolTristate, localName} from '../../xml/xml-scan.ts';
+import {boolStrict, boolTristate, localName} from '../../xml/xml-scan.ts';
 import {
   boolAttr,
   checkedToken,
@@ -80,14 +83,49 @@ import {x14Ext} from './x14-ext.ts';
 const DEFAULT_DATABAR_CFVO: readonly CfValueObject[] = [{type: 'min'}, {type: 'max'}];
 const DEFAULT_DATABAR_COLOR: Color = {argb: 'FF638EC6'};
 
+// The anchors the classic form has no spelling for, and the one it states in their place, as Excel's
+// own save does.
+const CLASSIC_ANCHOR: Partial<Record<CfValueObjectType, CfValueObjectType>> = {
+  autoMin: 'min',
+  autoMax: 'max',
+};
+
+// The facets of a data bar only its `<x14:dataBar>` carries, gathered as read. Its lengths are here too,
+// though the classic element can carry them, because a bar with an extension keeps them in the
+// extension, as Excel writes it.
+type DataBarFacets = Pick<
+  ConditionalFormattingRule,
+  | 'minLength'
+  | 'maxLength'
+  | 'gradient'
+  | 'border'
+  | 'borderColor'
+  | 'direction'
+  | 'negativeFillColor'
+  | 'negativeBorderColor'
+  | 'negativeBarColorSameAsPositive'
+  | 'negativeBarBorderColorSameAsPositive'
+  | 'axisPosition'
+  | 'axisColor'
+>;
+
 // A data bar needs the x14 extension only when it carries a facet the classic element cannot express.
-// A plain data bar (anchors and bar colour alone) stays classic-only, so an unadorned rule never
-// fabricates an empty extension block.
+// Its lengths are not one: Excel keeps a bar that differs from a plain one only in its lengths classic,
+// with the lengths on the classic element. A plain data bar stays classic-only, so an unadorned rule
+// never fabricates an empty extension block.
 function needsDataBarExt(rule: ConditionalFormattingRule): boolean {
   return (
     rule.gradient !== undefined ||
+    rule.border !== undefined ||
+    rule.borderColor !== undefined ||
+    rule.direction !== undefined ||
     rule.negativeFillColor !== undefined ||
-    rule.axisColor !== undefined
+    rule.negativeBorderColor !== undefined ||
+    rule.negativeBarColorSameAsPositive !== undefined ||
+    rule.negativeBarBorderColorSameAsPositive !== undefined ||
+    rule.axisPosition !== undefined ||
+    rule.axisColor !== undefined ||
+    (rule.cfvo ?? []).some((anchor) => CLASSIC_ANCHOR[anchor.type] !== undefined)
   );
 }
 
@@ -268,25 +306,45 @@ function extensionScaleXml(
 }
 
 // An `<x14:dataBar>`: the anchors mirrored as `<x14:cfvo>`, and the facets the classic element cannot
-// carry (gradient, negative-fill and axis colours). A bar written wholly in the extension has no
-// classic element to hold its colour or its hidden value, so it states them here too.
+// carry, attributes and colours alike in the order `x14:CT_DataBar` sequences them. A bar written wholly
+// in the extension has no classic element to hold its colour or its hidden value, so it states them
+// here too.
 function x14DataBarXml(
   rule: ConditionalFormattingRule,
   formulaNames: ReadonlySet<string>,
   whole: boolean,
 ): string {
-  const anchors = dataBarAnchors(rule).map(cfvoWriter('x14', formulaNames)).join('');
-  const showValue = whole && rule.showValue === false ? ' showValue="0"' : '';
-  const fill = whole ? `<x14:fillColor ${colorAttrs(rule.color ?? DEFAULT_DATABAR_COLOR)}/>` : '';
-  const negative =
-    rule.negativeFillColor !== undefined
-      ? `<x14:negativeFillColor ${colorAttrs(rule.negativeFillColor)}/>`
-      : '';
-  const axis = rule.axisColor !== undefined ? `<x14:axisColor ${colorAttrs(rule.axisColor)}/>` : '';
-  return (
-    `<x14:dataBar${showValue}${boolAttr('gradient', rule.gradient)}>` +
-    `${anchors}${fill}${negative}${axis}</x14:dataBar>`
-  );
+  const attrs =
+    intAttr('minLength', rule.minLength, 0) +
+    intAttr('maxLength', rule.maxLength, 0) +
+    (whole && rule.showValue === false ? ' showValue="0"' : '') +
+    boolAttr('border', rule.border) +
+    boolAttr('gradient', rule.gradient) +
+    tokenAttr('direction', rule.direction, isDataBarDirection, 'data bar direction') +
+    boolAttr('negativeBarColorSameAsPositive', rule.negativeBarColorSameAsPositive) +
+    boolAttr('negativeBarBorderColorSameAsPositive', rule.negativeBarBorderColorSameAsPositive) +
+    tokenAttr('axisPosition', rule.axisPosition, isDataBarAxisPosition, 'data bar axis position');
+  const children =
+    dataBarAnchors(rule).map(cfvoWriter('x14', formulaNames)).join('') +
+    (whole ? x14ColorXml('fillColor', rule.color ?? DEFAULT_DATABAR_COLOR) : '') +
+    x14ColorXml('borderColor', rule.borderColor) +
+    x14ColorXml('negativeFillColor', rule.negativeFillColor) +
+    x14ColorXml('negativeBorderColor', rule.negativeBorderColor) +
+    x14ColorXml('axisColor', rule.axisColor);
+  return `<x14:dataBar${attrs}>${children}</x14:dataBar>`;
+}
+
+function x14ColorXml(name: string, color: Color | undefined): string {
+  return color === undefined ? '' : `<x14:${name} ${colorAttrs(color)}/>`;
+}
+
+function tokenAttr(
+  name: string,
+  value: string | undefined,
+  isValid: (candidate: string) => boolean,
+  kind: string,
+): string {
+  return value === undefined ? '' : ` ${name}="${checkedToken(value, isValid, kind)}"`;
 }
 
 /**
@@ -321,7 +379,8 @@ function cfvoWriter(
   formulaNames: ReadonlySet<string>,
 ): (cfvo: CfValueObject) => string {
   return (cfvo) => {
-    const type = checkedToken(cfvo.type, isCfValueObjectType, 'conditional format value type');
+    const checked = checkedToken(cfvo.type, isCfValueObjectType, 'conditional format value type');
+    const type = form === 'classic' ? (CLASSIC_ANCHOR[cfvo.type] ?? checked) : checked;
     const tag = form === 'classic' ? 'cfvo' : 'x14:cfvo';
     // `gte` defaults to true, so only a strict threshold states it.
     const gte = cfvo.gte === false ? ' gte="0"' : '';
@@ -374,13 +433,13 @@ function ruleXml(
   if (dxfId !== undefined) attrs.push(`dxfId="${dxfId}"`);
   attrs.push(`priority="${priorityOf(plan, rule)}"`, ...ruleFlagAttrs(rule));
 
-  let body = SCALE_TYPES.has(rule.type)
-    ? scaleXml(rule, formulaNames)
-    : operandsXml(rule.formulae, 'formula', formulaNames);
   // A data bar with x14-only facets links to its extension by the id the plan assigned; the extension
   // itself rides in the worksheet <extLst>. The link is the cfRule's last child, after the dataBar. A
   // classic rule absent from the map carries no extension.
   const extGuid = plan.extensionIds.get(rule);
+  let body = SCALE_TYPES.has(rule.type)
+    ? scaleXml(rule, formulaNames, extGuid !== undefined)
+    : operandsXml(rule.formulae, 'formula', formulaNames);
   if (extGuid !== undefined) body += cfRuleExtLinkXml(extGuid);
   return body === ''
     ? `<cfRule ${attrs.join(' ')}/>`
@@ -442,26 +501,33 @@ function operandsXml(
     .join('');
 }
 
-function scaleXml(rule: ConditionalFormattingRule, formulaNames: ReadonlySet<string>): string {
+function scaleXml(
+  rule: ConditionalFormattingRule,
+  formulaNames: ReadonlySet<string>,
+  linked: boolean,
+): string {
   const cfvoXml = cfvoWriter('classic', formulaNames);
-  if (rule.type === 'dataBar') return dataBarXml(rule, cfvoXml);
+  if (rule.type === 'dataBar') return dataBarXml(rule, cfvoXml, linked);
   if (rule.type === 'colorScale') return colorScaleXml(rule, cfvoXml);
   return iconSetXml(rule, cfvoXml, 'classic');
 }
 
 // A data bar states its low and high anchors and its bar colour. The minimal call (no cfvo, no colour)
 // gains Excel's own defaults, a min/max anchor pair and the standard blue, rather than an invalid
-// empty element. The gradient flag and the negative-fill/axis colours have no home in this classic
-// element; they ride in the x14 extension (see {@link conditionalFormattingsExtXml}), linked from the
-// cfRule that wraps this by a shared id.
+// empty element. Its lengths are stated here only for a bar with no extension: one `linked` to an
+// `<x14:dataBar>` keeps them there, beside the facets this element cannot carry.
 function dataBarXml(
   rule: ConditionalFormattingRule,
   cfvoXml: (cfvo: CfValueObject) => string,
+  linked: boolean,
 ): string {
   const color = rule.color ?? DEFAULT_DATABAR_COLOR;
   const anchors = dataBarAnchors(rule).map(cfvoXml).join('');
+  const lengths = linked
+    ? ''
+    : intAttr('minLength', rule.minLength, 0) + intAttr('maxLength', rule.maxLength, 0);
   const showValue = rule.showValue === false ? ' showValue="0"' : '';
-  return `<dataBar${showValue}>${anchors}<color ${colorAttrs(color)}/></dataBar>`;
+  return `<dataBar${lengths}${showValue}>${anchors}<color ${colorAttrs(color)}/></dataBar>`;
 }
 
 // A colour scale pairs each anchor with a colour; a missing colour list falls back to none, still a
@@ -486,9 +552,7 @@ function iconSetXml(
   const tag = form === 'classic' ? 'iconSet' : 'x14:iconSet';
   const icons = form === 'x14' ? (rule.icons ?? []) : [];
   const attrs =
-    (rule.iconSet === undefined
-      ? ''
-      : ` iconSet="${checkedToken(rule.iconSet, isIconSetType, 'icon set')}"`) +
+    tokenAttr('iconSet', rule.iconSet, isIconSetType, 'icon set') +
     (rule.showValue === false ? ' showValue="0"' : '') +
     (rule.reverse ? ' reverse="1"' : '') +
     (icons.length > 0 ? ' custom="1"' : '');
@@ -532,6 +596,8 @@ interface RuleDraft {
   cfvo: CfValueObject[];
   colors: Color[];
   color: Color | undefined;
+  // A data bar's facets, holding only those the markup states, so they fold onto a rule as they stand.
+  bar: DataBarFacets;
   // The `<x14:id>` a data-bar cfRule carries to name its extension. Transient: it links this rule to
   // its `<x14:dataBar>` during parsing and is dropped once the extension's facets are folded in.
   x14Id: string | undefined;
@@ -540,20 +606,18 @@ interface RuleDraft {
   dxf: string | undefined;
 }
 
-// The facets an `<x14:dataBar>` adds over the classic element, gathered by the id its `<x14:cfRule>`
-// carries so they can be matched to the classic rule that links to the same id.
+// What an `<x14:dataBar>` a classic rule links to adds to that rule: its facets, and its anchors, which
+// can say `autoMin` and `autoMax` where the classic element had to say `min` and `max`.
 interface DataBarExt {
-  gradient: boolean | undefined;
-  negativeFillColor: Color | undefined;
-  axisColor: Color | undefined;
+  readonly bar: DataBarFacets;
+  readonly cfvo: readonly CfValueObject[];
 }
 
-// An `<x14:cfRule>` being read: its draft, the id a classic data bar may link to it by, and the data-bar
-// facets it carries, which belong to that classic rule when one links here and to this rule otherwise.
+// An `<x14:cfRule>` being read, and the id a classic data bar may link to it by: when one does, the
+// rule's data-bar facets belong to that classic rule rather than to a rule of their own.
 interface ExtensionRuleDraft {
   readonly draft: RuleDraft;
   readonly id: string | undefined;
-  readonly bar: DataBarExt;
 }
 
 /**
@@ -614,10 +678,9 @@ class DxfCapture {
  *
  * The classic `<conditionalFormatting>` blocks come first. Each `<x14:conditionalFormatting>` in the
  * worksheet extension that follows them is read as a set of its own, marked `extended`, unless its rule
- * is a data bar a classic rule links to by id: that one only enriches the classic rule with the facets
- * the classic element cannot carry (the gradient flag and the negative-fill and axis colours). An
- * extension rule's inline style is handed to `adoptDifferentialStyle`, which answers the index the rule
- * then holds as its `dxfId`.
+ * is a data bar a classic rule links to by id: that one only completes the classic rule with the facets
+ * and automatic anchors the classic element cannot carry. An extension rule's inline style is handed to
+ * `adoptDifferentialStyle`, which answers the index the rule then holds as its `dxfId`.
  *
  * A rule's formulas shed their function prefixes as a cell formula's do, against `definedNames`, the
  * workbook's names as `definedNameKeys` spells them.
@@ -651,19 +714,17 @@ export function conditionalFormattingPass(
 
   const closeExtensionRule = (): void => {
     if (extRule === undefined) return;
-    const {draft: ruleDraft, id, bar} = extRule;
+    const {draft: ruleDraft, id} = extRule;
     extRule = undefined;
     extCfvo = undefined;
     if (id !== undefined && linkedIds.has(id)) {
-      extById.set(id, bar);
+      extById.set(id, {bar: ruleDraft.bar, cfvo: ruleDraft.cfvo});
       return;
     }
     if (ruleDraft.dxf !== undefined)
       ruleDraft.dxfId = String(adoptDifferentialStyle(ruleDraft.dxf));
     const rule = finalizeRule(ruleDraft);
-    if (rule === undefined) return;
-    if (rule.type === 'dataBar') applyDataBarExt(rule, bar);
-    extRules?.push(rule);
+    if (rule !== undefined) extRules?.push(rule);
   };
 
   const openExtension = (ln: string, attrs: Record<string, string>, selfClosing: boolean): void => {
@@ -674,59 +735,57 @@ export function conditionalFormattingPass(
       extRules = [];
       extSqref = '';
     } else if (ln === 'cfRule') {
-      extRule = {draft: newDraft(attrs), id: attrs.id, bar: emptyExt()};
+      extRule = {draft: newDraft(attrs), id: attrs.id};
       // A rule with no children fires no close, so it is finished here.
       if (selfClosing) closeExtensionRule();
     } else if (extRule === undefined) {
       if (extRules !== undefined && ln === 'sqref') extCapture.open(ln, selfClosing);
     } else {
-      readExtensionRuleChild(extRule, ln, attrs, selfClosing);
+      readExtensionRuleChild(extRule.draft, ln, attrs, selfClosing);
     }
   };
 
   const readExtensionRuleChild = (
-    rule: ExtensionRuleDraft,
+    rule: RuleDraft,
     ln: string,
     attrs: Record<string, string>,
     selfClosing: boolean,
   ): void => {
     switch (ln) {
       case 'dataBar':
-        // gradient defaults to true in the x14 schema, so an absent attribute reads as a gradient.
-        rule.bar.gradient = boolPresent(attrs.gradient);
-        rule.draft.showValue = boolTristate(attrs.showValue);
+        readDataBarAttrs(rule, attrs);
         break;
       case 'iconSet':
-        readIconSetAttrs(rule.draft, attrs);
+        readIconSetAttrs(rule, attrs);
         break;
       case 'cfvo':
         extCfvo = parseCfvo(attrs, definedNames);
-        rule.draft.cfvo.push(extCfvo);
+        rule.cfvo.push(extCfvo);
         if (selfClosing) extCfvo = undefined;
         break;
       case 'f':
         extCapture.open(ln, selfClosing);
         break;
       case 'color':
-        rule.draft.colors.push(parseColor(attrs));
+        rule.colors.push(parseColor(attrs));
         break;
       case 'fillColor':
-        rule.draft.color = parseColor(attrs);
+        rule.color = parseColor(attrs);
         break;
+      case 'borderColor':
       case 'negativeFillColor':
-        rule.bar.negativeFillColor = parseColor(attrs);
-        break;
+      case 'negativeBorderColor':
       case 'axisColor':
-        rule.bar.axisColor = parseColor(attrs);
+        rule.bar[ln] = parseColor(attrs);
         break;
       case 'cfIcon': {
         const icon = parseCfIcon(attrs);
-        if (icon === undefined) rule.draft.icons = undefined;
-        else rule.draft.icons?.push(icon);
+        if (icon === undefined) rule.icons = undefined;
+        else rule.icons?.push(icon);
         break;
       }
       case 'dxf':
-        if (selfClosing) rule.draft.dxf = '<dxf/>';
+        if (selfClosing) rule.dxf = '<dxf/>';
         else dxf = new DxfCapture();
         break;
     }
@@ -789,7 +848,7 @@ export function conditionalFormattingPass(
       ) {
         scale = ln;
         if (ln === 'iconSet') readIconSetAttrs(draft, attrs);
-        else if (ln === 'dataBar') draft.showValue = boolTristate(attrs.showValue);
+        else if (ln === 'dataBar') readDataBarAttrs(draft, attrs);
       } else if (draft !== undefined && ln === 'cfvo') {
         draft.cfvo.push(parseCfvo(attrs, definedNames));
       } else if (draft !== undefined && ln === 'color') {
@@ -848,7 +907,9 @@ export function conditionalFormattingPass(
   const result = (): ConditionalFormatting[] => {
     for (const {rule, id} of linked) {
       const ext = extById.get(id);
-      if (ext !== undefined) applyDataBarExt(rule, ext);
+      if (ext === undefined) continue;
+      Object.assign(rule, ext.bar);
+      if (ext.cfvo.length > 0) rule.cfvo = [...ext.cfvo];
     }
     return blocks;
   };
@@ -870,16 +931,6 @@ export function applyConditionalFormattings(
       sheet.addConditionalFormatting(block);
     });
   }
-}
-
-function emptyExt(): DataBarExt {
-  return {gradient: undefined, negativeFillColor: undefined, axisColor: undefined};
-}
-
-function applyDataBarExt(rule: ConditionalFormattingRule, ext: DataBarExt): void {
-  if (ext.gradient !== undefined) rule.gradient = ext.gradient;
-  if (ext.negativeFillColor !== undefined) rule.negativeFillColor = ext.negativeFillColor;
-  if (ext.axisColor !== undefined) rule.axisColor = ext.axisColor;
 }
 
 function newDraft(attrs: Record<string, string>): RuleDraft {
@@ -909,6 +960,7 @@ function newDraft(attrs: Record<string, string>): RuleDraft {
     cfvo: [],
     colors: [],
     color: undefined,
+    bar: {},
     x14Id: undefined,
     dxf: undefined,
   };
@@ -920,6 +972,39 @@ function readIconSetAttrs(draft: RuleDraft, attrs: Record<string, string>): void
   draft.iconSet = enumToken(attrs.iconSet, isIconSetType);
   draft.showValue = boolTristate(attrs.showValue);
   draft.reverse = boolStrict(attrs.reverse);
+}
+
+// The attributes a data bar carries, the classic element's three and the extension's rest alike: the
+// schema gives the classic element only the lengths and `showValue`, so an attribute absent there reads
+// as absent. Each facet is kept only as the markup states it, an unrecognised token and an absent
+// attribute both leaving the schema default in force.
+function readDataBarAttrs(draft: RuleDraft, attrs: Record<string, string>): void {
+  const {bar} = draft;
+  draft.showValue = boolTristate(attrs.showValue);
+  setDefined(bar, 'minLength', numInteger(attrs.minLength, 0));
+  setDefined(bar, 'maxLength', numInteger(attrs.maxLength, 0));
+  setDefined(bar, 'border', boolTristate(attrs.border));
+  setDefined(bar, 'gradient', boolTristate(attrs.gradient));
+  setDefined(bar, 'direction', enumToken(attrs.direction, isDataBarDirection));
+  setDefined(
+    bar,
+    'negativeBarColorSameAsPositive',
+    boolTristate(attrs.negativeBarColorSameAsPositive),
+  );
+  setDefined(
+    bar,
+    'negativeBarBorderColorSameAsPositive',
+    boolTristate(attrs.negativeBarBorderColorSameAsPositive),
+  );
+  setDefined(bar, 'axisPosition', enumToken(attrs.axisPosition, isDataBarAxisPosition));
+}
+
+function setDefined<K extends keyof DataBarFacets>(
+  bar: DataBarFacets,
+  key: K,
+  value: DataBarFacets[K] | undefined,
+): void {
+  if (value !== undefined) bar[key] = value;
 }
 
 function parseCfIcon(attrs: Record<string, string>): CfIcon | undefined {
@@ -967,6 +1052,7 @@ function finalizeRule(draft: RuleDraft): ConditionalFormattingRule | undefined {
   if (draft.cfvo.length > 0) rule.cfvo = draft.cfvo;
   if (draft.colors.length > 0) rule.colors = draft.colors;
   if (draft.color !== undefined) rule.color = draft.color;
+  if (draft.type === 'dataBar') Object.assign(rule, draft.bar);
   return rule;
 }
 
@@ -988,7 +1074,7 @@ function parseCfvo(
 // A `formula` anchor's value is an expression and stays a string; the rest are numeric. The classic
 // form states it in `val`, the extension in an `<xm:f>`, and both are read here.
 function anchorValue(
-  type: CfValueObject['type'],
+  type: CfValueObjectType,
   text: string,
   definedNames: ReadonlySet<string>,
 ): string | number {

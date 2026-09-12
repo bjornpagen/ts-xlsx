@@ -25,6 +25,15 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   scale anchor gains `gte`. A rule drawing from a 2009 family or carrying icons is written in the
   extension whatever its set says.
 
+- **A data bar's 2010 look.** A rule gains `minLength`, `maxLength`, `border`, `borderColor`,
+  `direction` (`DataBarDirection`), `negativeBorderColor`, `negativeBarColorSameAsPositive`,
+  `negativeBarBorderColorSameAsPositive` and `axisPosition` (`DataBarAxisPosition`), and an anchor can
+  be the automatic `autoMin` or `autoMax`. Excel keeps all of them in the `<x14:dataBar>` a classic data
+  bar links to, and a read used to drop them, so every bar in a saved dashboard fell back to Excel
+  2007's look: bordered bars lost their border, negative bars their colours and their axis. They now
+  read from the extension and are written back to it. An absent `gradient` there now reads as absent,
+  the schema's gradient default, rather than as `true`.
+
 - **`ParsedPivotSource.inAnotherWorkbook`**, whether a loaded pivot draws from a range of another
   workbook, which the cache reaches through a relationship. A splice of this workbook never moves such
   a source.

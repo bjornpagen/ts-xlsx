@@ -61,12 +61,16 @@ export {
   type ConditionalFormattingOperator,
   type ConditionalFormattingRule,
   type ConditionalFormattingType,
+  type DataBarAxisPosition,
+  type DataBarDirection,
   type IconSetType,
   isCfIconSetType,
   isCfTimePeriod,
   isCfValueObjectType,
   isConditionalFormattingOperator,
   isConditionalFormattingType,
+  isDataBarAxisPosition,
+  isDataBarDirection,
   isIconSetType,
 } from '../core/conditional-formatting.ts';
 export {type Hyperlink} from '../core/hyperlink.ts';

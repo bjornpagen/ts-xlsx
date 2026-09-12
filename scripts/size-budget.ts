@@ -93,7 +93,11 @@ const DIST = join(ROOT, 'dist');
 //
 // Raised again, from 638, when conditional formats Excel keeps in the worksheet extension began
 // to be read and written, inline styles and custom icons included, 9.5 KB over.
-const TOTAL_BUDGET_BYTES = 648 * 1024;
+//
+// Raised again, from 648, when a data bar's 2010 facets (lengths, border, direction, axis,
+// negative colours, automatic anchors) began to be read from and written to its extension, 1.9 KB
+// over.
+const TOTAL_BUDGET_BYTES = 650 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -206,7 +210,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 625, by the same hyperlink overlay as `/core`, 0.8 KB over.
   //
   // Raised again, from 627, by the same extension-form conditional formats as `/xlsx`, 9.0 KB over.
-  '.': 637,
+  //
+  // Raised again, from 637, by the same data-bar facets as `/xlsx`, 1.5 KB over.
+  '.': 639,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -299,7 +305,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 609, when the conditional-format codec began reading and writing the rules
   // Excel keeps in the worksheet extension, their inline styles included, 8.7 KB over.
-  './xlsx': 618,
+  //
+  // Raised again, from 618, when the conditional-format codec began reading and writing a data bar's
+  // 2010 facets, 2.1 KB over.
+  './xlsx': 621,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -352,7 +361,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 336, by the same hyperlink overlay as `/core`, 2.8 KB over.
   //
   // Raised again, from 339, by the same conditional-format model as `/core`, 0.7 KB over.
-  './xlsb': 340,
+  //
+  // Raised again, from 340, by the data-bar facet types and guards the conditional-format model
+  // gained, 0.2 KB over.
+  './xlsb': 341,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
@@ -391,7 +403,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 247, by the same hyperlink overlay as `/core`, 2.6 KB over.
   //
   // Raised again, from 250, by the same conditional-format model as `/core`, 0.6 KB over.
-  './csv': 251,
+  //
+  // Raised again, from 251, by the same data-bar facet model as `/xlsb`, 0.1 KB over.
+  './csv': 252,
   // The streaming writer and the write half it rides on, and nothing of the reader: a jump here is
   // the read path arriving, which would mean the entry had stopped being about one thing.
   //
@@ -442,7 +456,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 452, by the same hyperlink overlay as `/core`, 0.9 KB over.
   //
   // Raised again, from 454, by the same extension-form conditional formats as `/xlsx`, 9.1 KB over.
-  './node': 464,
+  //
+  // Raised again, from 464, by the same data-bar facets as `/xlsx`, 1.5 KB over.
+  './node': 466,
   // Raised from 50 when the MS-OVBA encoder stopped rescanning its whole back-window for every
   // output byte. The hash chain that replaced the rescan is the cost, and it buys a time bound on a
   // path an untrusted `.xlsm` reaches through `removeVbaModule`; the CFB and `dir` guards landed

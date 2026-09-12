@@ -59,6 +59,10 @@ One anchor of a colour-scale, data-bar, or icon-set scale: a "conditional format
 `type` names how `value` is read: a literal `num`, a `percent`/`percentile` of the range, a
 `formula`, or the range's own `min`/`max` (which carry no value).
 
+`autoMin` and `autoMax` are the automatic anchors Excel 2010 gives a new data bar, and carry no value
+either. Only the extension form spells them, so a data bar using one is written with its extension,
+its classic element saying `min` or `max` in their place as Excel's does.
+
 ```ts
 interface CfValueObject {
   type: CfValueObjectType;
@@ -77,10 +81,19 @@ interface CfValueObject {
 
 <sub>type</sub>
 
-How a [`CfValueObject`](./conditional-formatting.md#cfvalueobject) reads its `value`: `ST_CfvoType` verbatim.
+How a [`CfValueObject`](./conditional-formatting.md#cfvalueobject) reads its `value`: `ST_CfvoType` verbatim, with the `autoMin` and
+`autoMax` the 2009 extension adds.
 
 ```ts
-type CfValueObjectType = 'num' | 'percent' | 'max' | 'min' | 'percentile' | 'formula';
+type CfValueObjectType =
+  | 'num'
+  | 'percent'
+  | 'max'
+  | 'min'
+  | 'percentile'
+  | 'formula'
+  | 'autoMin'
+  | 'autoMax';
 ```
 
 ---
@@ -145,6 +158,9 @@ A single conditional-formatting rule. `type` is the OOXML cfRule type; the remai
 the operands that type needs and are absent otherwise. A rule the library does not model in depth
 still preserves `type`, `priority`, `operator`, `formulae`, and `dxfId` across a round-trip.
 
+A data bar's facets marked as x14 properties have no place in the classic `<dataBar>` element, so a
+bar carrying any of them, or an automatic anchor, is written with a linked `<x14:dataBar>` as well.
+
 ```ts
 interface ConditionalFormattingRule {
   type: ConditionalFormattingType;
@@ -168,10 +184,34 @@ interface ConditionalFormattingRule {
   color?: Color;
   /** A colorScale's colours, one per {@link cfvo}. */
   colors?: Color[];
-  /** A dataBar's gradient-fill flag. Lives only in the x14 extension, not the classic element. */
+  /** A dataBar's shortest bar, as a percentage of the cell. */
+  minLength?: number;
+  /** A dataBar's longest bar, as a percentage of the cell. */
+  maxLength?: number;
+  /** A dataBar's gradient-fill flag. An x14 property. */
   gradient?: boolean;
-  /** A dataBar's fill colour for negative values. An x14 extension property. */
+  /** Whether a dataBar has a border, in {@link borderColor}. An x14 property. */
+  border?: boolean;
+  /** A dataBar's border colour. An x14 property. */
+  borderColor?: Color;
+  /** Which way a dataBar grows. An x14 property. */
+  direction?: DataBarDirection;
+  /** A dataBar's fill colour for negative values. An x14 property. */
   negativeFillColor?: Color;
+  /** A dataBar's border colour for negative values. An x14 property. */
+  negativeBorderColor?: Color;
+  /**
+   * Whether a dataBar fills a negative bar in its positive colour rather than
+   * {@link negativeFillColor}. An x14 property.
+   */
+  negativeBarColorSameAsPositive?: boolean;
+  /**
+   * Whether a dataBar borders a negative bar in its positive border colour rather than
+   * {@link negativeBorderColor}. An x14 property.
+   */
+  negativeBarBorderColorSameAsPositive?: boolean;
+  /** Where a dataBar draws the axis between negative and positive bars. An x14 property. */
+  axisPosition?: DataBarAxisPosition;
   /** A dataBar's axis colour (the zero line between positive and negative bars). An x14 property. */
   axisColor?: Color;
   /** An iconSet's named icon family (e.g. `3TrafficLights1`). */
@@ -236,6 +276,33 @@ type ConditionalFormattingType =
   | 'notContainsErrors'
   | 'timePeriod'
   | 'aboveAverage';
+```
+
+---
+
+### `DataBarAxisPosition`
+
+<sub>type</sub>
+
+Where a data bar draws the axis between its negative and positive bars, as `ST_DataBarAxisPosition`
+enumerates it: where the values put it, at the middle of the cell, or nowhere, which grows a
+negative bar the way a positive one grows.
+
+```ts
+type DataBarAxisPosition = 'automatic' | 'middle' | 'none';
+```
+
+---
+
+### `DataBarDirection`
+
+<sub>type</sub>
+
+Which way a data bar grows, as `ST_DataBarDirection` enumerates it: `context` follows the sheet's
+reading direction.
+
+```ts
+type DataBarDirection = 'context' | 'leftToRight' | 'rightToLeft';
 ```
 
 ---
@@ -332,6 +399,30 @@ Narrow a raw `<cfRule type>` token to a known [`ConditionalFormattingType`](./co
 
 ```ts
 const isConditionalFormattingType: (value: string) => value is ConditionalFormattingType
+```
+
+---
+
+### `isDataBarAxisPosition`
+
+<sub>const</sub>
+
+Narrow a raw `<x14:dataBar axisPosition>` token to a known [`DataBarAxisPosition`](./conditional-formatting.md#databaraxisposition).
+
+```ts
+const isDataBarAxisPosition: (value: string) => value is DataBarAxisPosition
+```
+
+---
+
+### `isDataBarDirection`
+
+<sub>const</sub>
+
+Narrow a raw `<x14:dataBar direction>` token to a known [`DataBarDirection`](./conditional-formatting.md#databardirection).
+
+```ts
+const isDataBarDirection: (value: string) => value is DataBarDirection
 ```
 
 ---

@@ -154,4 +154,39 @@ export const conditionalFormatting = {
       .sort((a, b) => a.ref.localeCompare(b.ref));
     return {read, source: stored(fixtureBytes(rel)), rewritten: stored(writeXlsx(workbook))};
   },
+
+  // Read a fixture and report each data bar on its first sheet as the model surfaces it, sorted by range
+  // → [{ref, anchors, color, minLength, maxLength, showValue, gradient, border, borderColor, direction,
+  // negativeFillColor, negativeBorderColor, negativeBarColorSameAsPositive,
+  // negativeBarBorderColorSameAsPositive, axisPosition, axisColor}]. An anchor is its type, with `:value`
+  // when it has one; a colour is its ARGB; a facet the bar does not state is `null`.
+  dataBarsAsRead(rel: string) {
+    const argb = (color: {argb?: string} | undefined) => color?.argb ?? null;
+    return (readFixture(rel).worksheets[0]?.conditionalFormattings ?? [])
+      .flatMap((set) =>
+        set.rules
+          .filter((rule) => rule.type === 'dataBar')
+          .map((rule) => ({
+            ref: set.ref,
+            anchors: (rule.cfvo ?? []).map((anchor) =>
+              anchor.value === undefined ? anchor.type : `${anchor.type}:${anchor.value}`,
+            ),
+            color: argb(rule.color),
+            minLength: rule.minLength ?? null,
+            maxLength: rule.maxLength ?? null,
+            showValue: rule.showValue ?? null,
+            gradient: rule.gradient ?? null,
+            border: rule.border ?? null,
+            borderColor: argb(rule.borderColor),
+            direction: rule.direction ?? null,
+            negativeFillColor: argb(rule.negativeFillColor),
+            negativeBorderColor: argb(rule.negativeBorderColor),
+            negativeBarColorSameAsPositive: rule.negativeBarColorSameAsPositive ?? null,
+            negativeBarBorderColorSameAsPositive: rule.negativeBarBorderColorSameAsPositive ?? null,
+            axisPosition: rule.axisPosition ?? null,
+            axisColor: argb(rule.axisColor),
+          })),
+      )
+      .sort((a, b) => a.ref.localeCompare(b.ref));
+  },
 };

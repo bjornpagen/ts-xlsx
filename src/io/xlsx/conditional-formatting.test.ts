@@ -304,6 +304,103 @@ test('a data bar in an extended set states its colour in the extension, having n
   assert.equal(rule?.gradient, false);
 });
 
+// A data bar as Excel 16.0 (build 20326) saves it with a border, red negative bars bordered in blue
+// and a green axis at the middle: a classic element, and the extension it links to by id.
+const NEGATIVE_BAR =
+  '<x14:dataBar minLength="0" maxLength="100" border="1" negativeBarBorderColorSameAsPositive="0" axisPosition="middle">' +
+  '<x14:cfvo type="min"/><x14:cfvo type="max"/><x14:borderColor rgb="FF000000"/>' +
+  '<x14:negativeFillColor rgb="FFFF0000"/><x14:negativeBorderColor rgb="FF0000FF"/>' +
+  '<x14:axisColor rgb="FF00FF00"/></x14:dataBar>';
+const X14_NS = 'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main';
+const LINKED_BAR_SHEET =
+  '<?xml version="1.0"?>' +
+  '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData/>' +
+  '<conditionalFormatting sqref="C1:C6"><cfRule type="dataBar" priority="3"><dataBar>' +
+  '<cfvo type="min"/><cfvo type="max"/><color rgb="FF638EC6"/></dataBar>' +
+  `<extLst><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}" xmlns:x14="${X14_NS}">` +
+  '<x14:id>{1721FF08-FA27-4BD9-9E93-001E2538B595}</x14:id></ext></extLst></cfRule></conditionalFormatting>' +
+  `<extLst><ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}" xmlns:x14="${X14_NS}">` +
+  '<x14:conditionalFormattings><x14:conditionalFormatting xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">' +
+  `<x14:cfRule type="dataBar" id="{1721FF08-FA27-4BD9-9E93-001E2538B595}">${NEGATIVE_BAR}</x14:cfRule>` +
+  '<xm:sqref>C1:C6</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst></worksheet>';
+
+test('a data bar reads the border, negative colours and axis its extension holds, and writes them back', () => {
+  const workbook = readPatched({[SHEET1]: LINKED_BAR_SHEET});
+  const sets = workbook.getWorksheet('S')?.conditionalFormattings ?? [];
+  assert.equal(sets.length, 1, 'the extension completes the classic rule rather than adding one');
+  const rule = sets[0]?.rules[0];
+  assert.equal(rule?.minLength, 0);
+  assert.equal(rule?.maxLength, 100);
+  assert.equal(rule?.border, true);
+  assert.equal(rule?.borderColor?.argb, 'FF000000');
+  assert.equal(rule?.negativeFillColor?.argb, 'FFFF0000');
+  assert.equal(rule?.negativeBorderColor?.argb, 'FF0000FF');
+  assert.equal(rule?.negativeBarBorderColorSameAsPositive, false);
+  assert.equal(rule?.axisPosition, 'middle');
+  assert.equal(rule?.axisColor?.argb, 'FF00FF00');
+  assert.equal(rule?.gradient, undefined, 'an absent gradient stays absent, the schema default');
+
+  const xml = sheetXml(writeXlsx(workbook));
+  assert.ok(xml.includes(NEGATIVE_BAR), xml);
+  assert.match(
+    xml,
+    /<dataBar><cfvo type="min"\/><cfvo type="max"\/><color rgb="FF638EC6"\/><\/dataBar>/,
+    'the lengths stay in the extension, as Excel keeps them',
+  );
+});
+
+test('automatic anchors read from the extension, the classic element saying min and max for them', () => {
+  const workbook = readPatched({
+    [SHEET1]: LINKED_BAR_SHEET.replace(
+      NEGATIVE_BAR,
+      '<x14:dataBar minLength="0" maxLength="100"><x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/></x14:dataBar>',
+    ),
+  });
+  const rule = workbook.getWorksheet('S')?.conditionalFormattings[0]?.rules[0];
+  assert.deepEqual(rule?.cfvo, [{type: 'autoMin'}, {type: 'autoMax'}]);
+
+  const xml = sheetXml(writeXlsx(workbook));
+  assert.match(xml, /<dataBar><cfvo type="min"\/><cfvo type="max"\/>/);
+  assert.match(
+    xml,
+    /<x14:dataBar minLength="0" maxLength="100"><x14:cfvo type="autoMin"\/><x14:cfvo type="autoMax"\/><\/x14:dataBar>/,
+  );
+});
+
+test('a bar that differs from a plain one only in its lengths stays classic, lengths and all', () => {
+  const workbook = new Workbook();
+  workbook.addWorksheet('S').addConditionalFormatting({
+    ref: 'D1:D6',
+    rules: [{type: 'dataBar', color: {argb: 'FF92D050'}, minLength: 20, maxLength: 80}],
+  });
+  const xml = sheetXml(writeXlsx(workbook));
+
+  // The shape Excel 16.0 (build 20326) saves for the same bar.
+  assert.match(
+    xml,
+    /<dataBar minLength="20" maxLength="80"><cfvo type="min"\/><cfvo type="max"\/><color rgb="FF92D050"\/><\/dataBar>/,
+  );
+  assert.doesNotMatch(xml, /x14:/);
+  const rule = roundtrip(workbook).getWorksheet('S')?.conditionalFormattings[0]?.rules[0];
+  assert.equal(rule?.minLength, 20);
+  assert.equal(rule?.maxLength, 80);
+});
+
+test('a data bar direction, axis position or length the schema cannot hold is refused at write', () => {
+  const refused = (facets: object): void => {
+    const workbook = new Workbook();
+    workbook.addWorksheet('S').addConditionalFormatting({
+      ref: 'A1:A3',
+      rules: [{type: 'dataBar', ...facets} as never],
+    });
+    assert.throws(() => writeXlsx(workbook), AuthoringError, JSON.stringify(facets));
+  };
+  refused({direction: 'upward'});
+  refused({axisPosition: 'left'});
+  refused({minLength: -1});
+  refused({border: true, maxLength: 1.5});
+});
+
 test('an authored extended set writes its style inline, and into the table as Excel does', () => {
   const workbook = new Workbook();
   workbook.addWorksheet('S').addConditionalFormatting({
@@ -779,8 +876,8 @@ test('an iconSet with no named family emits the element without an empty iconSet
 
 // `gradient` and `aboveAverage` are both default-true xsd:booleans, so a producer that spells false
 // the long way must turn them off exactly as the digit does, and an unrecognised token leaves the
-// default in force: the x14 gradient reads it as on, and `aboveAverage` drops it, which the writer
-// (emitting only `aboveAverage="0"`) spells the same way as on.
+// default in force: both drop it, leaving the attribute absent, which the writers spell the same way
+// as on.
 
 test('x14 gradient="false" turns the bar flat exactly as gradient="0" does', () => {
   const written = sheetXml(writeXlsx(dataBarBook({gradient: true})));

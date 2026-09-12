@@ -14,8 +14,19 @@ import type {AssertNever} from './internal.ts';
 import {cloneBorder, cloneFill, cloneFont, type Color} from './style.ts';
 import type {DifferentialStyle} from './workbook-styles.ts';
 
-/** How a {@link CfValueObject} reads its `value`: `ST_CfvoType` verbatim. */
-export type CfValueObjectType = 'num' | 'percent' | 'max' | 'min' | 'percentile' | 'formula';
+/**
+ * How a {@link CfValueObject} reads its `value`: `ST_CfvoType` verbatim, with the `autoMin` and
+ * `autoMax` the 2009 extension adds.
+ */
+export type CfValueObjectType =
+  | 'num'
+  | 'percent'
+  | 'max'
+  | 'min'
+  | 'percentile'
+  | 'formula'
+  | 'autoMin'
+  | 'autoMax';
 
 /** Narrow a raw `<cfvo type>` token to a known {@link CfValueObjectType}. */
 export const isCfValueObjectType = tokenSet<CfValueObjectType>({
@@ -25,12 +36,18 @@ export const isCfValueObjectType = tokenSet<CfValueObjectType>({
   min: true,
   percentile: true,
   formula: true,
+  autoMin: true,
+  autoMax: true,
 });
 
 /**
  * One anchor of a colour-scale, data-bar, or icon-set scale: a "conditional format value object".
  * `type` names how `value` is read: a literal `num`, a `percent`/`percentile` of the range, a
  * `formula`, or the range's own `min`/`max` (which carry no value).
+ *
+ * `autoMin` and `autoMax` are the automatic anchors Excel 2010 gives a new data bar, and carry no value
+ * either. Only the extension form spells them, so a data bar using one is written with its extension,
+ * its classic element saying `min` or `max` in their place as Excel's does.
  */
 export interface CfValueObject {
   type: CfValueObjectType;
@@ -157,6 +174,33 @@ export const isCfTimePeriod = tokenSet<CfTimePeriod>({
 });
 
 /**
+ * Which way a data bar grows, as `ST_DataBarDirection` enumerates it: `context` follows the sheet's
+ * reading direction.
+ */
+export type DataBarDirection = 'context' | 'leftToRight' | 'rightToLeft';
+
+/** Narrow a raw `<x14:dataBar direction>` token to a known {@link DataBarDirection}. */
+export const isDataBarDirection = tokenSet<DataBarDirection>({
+  context: true,
+  leftToRight: true,
+  rightToLeft: true,
+});
+
+/**
+ * Where a data bar draws the axis between its negative and positive bars, as `ST_DataBarAxisPosition`
+ * enumerates it: where the values put it, at the middle of the cell, or nowhere, which grows a
+ * negative bar the way a positive one grows.
+ */
+export type DataBarAxisPosition = 'automatic' | 'middle' | 'none';
+
+/** Narrow a raw `<x14:dataBar axisPosition>` token to a known {@link DataBarAxisPosition}. */
+export const isDataBarAxisPosition = tokenSet<DataBarAxisPosition>({
+  automatic: true,
+  middle: true,
+  none: true,
+});
+
+/**
  * The named icon family an `iconSet` rule draws from, as `ST_IconSetType` enumerates it. The leading
  * digit is the number of icons, which is also how many {@link CfValueObject} anchors the rule needs.
  *
@@ -232,6 +276,9 @@ export interface CfIcon {
  * A single conditional-formatting rule. `type` is the OOXML cfRule type; the remaining fields carry
  * the operands that type needs and are absent otherwise. A rule the library does not model in depth
  * still preserves `type`, `priority`, `operator`, `formulae`, and `dxfId` across a round-trip.
+ *
+ * A data bar's facets marked as x14 properties have no place in the classic `<dataBar>` element, so a
+ * bar carrying any of them, or an automatic anchor, is written with a linked `<x14:dataBar>` as well.
  */
 export interface ConditionalFormattingRule {
   type: ConditionalFormattingType;
@@ -255,10 +302,34 @@ export interface ConditionalFormattingRule {
   color?: Color;
   /** A colorScale's colours, one per {@link cfvo}. */
   colors?: Color[];
-  /** A dataBar's gradient-fill flag. Lives only in the x14 extension, not the classic element. */
+  /** A dataBar's shortest bar, as a percentage of the cell. */
+  minLength?: number;
+  /** A dataBar's longest bar, as a percentage of the cell. */
+  maxLength?: number;
+  /** A dataBar's gradient-fill flag. An x14 property. */
   gradient?: boolean;
-  /** A dataBar's fill colour for negative values. An x14 extension property. */
+  /** Whether a dataBar has a border, in {@link borderColor}. An x14 property. */
+  border?: boolean;
+  /** A dataBar's border colour. An x14 property. */
+  borderColor?: Color;
+  /** Which way a dataBar grows. An x14 property. */
+  direction?: DataBarDirection;
+  /** A dataBar's fill colour for negative values. An x14 property. */
   negativeFillColor?: Color;
+  /** A dataBar's border colour for negative values. An x14 property. */
+  negativeBorderColor?: Color;
+  /**
+   * Whether a dataBar fills a negative bar in its positive colour rather than
+   * {@link negativeFillColor}. An x14 property.
+   */
+  negativeBarColorSameAsPositive?: boolean;
+  /**
+   * Whether a dataBar borders a negative bar in its positive border colour rather than
+   * {@link negativeBorderColor}. An x14 property.
+   */
+  negativeBarBorderColorSameAsPositive?: boolean;
+  /** Where a dataBar draws the axis between negative and positive bars. An x14 property. */
+  axisPosition?: DataBarAxisPosition;
   /** A dataBar's axis colour (the zero line between positive and negative bars). An x14 property. */
   axisColor?: Color;
   /** An iconSet's named icon family (e.g. `3TrafficLights1`). */
@@ -341,8 +412,17 @@ const RULE_CLONE: ClonePlan<ConditionalFormattingRule> = {
   cfvo: 'records',
   color: 'record',
   colors: 'records',
+  minLength: 'value',
+  maxLength: 'value',
   gradient: 'value',
+  border: 'value',
+  borderColor: 'record',
+  direction: 'value',
   negativeFillColor: 'record',
+  negativeBorderColor: 'record',
+  negativeBarColorSameAsPositive: 'value',
+  negativeBarBorderColorSameAsPositive: 'value',
+  axisPosition: 'value',
   axisColor: 'record',
   iconSet: 'value',
   icons: 'records',
