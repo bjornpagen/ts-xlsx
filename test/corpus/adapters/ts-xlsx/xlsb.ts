@@ -20,9 +20,14 @@ export const xlsb = {
   //
   // Formula text is compared like everything else; only the shared-formula *grouping* is projected
   // away, because the binary form does not record it (see `xlsbFilledFormulaColumn`).
-  xlsbModelMatchesXlsxTwin() {
-    const binary = snapshot(readXlsx(fixtureBytes(`${FIXTURE}/source.xlsb`)));
-    const xml = snapshot(readXlsx(fixtureBytes(`${FIXTURE}/source.xlsx`)));
+  //
+  // `binaryPath` and `xmlPath` name another Excel-saved pair; the style and grid tour by default.
+  xlsbModelMatchesXlsxTwin(
+    binaryPath = `${FIXTURE}/source.xlsb`,
+    xmlPath = `${FIXTURE}/source.xlsx`,
+  ) {
+    const binary = snapshot(readXlsx(fixtureBytes(binaryPath)));
+    const xml = snapshot(readXlsx(fixtureBytes(xmlPath)));
     if (binary === xml) return {identical: true, firstDifference: null};
     const binaryLines = binary.split('\n');
     const xmlLines = xml.split('\n');
@@ -75,6 +80,15 @@ export const xlsb = {
       alignment: cell.alignment ?? null,
       protection: cell.protection ?? null,
     };
+  },
+
+  // The first sheet's cells at `references` in the binary workbook at `path` → a map of reference →
+  // value, a formula as {formula, result} with {array: {ref, dynamic}} when it is an array formula.
+  xlsbCellValues(path: string, references: string[]) {
+    const sheet = readXlsb(fixtureBytes(path)).worksheets[0];
+    return Object.fromEntries(
+      references.map((reference) => [reference, comparable(sheet?.getCell(reference).value)]),
+    );
   },
 
   // A sheet's row/column geometry and merged ranges, from the binary reading.
@@ -219,15 +233,18 @@ function normalize(value: Untyped): Untyped {
   return value;
 }
 
-// A cell value as the two serialisations can honestly be compared: formula text and cached result
-// both kept, but the shared-formula *grouping* dropped. A spreadsheet fills a formula down a column
-// by storing it once and marking the rest as clones; the XML form records that grouping and the
-// binary form does not: Excel writes each cell's own formula out in full. So a clone reads back with
-// the same formula text either way, and only the `sharedFormula` pointer back to the master differs.
+// A cell value as the two serialisations can honestly be compared: formula text, cached result and an
+// array formula's range and kind kept, but the shared-formula *grouping* dropped. A spreadsheet fills a
+// formula down a column by storing it once and marking the rest as clones; the XML form records that
+// grouping and the binary form does not: Excel writes each cell's own formula out in full. So a clone
+// reads back with the same formula text either way, and only the `sharedFormula` pointer back to the
+// master differs.
 function comparable(value: Untyped): Untyped {
   const formula = formulaOf(value);
   if (formula === null) return normalize(value);
-  return {formula, result: normalize(value.result ?? null)};
+  const array =
+    value.shareType === 'array' ? {array: {ref: value.ref, dynamic: value.dynamic === true}} : {};
+  return {formula, result: normalize(value.result ?? null), ...array};
 }
 
 // The formula text a cell carries, or null for a cell that is not a formula.

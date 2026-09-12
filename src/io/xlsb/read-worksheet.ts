@@ -16,6 +16,9 @@
 // pointing at the group's top-left, and the `BrtArrFmla` record carrying the group's actual formula
 // comes *after* those cells in the stream. Those cells are therefore parked and resolved once the
 // whole part has been read.
+//
+// A cell's metadata indices, the XML form's `cm` and `vm`, arrive as `BrtCellMeta` and `BrtValueMeta`
+// records just ahead of the cell record they belong to, and apply to that one record alone.
 
 import {
   encodeAddress,
@@ -29,8 +32,9 @@ import {coerceDateSerial, type DateEpoch} from '../../core/date.ts';
 import {unmangleFunctions} from '../../core/formula.ts';
 import {INTERNAL} from '../../core/internal.ts';
 import {assignStyleFacets} from '../../core/style.ts';
-import type {CellValue, ErrorValue, FormulaResult} from '../../core/value.ts';
+import type {CellValue, ErrorCode, ErrorValue, FormulaResult} from '../../core/value.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
+import type {CellMetadataIndex} from '../cell-metadata/metadata.ts';
 import {ColumnRecordBudget, clampColumnSpan} from '../read-policy/column-budget.ts';
 import {admitting} from '../read-policy/read-repair.ts';
 import {CellStyleResolver} from '../style/cell-style-resolution.ts';
@@ -46,6 +50,8 @@ interface ValueContext {
   readonly sharedStrings: readonly string[];
   readonly numFmt: string | undefined;
   readonly epoch: DateEpoch;
+  /** The error the cell's `BrtValueMeta` names through a rich value, which an error cell holds. */
+  readonly valueError: ErrorCode | undefined;
 }
 
 /**
@@ -83,7 +89,7 @@ const CELL_RECORDS: ReadonlyMap<number, CellRecord> = new Map<number, CellRecord
   [BRT.CellBool, value((r) => r.u8() !== 0)],
   // An unrecognised error byte keeps the cell non-empty without inventing an error the model does not
   // define; there is no text form to fall back to as there is in XML.
-  [BRT.CellError, value((r) => errorValueOrNull(r.u8()))],
+  [BRT.CellError, value((r, c) => errorOf(r.u8(), c.valueError))],
   [BRT.CellSt, value((r) => r.wideString())],
   // Rich runs are not modelled in this cut; the flattened text is what a consumer sees.
   [BRT.CellRString, value((r) => r.richString())],
@@ -92,13 +98,15 @@ const CELL_RECORDS: ReadonlyMap<number, CellRecord> = new Map<number, CellRecord
   // so a date-valued formula reads back as a Date rather than a serial.
   [BRT.FmlaNum, formula((r, c) => coerceDateSerial(r.f64(), c.numFmt, c.epoch))],
   [BRT.FmlaBool, formula((r) => r.u8() !== 0)],
-  [BRT.FmlaError, formula((r) => errorValueOrNull(r.u8()) ?? undefined)],
+  [BRT.FmlaError, formula((r, c) => errorOf(r.u8(), c.valueError) ?? undefined)],
   [BRT.FmlaString, formula((r) => r.wideString())],
 ]);
 
-// A BErr byte as the model's error value, or null when the byte names no error this library defines.
-function errorValueOrNull(code: number): ErrorValue | null {
-  const error = errorCodeFor(code);
+// An error cell's error: the one its value metadata names, which Excel stores beside a `#VALUE!` it has no
+// literal for, as the XML form's `vm` does; else the BErr byte's, or null when the byte names no error
+// this library defines.
+function errorOf(code: number, valueError: ErrorCode | undefined): ErrorValue | null {
+  const error = valueError ?? errorCodeFor(code);
   return error === undefined ? null : {error};
 }
 
@@ -111,6 +119,8 @@ interface DeferredFormula {
   readonly anchorRow: number;
   readonly anchorColumn: number;
   readonly result: FormulaResult | undefined;
+  /** Whether the cell's `BrtCellMeta` marks it a dynamic array, which only the group's own cell says. */
+  readonly dynamic: boolean;
 }
 
 /**
@@ -138,6 +148,9 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
   const deferred: DeferredFormula[] = [];
   const columnBudget = new ColumnRecordBudget();
   const protection = new SheetProtectionRecords();
+  // The metadata indices the next cell record carries, 0 for none, as an absent `cm` or `vm` is.
+  let cellMeta = 0;
+  let valueMeta = 0;
 
   for (const record of readRecords(part)) {
     const cellRecord = CELL_RECORDS.get(record.type);
@@ -186,8 +199,20 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
         rgce: reader.bytes(reader.u32()),
         rgcb: reader.bytes(reader.u32()),
       });
+    } else if (record.type === BRT.CellMeta) {
+      cellMeta = reader.u32();
+    } else if (record.type === BRT.ValueMeta) {
+      valueMeta = reader.u32();
     } else if (cellRecord !== undefined) {
-      const member = readCellRecord(cellRecord, reader, {...context, row, styleResolution});
+      const member = readCellRecord(cellRecord, reader, {
+        ...context,
+        row,
+        styleResolution,
+        cellMeta,
+        valueMeta,
+      });
+      cellMeta = 0;
+      valueMeta = 0;
       if (member !== undefined) deferred.push(member);
     }
   }
@@ -208,6 +233,7 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
             group.ref,
             member.result,
             definedNames,
+            member.dynamic,
           );
   }
 }
@@ -232,13 +258,22 @@ export interface WorksheetReadContext {
   /** Every name the workbook defines, as `definedNameKeys` spells them: whether a function a formula
    * passes as a value sheds its `_xleta.` depends on them, as it does in the XML reader. */
   readonly definedNames: ReadonlySet<string>;
+  /** What the workbook's cell and value metadata indices resolve to, read from its metadata part. */
+  readonly cellMetadata: CellMetadataIndex;
 }
 
-/** What reading one cell record needs: the sheet around it, and the row it is currently inside. */
+/**
+ * What reading one cell record needs: the sheet around it, the row it is currently inside, and the
+ * metadata indices the records just ahead of it gave it.
+ */
 interface CellRecordContext extends WorksheetReadContext {
   /** The open row, one-based; -1 when none is, which is a malformed sheet. */
   readonly row: number;
   readonly styleResolution: CellStyleResolver;
+  /** The cell's `BrtCellMeta` index, 0 for none. */
+  readonly cellMeta: number;
+  /** The cell's `BrtValueMeta` index, 0 for none. */
+  readonly valueMeta: number;
 }
 
 /**
@@ -256,6 +291,7 @@ function readCellRecord(
 ): DeferredFormula | undefined {
   const {sheet, sharedStrings, xfStyles, scope, dateEpoch, definedNames, row, styleResolution} =
     context;
+  const {cellMetadata, cellMeta, valueMeta} = context;
   // A cell record arriving before any row header is dropped rather than guessed at.
   if (row <= 0) return undefined;
   const {column, styleIndex} = reader.cell();
@@ -267,7 +303,12 @@ function readCellRecord(
   const cell = sheet.getCell(encodeAddress(column + 1, row));
   applyXfToCell(cell, style);
 
-  const ctx: ValueContext = {sharedStrings, numFmt: style?.numFmt, epoch: dateEpoch};
+  const ctx: ValueContext = {
+    sharedStrings,
+    numFmt: style?.numFmt,
+    epoch: dateEpoch,
+    valueError: cellMetadata.valueErrors.get(valueMeta),
+  };
   if (record.kind === 'value') {
     cell.value = record.read(reader, ctx);
     return undefined;
@@ -289,6 +330,7 @@ function readCellRecord(
     anchorRow: anchor.row,
     anchorColumn: anchor.column,
     result,
+    dynamic: cellMetadata.dynamicArrayCells.has(cellMeta),
   };
 }
 
@@ -311,19 +353,25 @@ function formulaValue(
 }
 
 // An array group's formula on the cell its range starts at, as the XML reader gives the same cell: the
-// array kind over the group's range. A range leaving the grid names no cells, and the formula is the
-// plain one its text is, which is the XML reader's answer to a `ref` it cannot read. The binary form
-// keeps a dynamic array's mark somewhere this reader does not look yet, so every group reads as legacy.
+// array kind over the group's range, dynamic when the cell's metadata marks it so. A range leaving the
+// grid names no cells, and the formula is the plain one its text is, which is the XML reader's answer
+// to a `ref` it cannot read.
 function arrayFormulaValue(
   formula: string | undefined,
   ref: string | undefined,
   result: FormulaResult | undefined,
   definedNames: ReadonlySet<string>,
+  dynamic: boolean,
 ): CellValue {
   if (formula === undefined || ref === undefined)
     return formulaValue(formula, result, definedNames);
-  const stored = unmangleFunctions(formula, definedNames);
-  return {shareType: 'array', formula: stored, ref, ...(result === undefined ? {} : {result})};
+  return {
+    shareType: 'array',
+    formula: unmangleFunctions(formula, definedNames),
+    ref,
+    ...(dynamic ? {dynamic: true} : {}),
+    ...(result === undefined ? {} : {result}),
+  };
 }
 
 // Excel's grid bounds, zero-based as the binary format counts. [MS-XLSB] states them as MUST

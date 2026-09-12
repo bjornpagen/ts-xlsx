@@ -22,7 +22,7 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   the six outright. `readXlsx` and `readSheetRows` now read the error the rich value names, whether the
   cell holds it or a formula cached it, and both writers store each of the six as Excel does, beside the
   value metadata and the rich-value parts. A `t="e"` cell spelling one of them literally reads as that
-  error too.
+  error too, and `readXlsb` reads them from the binary form's value metadata.
 
 - **Array formulas keep their range and their kind.** `ArrayFormulaValue`
   (`{shareType: 'array', formula, ref, dynamic?, result?}`, guarded by `isArrayFormulaValue`) is a cell
@@ -31,7 +31,8 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   formula's own cell, and a spilling formula lost the `cm` link into `xl/metadata.xml` and opened as a
   legacy formula that no longer spilled. Both kinds now read over their range through `readXlsx` and
   `readSheetRows`, and are written back with the cell metadata Excel marks a dynamic array with. An
-  `.xlsb` array group reads as the array kind too, always as a legacy one. A splice moves the range, a
+  `.xlsb` array group reads as the array kind too, dynamic when the `BrtCellMeta` ahead of its cell
+  points into `xl/metadata.bin` at a block marking it so. A splice moves the range, a
   duplicated row copies it, and the writer refuses a `ref` that does not start at the formula's own cell.
   `isFormulaValue` no longer matches an array formula.
 

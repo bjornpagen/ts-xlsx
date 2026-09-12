@@ -733,10 +733,12 @@ different opinion about it.
 formats share an OPC/ZIP container, a relationship graph, and a style model, and differ only in how
 the office-document parts are spelled: XML in `.xlsx`, BIFF12 record streams in `.xlsb`. The code
 follows that split exactly, and the directory layout states it. The bounded inflater, magic-byte
-probe and OPC/relationship resolution live in `src/io/opc/`, and the resolved-format table
+probe and OPC/relationship resolution live in `src/io/opc/`, the resolved-format table
 (`XfStyle`, its built-in number formats, `applyXfToCell`, and the cell → row → column → xf 0
-resolution every cell reader drives) in `src/io/style/`. Both sit _above_
-the codecs rather than inside either. Only the part parsers live apart in `src/io/xlsb/`:
+resolution every cell reader drives) in `src/io/style/`, and what a cell's metadata indices resolve
+to (the dynamic-array mark and the rich-value error behind a `#VALUE!`, over a model of the metadata
+part that each codec reads from its own spelling of it) in `src/io/cell-metadata/`. All three sit
+_above_ the codecs rather than inside either. Only the part parsers live apart in `src/io/xlsb/`:
 `record-stream.ts` (the record framing), `primitives.ts` (RkNumber, length-prefixed strings,
 colours), `formula.ts` and `ptg-functions.ts` (the Ptg token stream a binary formula is stored as,
 decoded to the text `<f>` would have carried), then a per-part parser mirroring its XML counterpart.

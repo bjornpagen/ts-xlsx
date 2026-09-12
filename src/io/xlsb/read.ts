@@ -20,6 +20,8 @@ import {INTERNAL} from '../../core/internal.ts';
 import {type DefinedName, Workbook} from '../../core/workbook.ts';
 import type {WorksheetState} from '../../core/worksheet.ts';
 import {quoted} from '../../errors.ts';
+import {indexCellMetadata} from '../cell-metadata/metadata.ts';
+import {parseRichValueErrors} from '../cell-metadata/rich-values.ts';
 import {UnsupportedFormatError} from '../opc/errors.ts';
 import {openSpreadsheetPackage, packageAccessors, readPartRelationships} from '../opc/read-opc.ts';
 import type {ReadPackageOptions} from '../opc/read-options.ts';
@@ -27,6 +29,7 @@ import {admitting, repairedSheetNames} from '../read-policy/read-repair.ts';
 import {XlsbParseError} from './errors.ts';
 import {decodeFormula, type ExternSheetRef, type FormulaScope} from './formula.ts';
 import {RecordReader} from './primitives.ts';
+import {parseMetadataPart} from './read-metadata.ts';
 import {parseSharedStrings} from './read-shared-strings.ts';
 import {parseStyleTable} from './read-styles.ts';
 import {parseWorksheet} from './read-worksheet.ts';
@@ -118,6 +121,15 @@ export function readXlsbPackage(
   // Whether a function a formula passes as a value sheds its `_xleta.` depends on the names the
   // workbook defines, so they are known before any formula is decoded, from the records alone.
   const namesInWorkbook = definedNameKeys(declaration.names.filter(isWorkbookName));
+  // What every cell's metadata indices resolve to, as the XML reader resolves them: the metadata part
+  // is binary here, and the rich values it names are the same XML parts either form carries.
+  const cellMetadata = indexCellMetadata(
+    parseMetadataPart(rels.relatedBytes('sheetMetadata')),
+    parseRichValueErrors(
+      rels.relatedText('rdRichValueStructure') ?? '',
+      rels.relatedText('rdRichValue') ?? '',
+    ),
+  );
 
   for (const declared of sheets) {
     const sheet = workbook.addWorksheet(declared.name, {state: declared.state});
@@ -131,6 +143,7 @@ export function readXlsbPackage(
         scope,
         dateEpoch: declaration.dateEpoch,
         definedNames: namesInWorkbook,
+        cellMetadata,
       });
   }
   // A name the model refuses, such as an empty one, is a name the file does not really carry.

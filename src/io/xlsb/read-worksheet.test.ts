@@ -3,6 +3,7 @@ import {test} from 'node:test';
 
 import {MAX_COLUMN} from '../../core/address.ts';
 import {Workbook} from '../../core/workbook.ts';
+import {NO_CELL_METADATA} from '../cell-metadata/metadata.ts';
 import {parseWorksheet} from './read-worksheet.ts';
 import {BRT} from './record-types.ts';
 import {concat, frame, nameCitations, word} from './records.test-support.ts';
@@ -43,8 +44,35 @@ test('a formula whose decoded text would outgrow any real formula keeps its cach
     },
     dateEpoch: 1900,
     definedNames: new Set(),
+    cellMetadata: NO_CELL_METADATA,
   });
   assert.equal(sheet.getCell('A1').value, 7);
+});
+
+test('a value metadata index names the error of the one cell record after it', () => {
+  const error = (column: number) =>
+    frame(BRT.CellError, concat(word(column), word(0), Uint8Array.of(0x0f)));
+  const part = concat(
+    frame(BRT.RowHdr, concat(word(0), word(0), Uint8Array.of(0, 0, 0, 0))),
+    frame(BRT.ValueMeta, word(1)),
+    error(0),
+    error(1),
+    frame(BRT.ValueMeta, word(2)),
+    error(2),
+  );
+  const sheet = new Workbook().addWorksheet('S');
+  parseWorksheet(part, {
+    sheet,
+    sharedStrings: [],
+    xfStyles: [],
+    scope: {sheetNames: ['S'], externSheets: [], selfSupBook: undefined, names: []},
+    dateEpoch: 1900,
+    definedNames: new Set(),
+    cellMetadata: {dynamicArrayCells: new Set(), valueErrors: new Map([[1, '#SPILL!']])},
+  });
+  assert.deepEqual(sheet.getCell('A1').value, {error: '#SPILL!'});
+  assert.deepEqual(sheet.getCell('B1').value, {error: '#VALUE!'}, 'the index is not carried on');
+  assert.deepEqual(sheet.getCell('C1').value, {error: '#VALUE!'}, 'an index naming no error');
 });
 
 // Clamping one run to the grid bounds that run and nothing else, so a part of full-width runs used to
@@ -66,6 +94,7 @@ test('full-width column runs are charged to one per-sheet budget, however many a
       scope: {sheetNames: ['S'], externSheets: [], selfSupBook: undefined, names: []},
       dateEpoch: 1900,
       definedNames: new Set(),
+      cellMetadata: NO_CELL_METADATA,
     });
     assert.equal(touched, 4 * MAX_COLUMN, `${count} full-width runs touched ${touched} columns`);
     assert.equal(getColumn(MAX_COLUMN).hidden, true, 'and the runs the budget affords still apply');

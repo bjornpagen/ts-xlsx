@@ -74,4 +74,22 @@ export const BRT = {
   ArrFmla: 426,
   SheetProtection: 535,
   SheetProtectionIso: 678,
+
+  // The metadata indices of the cell record that follows: its `cm` and its `vm`.
+  CellMeta: 49,
+  ValueMeta: 50,
+
+  // Metadata part: the metadata types, a list of future-metadata blocks per type, and the cell and
+  // value metadata blocks, the XML form's `<metadataType>`, `<futureMetadata>` and `<bk>` one for one.
+  Mdtinfo: 335,
+  BeginEsfmd: 339,
+  EndEsfmd: 340,
+  BeginFmd: 52,
+  BeginEsmdb: 337,
+  EndEsmdb: 338,
+  Mdb: 51,
+  // The records inside a future-metadata block carrying what the XML form's extensions do: a dynamic
+  // array's flags, and the rich value a rich-value block names.
+  DynamicArrayProperties: 4097,
+  RichValueBlock: 5003,
 } as const;

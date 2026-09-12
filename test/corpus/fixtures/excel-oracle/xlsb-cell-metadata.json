@@ -1,0 +1,23 @@
+{
+  "invariant": "xlsb-cell-metadata",
+  "description": "Where an .xlsb keeps the cell metadata marking a dynamic-array formula and the value metadata naming a rich-value error, and what the records carrying them mean. Excel saved one workbook as both .xlsx and .xlsb (`an-error-value-is-stored-as-excel-stores-it/excel-saved.*`, authored by the `author.ps1` beside them). The records were read out of the binary parts, then one record at a time was changed and the package read back over COM.",
+  "probe": "a BIFF12 record dump of the parts; a record patcher replacing one record type's payload in `xl/metadata.bin`; a one-off COM script reading Formula2, Text, HasArray, CurrentArray, HasSpill and SpillingToRange",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-12",
+  "sheetRecords": "record 49 (BrtCellMeta) and record 50 (BrtValueMeta), each one u32 index counted from 1, come right before the cell record they belong to, and only cells carrying a cm or vm in the .xlsx twin have them: A1, C1, E1 and J1 both before BrtFmlaError, M1 and O1 record 49 before BrtFmlaNum, G1 and G2 record 50 before BrtCellError, Q1 and S1 neither",
+  "metadataPart": "xl/metadata.bin, reached by the sheetMetadata relationship as metadata.xml is: BrtMdtinfo (335) per metadata type, u32 flags, u32 version 120000, XLWideString name XLDAPR then XLRICHVALUE; BrtBeginEsfmd (339) per type, u32 block count and the type name, holding per block BrtBeginFmd (52), BrtFRTBegin, record 4096 (empty) and record 4097 (0100) for XLDAPR or record 5002 (empty) and record 5003 (u32 0, u32 rich value index) for XLRICHVALUE, BrtFRTEnd, BrtEndFmd; BrtBeginEsmdb (337), u32 block count and u32 1 for cell metadata or 0 for value metadata, holding a BrtMdb (51) per block, u32 record count then u32 t and u32 v per record, t and v counted as in metadata.xml",
+  "richDataParts": "xl/richData/rdrichvalue.xml, rdrichvaluestructure.xml and rdRichValueTypes.xml, byte for byte the XML parts the .xlsx carries",
+  "readBack": {
+    "excel-saved.xlsb and excel-saved.xlsx": "identical: A1, J1 and A1048576 #SPILL!, C1 and I1 #CALC!, E1 #FIELD!, G1 #SPILL!, G2 #CALC!, M1 spilling over M1:M3, O1 a formula returning 12 with no array, Q1:Q3 a legacy array"
+  },
+  "patches": {
+    "record 4097 payload 0000": "A1, C1, E1, M1:M3 and O1 read as legacy array formulas, HasArray true and nothing spilling; A1 recalculated to 1; G1 and I1 unchanged",
+    "record 4097 payload 0300": "read as saved",
+    "record 5003 as u32 0, u32 1 in every block": "E1, G1 and I1 read #CALC!, the error of rich value 1, where they had read #FIELD!, #SPILL! and #CALC!; C1 still #CALC!",
+    "record 5003 as u32 1, u32 0 in every block": "Excel would not open the package"
+  },
+  "verdict": "The binary form keeps a cell's cm and vm in records 49 and 50 ahead of the cell record, resolving through xl/metadata.bin exactly as they resolve through xl/metadata.xml, into the same rich-value parts. A dynamic-array block's flags are record 4097's first byte, bit 0 fDynamic; a rich-value block names its rich value in record 5003's second word. Locked by the corpus case xlsb-cell-metadata-reads-like-the-xlsx-twin."
+}

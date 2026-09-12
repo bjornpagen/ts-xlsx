@@ -105,7 +105,10 @@ const DIST = join(ROOT, 'dist');
 //
 // Raised again, from 662, when an error Excel has no literal for began to be read from and written
 // to the value metadata and rich-value parts that name it, 8.5 KB over.
-const TOTAL_BUDGET_BYTES = 672 * 1024;
+//
+// Raised again, from 672, when the binary reader began reading a cell's metadata indices and the
+// metadata part they resolve through, 2.4 KB over.
+const TOTAL_BUDGET_BYTES = 676 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -226,7 +229,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 640, when an array formula began reading and writing its range and the cell metadata that marks a dynamic array.
   //
   // Raised again, from 650, by the same rich-value errors as `/xlsx`, 8.8 KB over.
-  '.': 660,
+  //
+  // Raised again, from 660, by the same binary cell metadata as `/xlsb`, 2.7 KB over.
+  '.': 664,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -333,7 +338,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 632, when an error Excel has no literal for began to be read from and written to
   // the value metadata and rich-value parts that name it, in `io/cell-metadata/` for the model both
   // codecs resolve a cell through and in the XML codec for the parts, 8.3 KB over.
-  './xlsx': 642,
+  //
+  // Raised again, from 642, by the same binary cell metadata as `/xlsb`, which `readXlsx` reaches for
+  // an `.xlsb` package, 2.2 KB over.
+  './xlsx': 646,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -391,7 +399,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // gained, 0.2 KB over.
   //
   // Raised again, from 341, when an array formula began reading and writing its range and the cell metadata that marks a dynamic array.
-  './xlsb': 344,
+  //
+  // Raised again, from 344, when the binary reader began reading a cell's metadata indices and
+  // `xl/metadata.bin`, and resolving them through `io/cell-metadata/`, the rich-value XML parser
+  // included, 6.8 KB over.
+  './xlsb': 352,
   // Raised from 210 when the CSV writer's private moment.js-style date table was replaced by a real
   // Excel number-format renderer (ADR 0041). It is the one entry that pays for it: the renderer sits
   // in `core/date-format.ts` apart from `core/date.ts` precisely so the four entries that never
