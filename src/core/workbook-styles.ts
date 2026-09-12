@@ -201,6 +201,14 @@ export class WorkbookStyleTables {
     replaceContents(this.#differentialStyles, fragments);
   }
 
+  // A differential style a sheet carries inline rather than by index takes the index of an identical
+  // entry, or a new one at the end, which leaves every existing index where it was. Excel writes an
+  // extension-form rule's style into the table as well, so the lookup usually finds it there.
+  adoptDifferentialStyle(fragment: string): number {
+    const existing = this.#differentialStyles.indexOf(fragment);
+    return existing === -1 ? this.#differentialStyles.push(fragment) - 1 : existing;
+  }
+
   restoreNamedStyles(styles: readonly NamedCellStyle[]): void {
     replaceContents(this.#namedStyles, styles);
   }

@@ -52,6 +52,8 @@ export {Column} from '../core/column.ts';
 export type {DateEpoch} from '../core/date.ts';
 export type {Comment, CommentThread, Mention, MentionRef, Person} from '../core/comment-thread.ts';
 export {
+  type CfIcon,
+  type CfIconSetType,
   type CfTimePeriod,
   type CfValueObject,
   type CfValueObjectType,
@@ -60,6 +62,7 @@ export {
   type ConditionalFormattingRule,
   type ConditionalFormattingType,
   type IconSetType,
+  isCfIconSetType,
   isCfTimePeriod,
   isCfValueObjectType,
   isConditionalFormattingOperator,

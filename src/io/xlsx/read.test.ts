@@ -1393,7 +1393,7 @@ test('the worksheet part is read in one pass, not once per reader', () => {
   parseXmlPasses(apart.source, [sheetHyperlinkPass()]);
   parseXmlPasses(apart.source, [dataValidationPass(new Set())]);
   parseXmlPasses(apart.source, [extendedDataValidationPass(new Set())]);
-  parseXmlPasses(apart.source, [conditionalFormattingPass(new Set())]);
+  parseXmlPasses(apart.source, [conditionalFormattingPass(new Set(), () => 0)]);
 
   const together = countingSource(xml);
   parseXmlPasses(together.source, [
@@ -1401,7 +1401,7 @@ test('the worksheet part is read in one pass, not once per reader', () => {
     sheetHyperlinkPass(),
     dataValidationPass(new Set()),
     extendedDataValidationPass(new Set()),
-    conditionalFormattingPass(new Set()),
+    conditionalFormattingPass(new Set(), () => 0),
   ]);
 
   assert.equal(

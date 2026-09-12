@@ -102,4 +102,56 @@ export const conditionalFormatting = {
     const outXml = partMapOf(writeXlsx(readFixture(rel)))['xl/worksheets/sheet1.xml'] || '';
     return {source, rewritten: cfFacts(outXml)};
   },
+
+  // Read a fixture, write it back, and report its first sheet's conditional formats → { read, source,
+  // rewritten }. `read` is what the model surfaces, one entry per range: [{ref, rules:[{type,
+  // formulae}]}]. `source` and `rewritten` are what each package stores, { classic:[{sqref, rule}],
+  // extension:[{sqref, rule, linksAClassicRule}] }, `rule` being the cfRule's markup with the id that
+  // ties an extension rule to a classic one blanked, since that id is the writer's to choose. Every
+  // list is sorted by range: a rule's place in either form means nothing, its priority does.
+  conditionalFormatRulesAsStored(rel: string) {
+    const stored = (pkg: Uint8Array) => {
+      const parts = partMapOf(pkg);
+      const name = Object.keys(parts).find((n) => n.endsWith('sheet1.xml'));
+      const xml = name === undefined ? '' : (parts[name] ?? '');
+      const linkedIds = new Set([...xml.matchAll(/<x14:id>([^<]*)<\/x14:id>/g)].map((m) => m[1]));
+      const blank = (rule: string) =>
+        rule.replace(/<x14:id>[^<]*<\/x14:id>/g, '<x14:id/>').replace(/\sid="[^"]*"/g, '');
+      const bySqref = (a: {sqref: string; rule: string}, b: {sqref: string; rule: string}) =>
+        a.sqref.localeCompare(b.sqref) || a.rule.localeCompare(b.rule);
+      const classic = [
+        ...xml.matchAll(
+          /<conditionalFormatting\b[^>]*\bsqref="([^"]*)"[^>]*>([\s\S]*?)<\/conditionalFormatting>/g,
+        ),
+      ].flatMap(([, sqref = '', body = '']) =>
+        [...body.matchAll(/<cfRule\b[^>]*\/>|<cfRule\b[^>]*>[\s\S]*?<\/cfRule>/g)].map((m) => ({
+          sqref,
+          rule: blank(m[0]),
+        })),
+      );
+      const extension = [
+        ...xml.matchAll(
+          /<x14:conditionalFormatting\b[^>]*>([\s\S]*?)<\/x14:conditionalFormatting>/g,
+        ),
+      ].flatMap(([, body = '']) => {
+        const sqref = /<xm:sqref>([^<]*)<\/xm:sqref>/.exec(body)?.[1] ?? '';
+        return [
+          ...body.matchAll(/<x14:cfRule\b[^>]*\/>|<x14:cfRule\b[^>]*>[\s\S]*?<\/x14:cfRule>/g),
+        ].map((m) => ({
+          sqref,
+          rule: blank(m[0]),
+          linksAClassicRule: linkedIds.has(/\sid="([^"]*)"/.exec(m[0])?.[1] ?? ''),
+        }));
+      });
+      return {classic: classic.sort(bySqref), extension: extension.sort(bySqref)};
+    };
+    const workbook = readFixture(rel);
+    const read = (workbook.worksheets[0]?.conditionalFormattings ?? [])
+      .map((set) => ({
+        ref: set.ref,
+        rules: set.rules.map((rule) => ({type: rule.type, formulae: rule.formulae ?? []})),
+      }))
+      .sort((a, b) => a.ref.localeCompare(b.ref));
+    return {read, source: stored(fixtureBytes(rel)), rewritten: stored(writeXlsx(workbook))};
+  },
 };

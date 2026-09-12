@@ -19,10 +19,10 @@ import type {ColumnProperties, Worksheet, WorksheetProperties} from '../../core/
 import {AuthoringError, InternalError, quoted} from '../../errors.ts';
 import {escapeAttr, numberText, XML_DECLARATION} from '../../xml/xml.ts';
 import {
+  type ConditionalFormattingPlan,
   conditionalFormattingsExtXml,
   conditionalFormattingsXml,
-  type DataBarExtLinks,
-  dataBarExtLinks,
+  planConditionalFormatting,
 } from './conditional-formatting.ts';
 import {dataValidationsExtXml, dataValidationsXml} from './data-validation.ts';
 import {type HyperlinkPlan, hyperlinksXml} from './hyperlinks.ts';
@@ -118,10 +118,10 @@ export function worksheetXml(inputs: WorksheetXmlInputs): string {
   // how to serialise its `<f>`. This also validates the master/clone geometry, throwing if a clone
   // precedes its master or its master carries no formula.
   const sharedRoles = planSharedFormulas(sheet);
-  // One link map for the whole sheet, handed to both conditional-formatting passes. Built here beside
-  // the shared-formula plan for the same reason: it is a fact about the sheet that two serialisers
-  // must agree on, and two of them deriving it separately is agreement by coincidence.
-  const extLinks = dataBarExtLinks(sheet.conditionalFormattings);
+  // One conditional-formatting plan for the whole sheet, handed to both conditional-formatting passes.
+  // Built here beside the shared-formula plan for the same reason: it is a fact about the sheet that
+  // two serialisers must agree on, and two of them deriving it separately is agreement by coincidence.
+  const formattingPlan = planConditionalFormatting(sheet.conditionalFormattings);
 
   // A fully-hidden outline group's collapse toggle belongs on its summary row; derive that set once
   // so the row loop can stamp it even onto a summary row that carries no properties of its own. The
@@ -184,7 +184,7 @@ export function worksheetXml(inputs: WorksheetXmlInputs): string {
     mergeCellsXml(sheet.merges) +
     // CT_Worksheet order: <conditionalFormatting> blocks follow <mergeCells>, then <dataValidations>,
     // then <hyperlinks>, all of which precede the print settings.
-    conditionalFormattingsXml(sheet.conditionalFormattings, styles, extLinks, formulaNames) +
+    conditionalFormattingsXml(sheet.conditionalFormattings, styles, formattingPlan, formulaNames) +
     dataValidationsXml(sheet.dataValidations, formulaNames) +
     hyperlinksXml(hyperlinks) +
     // CT_Worksheet order: <printOptions> precedes <pageMargins>, which precedes <pageSetup>.
@@ -204,11 +204,11 @@ export function worksheetXml(inputs: WorksheetXmlInputs): string {
     refElement('legacyDrawingHF', references.legacyDrawingHFRelId) +
     refElement('picture', references.backgroundRelId) +
     tablePartsXml(tables) +
-    // `<extLst>` is the final child of CT_Worksheet and a worksheet may carry at most one. Both the
-    // x14 conditional-formatting extensions (data-bar gradient/negative-fill/axis) and the extended
+    // `<extLst>` is the final child of CT_Worksheet and a worksheet may carry at most one. The x14
+    // conditional formats (whole rules, and a data bar's gradient/negative-fill/axis) and the extended
     // (x14) data validations ride inside it as sibling `<ext>` blocks, so they are gathered here into
     // a single `<extLst>` rather than each emitting its own.
-    worksheetExtLstXml(sheet, references.slicerRelIds, extLinks, formulaNames) +
+    worksheetExtLstXml(sheet, styles, references.slicerRelIds, formattingPlan, formulaNames) +
     '</worksheet>'
   );
 }
@@ -217,12 +217,18 @@ export function worksheetXml(inputs: WorksheetXmlInputs): string {
 // carries none. Each producer returns a bare `<ext>` so they compose without nesting an `<extLst>`.
 function worksheetExtLstXml(
   sheet: Worksheet,
+  styles: StyleRegistry,
   slicerRelIds: readonly string[],
-  extLinks: DataBarExtLinks,
+  formattingPlan: ConditionalFormattingPlan,
   formulaNames: ReadonlySet<string>,
 ): string {
   const exts = [
-    conditionalFormattingsExtXml(sheet.conditionalFormattings, extLinks, formulaNames),
+    conditionalFormattingsExtXml(
+      sheet.conditionalFormattings,
+      styles,
+      formattingPlan,
+      formulaNames,
+    ),
     dataValidationsExtXml(sheet.dataValidations, formulaNames),
     slicerListExtXml(slicerRelIds),
   ].filter((ext) => ext !== '');

@@ -266,7 +266,9 @@ function readSheet(sheet: Worksheet, path: string | undefined, context: SheetRea
   const hyperlinks = sheetHyperlinkPass();
   const validations = dataValidationPass(definedNames);
   const extendedValidations = extendedDataValidationPass(definedNames);
-  const formattings = conditionalFormattingPass(definedNames);
+  const formattings = conditionalFormattingPass(definedNames, (fragment) =>
+    workbook[INTERNAL].adoptDifferentialStyle(fragment),
+  );
   const references = worksheetReferencePass();
   if (sheetXml !== undefined) {
     parseXmlPasses(sheetXml, [

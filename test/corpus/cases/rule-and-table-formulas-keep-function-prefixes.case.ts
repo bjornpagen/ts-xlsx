@@ -10,8 +10,8 @@
 // spelling rather than the formula.
 //
 // The fixture was saved by Excel Desktop 16.0 (build 20326); `author.ps1` beside it builds it. The rule
-// Excel keeps only in the x14 extension (a format reaching another sheet) is not read into the model
-// at all, so it is not asserted on here.
+// Excel keeps only in the x14 extension, a format reaching another sheet, reads onto its range like the
+// rest and is written back to the extension, where its formula takes the same prefixes.
 
 import type {Assert, Case, CorpusApi} from '../case.ts';
 
@@ -54,6 +54,13 @@ const EXCEL: Record<string, {read: string; stored: string}> = {
   },
 };
 
+// The format Excel keeps in the extension, because it reaches another sheet. Its formula is read like
+// the rest, but written back to the extension rather than to the classic blocks `stored` reports.
+const CROSS_SHEET_FORMAT = {
+  read: "XLOOKUP(1,'S2'!$A$1:$A$3,'S2'!$B$1:$B$3)=1",
+  stored: "_xlfn.XLOOKUP(1,'S2'!$A$1:$A$3,'S2'!$B$1:$B$3)=1",
+};
+
 const project = (field: 'read' | 'stored') =>
   Object.fromEntries(Object.entries(EXCEL).map(([key, spelling]) => [key, spelling[field]]));
 
@@ -68,7 +75,10 @@ export default {
     {
       name: 'reading a workbook Excel saved gives every rule and table formula its plain text',
       expect(api: CorpusApi, assert: Assert) {
-        assert.deepEqual(api.ruleFormulaSpellings(FIXTURE).read, project('read'));
+        assert.deepEqual(api.ruleFormulaSpellings(FIXTURE).read, {
+          ...project('read'),
+          'cf:C4:C6:0': CROSS_SHEET_FORMAT.read,
+        });
       },
     },
     {
@@ -76,10 +86,12 @@ export default {
       expect(api: CorpusApi, assert: Assert) {
         const {written, writtenExtension} = api.ruleFormulaSpellings(FIXTURE);
         assert.deepEqual(written, project('stored'));
-        // The data bar's anchors are repeated in its x14 extension, beside the extended validation.
+        // The data bar's anchors are repeated in its x14 extension, beside the cross-sheet format and
+        // the extended validation.
         assert.deepEqual(writtenExtension, [
           `_xlfn.${MIN}`,
           `_xlfn.${MAX}`,
+          CROSS_SHEET_FORMAT.stored,
           "ISNUMBER(_xlfn.XLOOKUP(D3,'S2'!$A$1:$A$3,'S2'!$A$1:$A$3))",
         ]);
       },

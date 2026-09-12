@@ -17,7 +17,7 @@ thread is a viewer rendering difference between applications, not a library defe
 > string literal must be quoted and how relative references in an expression rule are translated,
 > rather than a single malformed-output assertion. The corpus already round-trips CF rules
 > (`databar-conditional-formatting-roundtrip`, `conditional-formatting-multi-area-ref-survives`,
-> `extended-conditional-formatting-expression-rule-roundtrip`); this note pins the semantics.
+> `extension-only-conditional-formats-round-trip`); this note pins the semantics.
 
 ## Desired behavior
 
@@ -44,4 +44,4 @@ thread is a viewer rendering difference between applications, not a library defe
   references left untranslated as expected?
 
 Related: `databar-conditional-formatting-roundtrip`, `conditional-formatting-multi-area-ref-survives`,
-`extended-conditional-formatting-expression-rule-roundtrip`, `conditional-format-numfmt-roundtrip`.
+`extension-only-conditional-formats-round-trip`, `conditional-format-numfmt-roundtrip`.

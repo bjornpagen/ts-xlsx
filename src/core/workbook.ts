@@ -926,6 +926,7 @@ export class Workbook {
     restoreDifferentialStyles: (fragments) => {
       this.#styles.restoreDifferentialStyles(fragments);
     },
+    adoptDifferentialStyle: (fragment) => this.#styles.adoptDifferentialStyle(fragment),
     restoreIndexedColors: (fragments) => {
       this.#styles.restoreIndexedColors(fragments);
     },
@@ -974,6 +975,13 @@ export interface WorkbookInternals {
    * re-write.
    */
   restoreDifferentialStyles(fragments: readonly string[]): void;
+
+  /**
+   * The index of a `<dxf>` fragment a sheet carried inline, found among the differential styles or
+   * appended after them, so a conditional format read from the extension form holds a `dxfId` like any
+   * other rule.
+   */
+  adoptDifferentialStyle(fragment: string): number;
 
   /**
    * Reinstate the custom indexed-color palette (`<colors><indexedColors>`) read from a file, each

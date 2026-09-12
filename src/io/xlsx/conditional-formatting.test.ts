@@ -193,28 +193,249 @@ test('a foreign differential style with a custom number format round-trips verba
   assert.match(out, /formatCode="_\(\* #,##0_\)/, 'the exact custom format code is preserved');
 });
 
-test('an x14 extLst conditional formatting is left untouched and writing the sheet does not crash', () => {
-  const sheet1 =
-    '<?xml version="1.0"?>' +
-    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData/>' +
-    '<extLst><ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}" ' +
-    'xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main">' +
-    '<x14:conditionalFormattings><x14:conditionalFormatting ' +
-    'xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">' +
-    '<x14:cfRule type="expression" priority="1" id="{GUID}"><xm:f>A1&gt;2</xm:f></x14:cfRule>' +
-    '<xm:sqref>A1:A5</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst></worksheet>';
-  const workbook = readPatched({[SHEET1]: sheet1});
+// The extension form Excel stores a rule in when its formula reaches another sheet: the target in an
+// `<xm:sqref>`, each operand in an `<xm:f>`, the differential style inline.
+const x14Sheet = (rules: string, sqref = 'A1:A5'): string =>
+  '<?xml version="1.0"?>' +
+  '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData/>' +
+  '<extLst><ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}" ' +
+  'xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main">' +
+  '<x14:conditionalFormattings><x14:conditionalFormatting ' +
+  `xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">${rules}` +
+  `<xm:sqref>${sqref}</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst></worksheet>`;
 
-  // The x14 rule is namespace-prefixed and is not read into the classic model, so it is neither
-  // half-parsed into a broken rule nor does it make the writer throw.
+const BOLD_RED_DXF =
+  '<font><b/><i val="0"/></font><fill><patternFill><bgColor rgb="FFFF0000"/></patternFill></fill>';
+
+test('a rule stored only in the extension reads as an extended set with its formula and style', () => {
+  const workbook = readPatched({
+    [SHEET1]: x14Sheet(
+      '<x14:cfRule type="expression" priority="1" stopIfTrue="1" id="{GUID}">' +
+        `<xm:f>A1&gt;Data!$A$1</xm:f><x14:dxf>${BOLD_RED_DXF}</x14:dxf></x14:cfRule>`,
+    ),
+  });
+  const sets = workbook.getWorksheet('S')?.conditionalFormattings ?? [];
+  assert.equal(sets.length, 1);
+  assert.equal(sets[0]?.ref, 'A1:A5');
+  assert.equal(sets[0]?.extended, true);
+  const rule = sets[0]?.rules[0];
+  assert.equal(rule?.type, 'expression');
+  assert.equal(rule?.priority, 1);
+  assert.equal(rule?.stopIfTrue, true);
+  assert.deepEqual(rule?.formulae, ['A1>Data!$A$1']);
   assert.equal(
-    workbook.getWorksheet('S')?.conditionalFormattings.length,
-    0,
-    'no classic rule was fabricated',
+    workbook.differentialStyles[Number(rule?.dxfId)],
+    `<dxf>${BOLD_RED_DXF}</dxf>`,
+    'the inline style is adopted into the table the rule indexes',
   );
-  assert.doesNotThrow(
-    () => writeXlsx(workbook),
-    'writing a sheet whose CF lived only in x14 does not crash',
+});
+
+test('an extended set is written back to the extension with its style inline, and nowhere else', () => {
+  const rules =
+    '<x14:cfRule type="expression" priority="1" id="{GUID}"><xm:f>A1&gt;Data!$A$1</xm:f>' +
+    `<x14:dxf>${BOLD_RED_DXF}</x14:dxf></x14:cfRule>`;
+  const xml = sheetXml(writeXlsx(readPatched({[SHEET1]: x14Sheet(rules)})));
+
+  assert.doesNotMatch(xml, /<conditionalFormatting\b/, 'no classic copy of the rule');
+  assert.ok(
+    xml.includes(
+      '<x14:cfRule type="expression" priority="1" id="{00000000-0000-0000-0000-000000000001}">' +
+        `<xm:f>A1&gt;Data!$A$1</xm:f><x14:dxf>${BOLD_RED_DXF}</x14:dxf></x14:cfRule>` +
+        '<xm:sqref>A1:A5</xm:sqref>',
+    ),
+    xml,
+  );
+});
+
+test("an inline style Excel also saved in the table takes that entry's index instead of a copy", () => {
+  const base = new Workbook();
+  base.addWorksheet('S');
+  const styles = partText(writeXlsx(base), 'xl/styles.xml').replace(
+    '<dxfs count="0"/>',
+    `<dxfs count="2"><dxf><fill><patternFill/></fill></dxf><dxf>${BOLD_RED_DXF}</dxf></dxfs>`,
+  );
+  const workbook = readPatched({
+    [SHEET1]: x14Sheet(
+      '<x14:cfRule type="expression" priority="1" id="{GUID}"><xm:f>A1&gt;2</xm:f>' +
+        `<x14:dxf>${BOLD_RED_DXF}</x14:dxf></x14:cfRule>`,
+    ),
+    'xl/styles.xml': styles,
+  });
+
+  assert.equal(workbook.getWorksheet('S')?.conditionalFormattings[0]?.rules[0]?.dxfId, '1');
+  assert.equal(workbook.differentialStyles.length, 2, 'no copy was appended');
+});
+
+test('an inline style keeps only its main-namespace markup, the only kind the table can hold', () => {
+  const workbook = readPatched({
+    [SHEET1]: x14Sheet(
+      '<x14:cfRule type="expression" priority="1" id="{GUID}"><xm:f>A1&gt;2</xm:f>' +
+        `<x14:dxf>${BOLD_RED_DXF}<extLst><ext uri="{X}"><x14:thing a="1"><x14:inner/></x14:thing>` +
+        '</ext></extLst></x14:dxf></x14:cfRule>',
+    ),
+  });
+  const rule = workbook.getWorksheet('S')?.conditionalFormattings[0]?.rules[0];
+  assert.equal(workbook.differentialStyles[Number(rule?.dxfId)], `<dxf>${BOLD_RED_DXF}</dxf>`);
+});
+
+test('a data bar a classic rule links to is that rule’s facets, not a set of its own', () => {
+  const sets = roundtrip(dataBarBook({gradient: false})).getWorksheet('S')?.conditionalFormattings;
+  assert.equal(sets?.length, 1);
+  assert.equal(sets?.[0]?.extended, undefined);
+  assert.equal(sets?.[0]?.rules[0]?.gradient, false);
+});
+
+test('a data bar in an extended set states its colour in the extension, having no classic element', () => {
+  const workbook = new Workbook();
+  workbook.addWorksheet('S').addConditionalFormatting({
+    ref: 'A1:A3',
+    extended: true,
+    rules: [{type: 'dataBar', color: {argb: 'FF00AA00'}, gradient: false}],
+  });
+  const xml = sheetXml(writeXlsx(workbook));
+
+  assert.doesNotMatch(xml, /<conditionalFormatting\b/);
+  assert.match(
+    xml,
+    /<x14:dataBar gradient="0"><x14:cfvo type="min"\/><x14:cfvo type="max"\/><x14:fillColor rgb="FF00AA00"\/><\/x14:dataBar>/,
+  );
+  const rule = roundtrip(workbook).getWorksheet('S')?.conditionalFormattings[0]?.rules[0];
+  assert.equal(rule?.color?.argb, 'FF00AA00');
+  assert.equal(rule?.gradient, false);
+});
+
+test('an authored extended set writes its style inline, and into the table as Excel does', () => {
+  const workbook = new Workbook();
+  workbook.addWorksheet('S').addConditionalFormatting({
+    ref: 'A1:A3',
+    extended: true,
+    rules: [{type: 'expression', formulae: ['A1>Data!$A$1'], style: {font: {bold: true}}}],
+  });
+  const pkg = writeXlsx(workbook);
+  const inline = sheetXml(pkg).match(/<x14:dxf>(.*?)<\/x14:dxf>/)?.[1];
+
+  assert.ok(inline !== undefined && inline !== '', 'the style is written inline');
+  assert.ok(stylesXml(pkg).includes(`<dxf>${inline}</dxf>`), 'and the table holds the same style');
+  const set = roundtrip(workbook).getWorksheet('S')?.conditionalFormattings[0];
+  assert.equal(set?.extended, true);
+  assert.deepEqual(set?.rules[0]?.formulae, ['A1>Data!$A$1']);
+});
+
+const THIRDS = [
+  {type: 'percent', value: 0},
+  {type: 'percent', value: 33},
+  {type: 'percent', value: 67},
+] as const;
+
+test('a 2009 icon family and custom icons are written in the extension, whatever the set says', () => {
+  const icons = [
+    {iconSet: '3Arrows', iconId: 0},
+    {iconSet: 'NoIcons', iconId: 0},
+    {iconSet: '3Symbols2', iconId: 2},
+  ] as const;
+  const workbook = new Workbook();
+  workbook.addWorksheet('S').addConditionalFormatting({
+    ref: 'A1:A9',
+    rules: [
+      {type: 'cellIs', operator: 'greaterThan', formulae: [5], style: {font: {bold: true}}},
+      {type: 'iconSet', iconSet: '3Stars', cfvo: THIRDS.map((anchor) => ({...anchor}))},
+      {
+        type: 'iconSet',
+        iconSet: '3Arrows',
+        cfvo: THIRDS.map((anchor) => ({...anchor})),
+        icons: icons.map((icon) => ({...icon})),
+      },
+    ],
+  });
+  const xml = sheetXml(writeXlsx(workbook));
+  const classic = elementIn(xml, /<conditionalFormatting[\s\S]*?<\/conditionalFormatting>/);
+
+  assert.match(classic, /<cfRule type="cellIs"/);
+  assert.doesNotMatch(classic, /iconSet/, 'neither icon set is left in the classic form');
+  // The shapes Excel 16.0 (build 20326) saves for the same two rules.
+  assert.match(
+    xml,
+    /<x14:iconSet iconSet="3Stars"><x14:cfvo type="percent"><xm:f>0<\/xm:f><\/x14:cfvo>/,
+  );
+  assert.match(
+    xml,
+    /<x14:iconSet iconSet="3Arrows" custom="1">(?:<x14:cfvo type="percent"><xm:f>\d+<\/xm:f><\/x14:cfvo>){3}<x14:cfIcon iconSet="3Arrows" iconId="0"\/><x14:cfIcon iconSet="NoIcons" iconId="0"\/><x14:cfIcon iconSet="3Symbols2" iconId="2"\/><\/x14:iconSet>/,
+  );
+
+  const sets = roundtrip(workbook).getWorksheet('S')?.conditionalFormattings ?? [];
+  assert.deepEqual(
+    sets.map((set) => [set.extended ?? false, set.rules.map((rule) => rule.type)]),
+    [
+      [false, ['cellIs']],
+      [true, ['iconSet', 'iconSet']],
+    ],
+  );
+  assert.deepEqual(sets[1]?.rules[1]?.icons, icons);
+  assert.deepEqual(
+    sets.flatMap((set) => set.rules.map((rule) => rule.priority)),
+    [1, 2, 3],
+    'one numbering across both forms',
+  );
+});
+
+test('an unreadable custom icon returns the set to its family instead of shifting the rest', () => {
+  const iconRule = (middle: string) =>
+    readPatched({
+      [SHEET1]: x14Sheet(
+        '<x14:cfRule type="iconSet" priority="1" id="{GUID}"><x14:iconSet iconSet="3Arrows" custom="1">' +
+          '<x14:cfvo type="percent"><xm:f>0</xm:f></x14:cfvo><x14:cfvo type="percent" gte="0"><xm:f>33</xm:f></x14:cfvo>' +
+          '<x14:cfvo type="percent"><xm:f>67</xm:f></x14:cfvo><x14:cfIcon iconSet="3Flags" iconId="1"/>' +
+          `${middle}<x14:cfIcon iconSet="3Flags" iconId="2"/></x14:iconSet></x14:cfRule>`,
+      ),
+    }).getWorksheet('S')?.conditionalFormattings[0]?.rules[0];
+
+  assert.equal(iconRule('<x14:cfIcon iconSet="NoIcons" iconId="0"/>')?.icons?.length, 3);
+  const broken = iconRule('<x14:cfIcon iconSet="4Moons" iconId="0"/>');
+  assert.equal(broken?.icons, undefined);
+  assert.equal(broken?.iconSet, '3Arrows', 'the family still stands');
+  assert.deepEqual(
+    broken?.cfvo,
+    [
+      {type: 'percent', value: 0},
+      {type: 'percent', value: 33, gte: false},
+      {type: 'percent', value: 67},
+    ],
+    'the anchors read their values from xm:f and their strictness from gte',
+  );
+});
+
+test('a strict threshold, a reversed icon order and a hidden value round-trip in the classic form', () => {
+  const workbook = new Workbook();
+  workbook.addWorksheet('S').addConditionalFormatting({
+    ref: 'A1:A6',
+    rules: [
+      {
+        type: 'iconSet',
+        iconSet: '3Arrows',
+        reverse: true,
+        showValue: false,
+        cfvo: [
+          {type: 'percent', value: 0},
+          {type: 'num', value: 2, gte: false},
+          {type: 'percent', value: 67},
+        ],
+      },
+    ],
+  });
+  const xml = sheetXml(writeXlsx(workbook));
+
+  // The shape Excel 16.0 (build 20326) saves for the same rule.
+  assert.match(
+    xml,
+    /<iconSet iconSet="3Arrows" showValue="0" reverse="1"><cfvo type="percent" val="0"\/><cfvo type="num" val="2" gte="0"\/><cfvo type="percent" val="67"\/><\/iconSet>/,
+  );
+  assert.doesNotMatch(xml, /x14:/, 'nothing about the rule needs the extension');
+  const rule = roundtrip(workbook).getWorksheet('S')?.conditionalFormattings[0]?.rules[0];
+  assert.equal(rule?.reverse, true);
+  assert.equal(rule?.showValue, false);
+  assert.deepEqual(
+    rule?.cfvo?.map((anchor) => anchor.gte),
+    [undefined, false, undefined],
   );
 });
 

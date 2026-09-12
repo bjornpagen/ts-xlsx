@@ -371,6 +371,14 @@ export class StyleRegistry {
     return this.#dxfs.intern(fragment, fragment);
   }
 
+  /**
+   * The `<dxf>` fragment at a differential-style index, or `undefined` past the end of the table: what
+   * a conditional format in the extension form writes inline, since that form names no `dxfId`.
+   */
+  differentialStyleFragment(id: number): string | undefined {
+    return this.#dxfs.entries[id];
+  }
+
   // Keyed by the XML it produces, as fonts and borders are. A key kept by hand beside the writer could
   // disagree with it in both directions: two fills written identically took two ids, and a field the
   // key forgot would have merged fills that differ.

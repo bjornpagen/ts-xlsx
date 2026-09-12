@@ -14,6 +14,17 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Added
 
+- **Conditional formats Excel keeps in the worksheet extension.** Excel stores a rule whose formula
+  reaches another sheet, an icon set from the stars, triangles or boxes families, an icon set with its
+  own icon per threshold and a colour scale anchored on another sheet in `<x14:conditionalFormatting>`,
+  and a read used to drop every one of them, so a saved template lost its cross-sheet highlights. Such a
+  set now reads as a `ConditionalFormatting` marked `extended`, its inline style adopted into the
+  differential-style table so the rule holds a `dxfId`, and is written back to the extension.
+  `IconSetType` gains `3Stars`, `3Triangles` and `5Boxes`; a rule gains `icons` (`CfIcon`, with
+  `NoIcons` for a threshold showing none, guarded by `isCfIconSetType`), `reverse` and `showValue`; a
+  scale anchor gains `gte`. A rule drawing from a 2009 family or carrying icons is written in the
+  extension whatever its set says.
+
 - **`ParsedPivotSource.inAnotherWorkbook`**, whether a loaded pivot draws from a range of another
   workbook, which the cache reaches through a relationship. A splice of this workbook never moves such
   a source.

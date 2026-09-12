@@ -5,7 +5,8 @@
 //
 // The model carries the operands each rule type needs and otherwise leaves them absent. A rule type
 // the library does not interpret in depth still round-trips its `type`, `priority`, `operator`,
-// `formulae`, and differential-style reference, so a read/write cycle never silently drops a rule.
+// `formulae`, and differential-style reference, so a read/write cycle never silently drops a rule,
+// whichever of the two forms Excel stored it in.
 
 import {tokenSet} from '../token-set.ts';
 import {type ClonePlan, cloneWith} from './clone.ts';
@@ -34,6 +35,11 @@ export const isCfValueObjectType = tokenSet<CfValueObjectType>({
 export interface CfValueObject {
   type: CfValueObjectType;
   value?: number | string;
+  /**
+   * Whether a value equal to this threshold reaches it. `false` makes an icon set's threshold a strict
+   * `>` rather than the `>=` the schema defaults to.
+   */
+  gte?: boolean;
 }
 
 /**
@@ -154,9 +160,8 @@ export const isCfTimePeriod = tokenSet<CfTimePeriod>({
  * The named icon family an `iconSet` rule draws from, as `ST_IconSetType` enumerates it. The leading
  * digit is the number of icons, which is also how many {@link CfValueObject} anchors the rule needs.
  *
- * The 2009 extension adds three more families (`3Stars`, `3Triangles`, `5Boxes`) under its own
- * namespace. They are absent here because the classic `<iconSet>` element this list types cannot
- * carry them; a file using one states it in the extension, which the library round-trips verbatim.
+ * `3Stars`, `3Triangles` and `5Boxes` are the families the 2009 extension added. The classic
+ * `<iconSet>` element cannot name them, so a rule drawing from one is written in the extension form.
  */
 export type IconSetType =
   | '3Arrows'
@@ -175,7 +180,10 @@ export type IconSetType =
   | '5Arrows'
   | '5ArrowsGray'
   | '5Rating'
-  | '5Quarters';
+  | '5Quarters'
+  | '3Stars'
+  | '3Triangles'
+  | '5Boxes';
 
 /** Narrow a raw `<iconSet iconSet>` token to a known {@link IconSetType}. */
 export const isIconSetType = tokenSet<IconSetType>({
@@ -196,7 +204,29 @@ export const isIconSetType = tokenSet<IconSetType>({
   '5ArrowsGray': true,
   '5Rating': true,
   '5Quarters': true,
+  '3Stars': true,
+  '3Triangles': true,
+  '5Boxes': true,
 });
+
+/** The families only the 2009 extension can name: a rule drawing from one is written there. */
+export function isExtensionIconSet(iconSet: IconSetType): boolean {
+  return iconSet === '3Stars' || iconSet === '3Triangles' || iconSet === '5Boxes';
+}
+
+/** The family a custom icon comes from: any {@link IconSetType}, or `NoIcons` for a threshold showing none. */
+export type CfIconSetType = IconSetType | 'NoIcons';
+
+/** Narrow a raw `<x14:cfIcon iconSet>` token to a known {@link CfIconSetType}. */
+export function isCfIconSetType(value: string): value is CfIconSetType {
+  return value === 'NoIcons' || isIconSetType(value);
+}
+
+/** One threshold's icon in a custom icon set: icon number `iconId`, from 0, of the family `iconSet`. */
+export interface CfIcon {
+  iconSet: CfIconSetType;
+  iconId: number;
+}
 
 /**
  * A single conditional-formatting rule. `type` is the OOXML cfRule type; the remaining fields carry
@@ -233,6 +263,16 @@ export interface ConditionalFormattingRule {
   axisColor?: Color;
   /** An iconSet's named icon family (e.g. `3TrafficLights1`). */
   iconSet?: IconSetType;
+  /**
+   * A custom iconSet's icons, one per {@link cfvo} threshold in order, each replacing the icon
+   * {@link iconSet} would show there. Only the extension form carries them, so a rule with icons is
+   * written in it.
+   */
+  icons?: CfIcon[];
+  /** iconSet: the icons in reverse order, the highest threshold showing the family's first icon. */
+  reverse?: boolean;
+  /** dataBar / iconSet: whether the cell still shows its value beside the bar or icon. */
+  showValue?: boolean;
   /** top10 rank cutoff. */
   rank?: number;
   /** top10: the rank is a percentage rather than a count. */
@@ -249,18 +289,41 @@ export interface ConditionalFormattingRule {
   timePeriod?: CfTimePeriod;
 }
 
-/** A set of rules bound to the range(s) they cover. `ref` is an OOXML `sqref`: one or more
+/**
+ * A set of rules bound to the range(s) they cover. `ref` is an OOXML `sqref`: one or more
  * space-separated areas (`"A1:C1 A3:C3 A5:C5"`), the shape Excel writes when one rule is applied to
- * several non-contiguous selections at once. */
+ * several non-contiguous selections at once.
+ *
+ * `extended` marks a set stored in the 2009 extension form (`<x14:conditionalFormatting>` inside the
+ * worksheet `<extLst>`), where Excel puts a rule whose formula reaches another sheet. The reader sets
+ * it for a set found in that form so a round-trip writes the set back there. A rule only that form can
+ * express, one drawing from a 2009 icon family or carrying custom icons, is written there whatever the
+ * flag says.
+ */
 export interface ConditionalFormatting {
   ref: string;
   rules: ConditionalFormattingRule[];
+  extended?: boolean;
 }
 
 /** A defensive deep copy, so a stored conditional formatting never aliases the caller's object nor
  * any of its nested arrays (rules, formulae, cfvo, colours) or the differential style. */
 export function cloneConditionalFormatting(cf: ConditionalFormatting): ConditionalFormatting {
-  return {ref: cf.ref, rules: cf.rules.map(cloneRule)};
+  const copy: ConditionalFormatting = {ref: cf.ref, rules: cf.rules.map(cloneRule)};
+  if (cf.extended !== undefined) copy.extended = cf.extended;
+  return copy;
+}
+
+/**
+ * Whether a rule needs the extension form: it names a family or custom icons the classic element has
+ * no way to spell.
+ */
+export function ruleNeedsExtension(rule: ConditionalFormattingRule): boolean {
+  return (
+    rule.type === 'iconSet' &&
+    ((rule.iconSet !== undefined && isExtensionIconSet(rule.iconSet)) ||
+      (rule.icons !== undefined && rule.icons.length > 0))
+  );
 }
 
 // One entry per field, so a new one on the rule does not compile until someone says how deep its copy
@@ -282,6 +345,9 @@ const RULE_CLONE: ClonePlan<ConditionalFormattingRule> = {
   negativeFillColor: 'record',
   axisColor: 'record',
   iconSet: 'value',
+  icons: 'records',
+  reverse: 'value',
+  showValue: 'value',
   rank: 'value',
   percent: 'value',
   bottom: 'value',

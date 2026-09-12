@@ -51,6 +51,25 @@ test('cloneConditionalFormatting deep-copies rules, formulae, cfvo, colours, and
   assert.notEqual(copy.rules[0]!.style, original.rules[0]!.style, 'the style is a fresh object');
 });
 
+test('cloneConditionalFormatting keeps the form a set is stored in and copies its custom icons', () => {
+  const original = {
+    ref: 'A1:A3',
+    extended: true,
+    rules: [
+      {
+        type: 'iconSet' as const,
+        iconSet: '3Arrows' as const,
+        icons: [{iconSet: 'NoIcons' as const, iconId: 0}],
+      },
+    ],
+  };
+  const copy = cloneConditionalFormatting(original);
+  copy.rules[0]!.icons![0]!.iconId = 2;
+
+  assert.equal(copy.extended, true);
+  assert.equal(original.rules[0]!.icons[0]!.iconId, 0, 'the icons are not aliased');
+});
+
 test('the differential style is copied a level deeper than a spread reaches', () => {
   // `'record'` is `{...v}`, which `clone.ts` documents as the strategy for a flat object. None of a
   // font, a border or a fill is flat, so the copy shared the nested parts: `copy.border.left` and
