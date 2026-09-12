@@ -231,6 +231,7 @@ export {
   type ThemeOverrides,
 } from '../core/theme.ts';
 export {
+  type ArrayFormulaValue,
   type CellValue,
   cellValueToText,
   coerceCellValue,
@@ -241,6 +242,7 @@ export {
   type ErrorValue,
   type FormulaResult,
   type FormulaValue,
+  isArrayFormulaValue,
   isDataTableFormulaValue,
   isErrorCode,
   isErrorValue,

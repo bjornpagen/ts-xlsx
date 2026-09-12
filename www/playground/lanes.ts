@@ -15,6 +15,7 @@
 import {
   type Cell,
   type CellValue,
+  isArrayFormulaValue,
   isDataTableFormulaValue,
   isErrorValue,
   isFormulaValue,
@@ -249,6 +250,14 @@ function comparableValue(value: CellValue): Comparable {
     return {
       sharedFormula: value.sharedFormula,
       formula: value.formula ?? null,
+      result: comparableResult(value.result),
+    };
+  }
+  if (isArrayFormulaValue(value)) {
+    return {
+      array: value.ref,
+      dynamic: value.dynamic === true,
+      formula: value.formula,
       result: comparableResult(value.result),
     };
   }

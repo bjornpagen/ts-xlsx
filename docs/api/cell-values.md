@@ -2,6 +2,34 @@
 
 <!-- Generated from the public types by `pnpm run docs`. Do not edit by hand. -->
 
+### `ArrayFormulaValue`
+
+<sub>interface</sub>
+
+A cell holding an array formula (`<f t="array">`): one formula whose result fills `ref`, a
+range starting at this cell. The other cells of the range hold only the values the formula
+produced, which is how Excel stores them, so they are plain values here too.
+
+Excel stores two kinds this way. A legacy array formula, entered with Ctrl+Shift+Enter, shows in
+braces and fills the range it was entered over. A dynamic-array formula is `dynamic`: it
+spills, `ref` is the range its last calculation filled, and no braces are shown. Excel keeps that
+mark in the workbook's cell metadata rather than on the formula, and a formula that loses it opens
+as a legacy array formula that no longer spills.
+
+```ts
+interface ArrayFormulaValue {
+  readonly shareType: 'array';
+  readonly formula: string;
+  /** The range the result fills, starting at this cell: `'B1:B3'`, or `'B1'` for one cell. */
+  readonly ref: string;
+  /** Whether Excel evaluates the formula as a dynamic array rather than a Ctrl+Shift+Enter one. */
+  readonly dynamic?: boolean;
+  readonly result?: FormulaResult;
+}
+```
+
+---
+
 ### `CellValue`
 
 <sub>type</sub>
@@ -18,6 +46,7 @@ type CellValue =
   | ErrorValue
   | FormulaValue
   | SharedFormulaValue
+  | ArrayFormulaValue
   | DataTableFormulaValue
   | RichTextValue;
 ```
@@ -41,8 +70,8 @@ only the value. What each kind yields:
 - a `Date` → a full ISO-8601 timestamp
 - an error → its literal, e.g. `"#REF!"`, the same string the grid shows
 - rich text → every run concatenated ([`richTextToPlain`](./cell-values.md#richtexttoplain))
-- any of the three formula kinds → the text of the *cached result*, and `""` when the cell
-  carries no cached result: the formula source is not text the sheet ever displayed
+- any formula kind → the text of the *cached result*, and `""` when the cell carries no cached
+  result: the formula source is not text the sheet ever displayed
 
 ```ts
 function cellValueToText(value: CellValue): string;
@@ -190,6 +219,18 @@ interface FormulaValue {
 
 ---
 
+### `isArrayFormulaValue`
+
+<sub>function</sub>
+
+Whether a value is an array formula, legacy or dynamic ([`ArrayFormulaValue`](./cell-values.md#arrayformulavalue)).
+
+```ts
+function isArrayFormulaValue(value: CellValue): value is ArrayFormulaValue;
+```
+
+---
+
 ### `isDataTableFormulaValue`
 
 <sub>function</sub>
@@ -232,10 +273,11 @@ function isErrorValue(value: CellValue): value is ErrorValue;
 
 <sub>function</sub>
 
-Whether a value is a cell's own formula ([`FormulaValue`](./cell-values.md#formulavalue)): a master, or a formula
-belonging to no shared group. A shared-formula clone is **not** one of these; see
-[`isSharedFormulaValue`](./cell-values.md#issharedformulavalue). Both report as `ValueType.Formula`, so a caller that means "any
-formula-shaped cell" wants [`detectValueType`](./cell-values.md#detectvaluetype), not this.
+Whether a value is a cell's own plain formula ([`FormulaValue`](./cell-values.md#formulavalue)): a shared-formula master, or a
+formula belonging to no group. A shared-formula clone is **not** one of these, and nor is an array
+formula; see [`isSharedFormulaValue`](./cell-values.md#issharedformulavalue) and [`isArrayFormulaValue`](./cell-values.md#isarrayformulavalue). Every formula kind reports
+as `ValueType.Formula`, so a caller that means "any formula-shaped cell" wants
+[`detectValueType`](./cell-values.md#detectvaluetype), not this.
 
 ```ts
 function isFormulaValue(value: CellValue): value is FormulaValue;
@@ -337,7 +379,7 @@ interface SharedFormulaValue {
 
 <sub>const</sub>
 
-The observable kind of a cell's value. Both formula shapes report as `Formula`.
+The observable kind of a cell's value. Every formula kind reports as `Formula`.
 
 ```ts
 const ValueType: { readonly Null: 'null'; readonly Number: 'number'; readonly String: 'string'; readonly Boolean: 'boolean'; readonly Date: 'date'; readonly Error: 'error'; readonly Formula: 'formula'; readonly RichText: 'richText'; }

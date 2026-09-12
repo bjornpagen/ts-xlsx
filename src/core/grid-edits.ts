@@ -10,6 +10,7 @@ import {
   boundedRect,
   decodeRange,
   encodeAddress,
+  encodeRange,
   encodeRect,
   type GridRect,
   tryDecodeCellRef,
@@ -32,6 +33,7 @@ import {positionalPlacements} from './row-input.ts';
 import type {Table} from './table.ts';
 import {
   type CellValue,
+  isArrayFormulaValue,
   isDataTableFormulaValue,
   isFormulaValue,
   isSharedFormulaValue,
@@ -249,6 +251,12 @@ export class GridEdits {
     for (const cols of this.#rows.values()) {
       for (const cell of cols.values()) {
         const value = cell.value;
+        // An array formula shares its text with no other cell, so it moves on its own, here.
+        if (isArrayFormulaValue(value)) {
+          const rewritten = rewrite(value.formula);
+          if (rewritten !== value.formula) cell.value = {...value, formula: rewritten};
+          continue;
+        }
         if (!isFormulaValue(value)) continue;
         masters.set(encodeAddress(cell.col, cell.row), {
           cell,
@@ -353,7 +361,7 @@ export class GridEdits {
   }
 
   // Move the grid coordinates a cell's value carries: the positions stored inside a value rather than
-  // beside it, which are a shared-formula clone's master address, a hyperlink's clickable `range`, and
+  // beside it, which are a shared-formula clone's master address, an array formula's filled `ref`, and
   // a data table's filled `ref` and input cells. Each names cells by position, so left behind it names
   // cells the splice moved away from, and the writer emits it as written. Formula text is moved before
   // any of this, by `spliceFormulas`.
@@ -471,6 +479,12 @@ function reanchoredValue(value: CellValue, splice: AxisSplice): CellValue {
         : encodeAddress(shiftIndex(master.col, splice), master.row);
     return anchored === value.sharedFormula ? value : {...value, sharedFormula: anchored};
   }
+  if (isArrayFormulaValue(value)) {
+    // The range starts at the formula's own cell, so a cell that survived keeps a range that did,
+    // still starting where the cell now is.
+    const ref = shiftedRange(value.ref, splice) ?? value.ref;
+    return ref === value.ref ? value : {...value, ref};
+  }
   if (isDataTableFormulaValue(value)) {
     // The filled range holds the table's own cell, so a cell that survived keeps a range that did.
     const ref = shiftedRange(value.ref, splice) ?? value.ref;
@@ -490,14 +504,14 @@ function reanchoredValue(value: CellValue, splice: AxisSplice): CellValue {
 }
 
 // A range reference moved as a region: the text itself when it did not move or names no bounded range,
-// re-spelled when it moved, and `undefined` when the delete took it whole.
+// re-spelled as Excel spells a `ref` when it moved, and `undefined` when the delete took it whole.
 function shiftedRange(ref: string, splice: AxisSplice): string | undefined {
   const decoded = tryDecodeRange(ref);
   const rect = decoded === undefined ? undefined : boundedRect(decoded);
   if (rect === undefined) return ref;
   const moved = shiftRect(rect, splice);
   if (moved === undefined) return undefined;
-  return sameRect(moved, rect) ? ref : encodeRect(moved);
+  return sameRect(moved, rect) ? ref : encodeRange(moved);
 }
 
 // A data table's input cell after a splice. One that survived moves with its line. One the delete took

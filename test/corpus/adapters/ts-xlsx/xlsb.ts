@@ -107,11 +107,12 @@ export const xlsb = {
     };
   },
 
-  // One formula cell of the binary reading: the decoded text and the result Excel cached beside it.
+  // One formula cell of the binary reading: the decoded text, the result Excel cached beside it, and
+  // the range the formula fills when it is an array formula (null otherwise).
   xlsbFormula(sheetName: string, reference: string) {
     const sheet = readXlsb(fixtureBytes(`${FORMULAS}/source.xlsb`)).getWorksheet(sheetName);
     const value = sheet?.getCell(reference).value;
-    return {formula: formulaOf(value), result: normalize(value)};
+    return {formula: formulaOf(value), result: normalize(value), arrayRef: arrayRefOf(value)};
   },
 
   // The defined names the binary workbook part declares.
@@ -233,6 +234,13 @@ function comparable(value: Untyped): Untyped {
 function formulaOf(value: Untyped): Untyped {
   return value !== null && typeof value === 'object' && typeof value.formula === 'string'
     ? value.formula
+    : null;
+}
+
+// The range an array formula fills, or null for a cell that is not one.
+function arrayRefOf(value: Untyped): Untyped {
+  return value !== null && typeof value === 'object' && value.shareType === 'array'
+    ? value.ref
     : null;
 }
 

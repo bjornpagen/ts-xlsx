@@ -1,0 +1,46 @@
+{
+  "invariant": "array-formulas",
+  "description": "How Excel stores a dynamic-array formula beside a Ctrl+Shift+Enter one, and whether it reads both back from a package ts-xlsx wrote. Excel authored the workbook over COM and saved it (`an-array-formula-keeps-its-range-and-its-kind/excel-saved.xlsx`). That package read and written back by ts-xlsx, and the same formulas authored in ts-xlsx with no cached results and fullCalcOnLoad set, were then opened and observed the same way.",
+  "probe": "a one-off COM script: Range.Formula2 (dynamic), Range.FormulaArray (legacy) and Range.Formula (plain) to author; HasArray, HasSpill, CurrentArray, SpillingToRange and SpillParent to observe",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-12",
+  "authored": {
+    "B1": "Formula2 =SEQUENCE(3)",
+    "D1:D3": "FormulaArray =A1:A3*2",
+    "F1": "FormulaArray =SUM(A1:A3*2)",
+    "H1": "Formula2 =SUM(A1:A3*2)",
+    "J1": "Formula =A1*2",
+    "L1": "Formula2 =TRANSPOSE(A1:A3)"
+  },
+  "excelSaved": {
+    "B1": "<c r=\"B1\" cm=\"1\"><f t=\"array\" ref=\"B1:B3\">_xlfn.SEQUENCE(3)</f><v>1</v></c>",
+    "B2": "<c r=\"B2\"><v>2</v></c>",
+    "D1": "<c r=\"D1\"><f t=\"array\" ref=\"D1:D3\">A1:A3*2</f><v>2</v></c>",
+    "D2": "<c r=\"D2\"><v>4</v></c>",
+    "F1": "<c r=\"F1\"><f t=\"array\" ref=\"F1\">SUM(A1:A3*2)</f><v>12</v></c>",
+    "H1": "<c r=\"H1\" cm=\"1\"><f t=\"array\" ref=\"H1\">SUM(A1:A3*2)</f><v>12</v></c>",
+    "J1": "<c r=\"J1\"><f>A1*2</f><v>2</v></c>",
+    "L1": "<c r=\"L1\" cm=\"1\"><f t=\"array\" ref=\"L1:N1\">TRANSPOSE(A1:A3)</f><v>1</v></c>",
+    "xl/metadata.xml": "one metadataType XLDAPR; one futureMetadata XLDAPR block holding <xda:dynamicArrayProperties fDynamic=\"1\" fCollapsed=\"0\"/> in <ext uri=\"{bdbb8cdc-fa1e-496e-a857-3c3f30c029c3}\">; one cellMetadata block <rc t=\"1\" v=\"0\"/>, which B1, H1 and L1 all point at",
+    "workbook": "a sheetMetadata relationship to metadata.xml, declared application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml"
+  },
+  "readBack": {
+    "B1": {"hasArray": false, "hasSpill": true, "spillingTo": "B1:B3"},
+    "B2": {"hasArray": false, "hasSpill": true, "spillParent": "B1", "value": 2},
+    "D1": {"hasArray": true, "hasSpill": false, "currentArray": "D1:D3"},
+    "D2": {"hasArray": true, "hasSpill": false, "currentArray": "D1:D3", "value": 4},
+    "F1": {"hasArray": true, "hasSpill": false, "currentArray": "F1"},
+    "H1": {"hasArray": false, "hasSpill": false, "value": 12},
+    "J1": {"hasArray": false, "hasSpill": false, "value": 2},
+    "L1": {"hasArray": false, "hasSpill": true, "spillingTo": "L1:N1"},
+    "M1": {"hasArray": false, "hasSpill": true, "spillParent": "L1", "value": 2}
+  },
+  "writtenByTsXlsx": {
+    "read and written back": "opened without repair; every observed cell (A1, B1:B3, D1:D3, F1, H1, J1, L1:N1) read back exactly as in Excel's own package",
+    "authored with no cached results": "opened without repair and read back the same, including D2 and D3, which the package stores no <c> for and Excel still reads as members of D1:D3"
+  },
+  "verdict": "Both kinds are <f t=\"array\" ref> on the cell the range starts at, and a one-cell range is the bare address. The only difference is the cell's cm pointing at XLDAPR cell metadata with fDynamic set: Excel writes it for every formula entered through Formula2 over arrays, spilling (B1, L1) or not (H1), and for none entered through FormulaArray. The other cells of a range are plain values. Excel reads a package carrying exactly that shape as it wrote it, so the model holds the range and the dynamic mark and the writer reproduces Excel's cell, formula and metadata part. Locked by the corpus case an-array-formula-keeps-its-range-and-its-kind."
+}

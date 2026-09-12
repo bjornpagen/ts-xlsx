@@ -7,7 +7,16 @@
 
 import {AuthoringError} from '../errors.ts';
 import {tokenSet} from '../token-set.ts';
-import {assertAxisInBounds, decodeCellRef, encodeAddress, tryDecodeCellRef} from './address.ts';
+import {
+  assertAxisInBounds,
+  boundedRect,
+  decodeCellRef,
+  encodeAddress,
+  encodeRange,
+  MAX_ROW,
+  tryDecodeCellRef,
+  tryDecodeRange,
+} from './address.ts';
 import {type AutoFilter, canonicalizeAutoFilter} from './autofilter.ts';
 import {applyCellStyle, Cell, copyCellContent} from './cell.ts';
 import {Column} from './column.ts';
@@ -43,7 +52,12 @@ import {Row} from './row.ts';
 import type {CellContent, CellStyle, Color, Fill} from './style.ts';
 import {Table, type TableOptions} from './table.ts';
 import {UsedExtent} from './used-extent.ts';
-import {type CellValue, isFormulaValue, isSharedFormulaValue} from './value.ts';
+import {
+  type CellValue,
+  isArrayFormulaValue,
+  isFormulaValue,
+  isSharedFormulaValue,
+} from './value.ts';
 import {WorksheetComments} from './worksheet-comments.ts';
 import {WorksheetMerges} from './worksheet-merges.ts';
 import {WORKSHEET_MODEL_FACETS} from './worksheet-model.ts';
@@ -1347,9 +1361,18 @@ export class Worksheet {
 // A cell value copied `offset` rows below its source: a formula's relative references move with it, and
 // its cached result, computed over the source's cells, goes. A shared-formula clone stays a clone of the
 // same master, which describes it at the new position as well; only the text a read resolved onto it
-// moves.
+// moves. An array formula stays one, over a range of the same shape starting at the copy, and is the
+// plain formula its text is where that range would run off the grid.
 function filledDown(value: CellValue, offset: number): CellValue {
   if (isFormulaValue(value)) return {formula: translateFormula(value.formula, 0, offset)};
+  if (isArrayFormulaValue(value)) {
+    const formula = translateFormula(value.formula, 0, offset);
+    const decoded = tryDecodeRange(value.ref);
+    const range = decoded === undefined ? undefined : boundedRect(decoded);
+    if (range === undefined || range.bottom + offset > MAX_ROW) return {formula};
+    const ref = encodeRange({...range, top: range.top + offset, bottom: range.bottom + offset});
+    return {shareType: 'array', formula, ref, ...(value.dynamic === true ? {dynamic: true} : {})};
+  }
   if (isSharedFormulaValue(value)) {
     return value.formula === undefined
       ? {sharedFormula: value.sharedFormula}

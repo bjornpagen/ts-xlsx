@@ -14,6 +14,17 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Added
 
+- **Array formulas keep their range and their kind.** `ArrayFormulaValue`
+  (`{shareType: 'array', formula, ref, dynamic?, result?}`, guarded by `isArrayFormulaValue`) is a cell
+  holding `<f t="array">`: a legacy Ctrl+Shift+Enter formula, or, with `dynamic`, a dynamic-array formula
+  that spills. A read used to take either for a plain formula, so a save collapsed every range to its
+  formula's own cell, and a spilling formula lost the `cm` link into `xl/metadata.xml` and opened as a
+  legacy formula that no longer spilled. Both kinds now read over their range through `readXlsx` and
+  `readSheetRows`, and are written back with the cell metadata Excel marks a dynamic array with. An
+  `.xlsb` array group reads as the array kind too, always as a legacy one. A splice moves the range, a
+  duplicated row copies it, and the writer refuses a `ref` that does not start at the formula's own cell.
+  `isFormulaValue` no longer matches an array formula.
+
 - **Conditional formats Excel keeps in the worksheet extension.** Excel stores a rule whose formula
   reaches another sheet, an icon set from the stars, triangles or boxes families, an icon set with its
   own icon per threshold and a colour scale anchored on another sheet in `<x14:conditionalFormatting>`,

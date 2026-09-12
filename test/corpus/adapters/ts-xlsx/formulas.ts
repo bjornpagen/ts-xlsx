@@ -5,6 +5,7 @@ import type {Untyped} from '../../untyped.ts';
 import {partNamesOf, partOf, patchedPackage, roundtrip} from './package-facts.ts';
 import {
   encodeAddress,
+  fixtureBytes,
   readFixture,
   readXlsx,
   Workbook,
@@ -13,7 +14,100 @@ import {
 } from './runtime.ts';
 import {buildFrom, isoOrNull} from './spec-model.ts';
 
+// A cell value as a case compares it: a formula of any kind as its kind, range, dynamic-array mark,
+// text and cached result, and anything else as it is.
+function formulaFacts(value: Untyped): Untyped {
+  if (value === null || typeof value !== 'object' || typeof value.formula !== 'string')
+    return value;
+  return {
+    kind: value.shareType ?? 'formula',
+    ref: value.ref ?? null,
+    dynamic: value.dynamic === true,
+    formula: value.formula,
+    result: value.result ?? null,
+  };
+}
+
+// Each formula a package's first sheet stores, keyed by cell → {t, ref, dynamic}: the `<f>` element's
+// type and range, and whether the cell's `cm` resolves, through the cell metadata part the workbook's
+// relationships name, to dynamic-array properties with `fDynamic` set. Read with patterns rather than
+// with the library, so a reader and a writer agreeing with each other cannot pass for agreeing with
+// the package Excel saved.
+function storedFormulas(pkg: Uint8Array) {
+  const rels = partOf(pkg, 'xl/_rels/workbook.xml.rels');
+  const relationship = /<Relationship [^>]*\/sheetMetadata"[^>]*>/.exec(rels)?.[0] ?? '';
+  const target = /Target="([^"]*)"/.exec(relationship)?.[1];
+  const path =
+    target === undefined ? undefined : target.startsWith('/') ? target.slice(1) : `xl/${target}`;
+  const metadata = path !== undefined && partNamesOf(pkg).includes(path) ? partOf(pkg, path) : '';
+  const blocks = (body: string | undefined) =>
+    [...(body ?? '').matchAll(/<bk>([\s\S]*?)<\/bk>/g)].map((match) => match[1] ?? '');
+  const typeNames = [...metadata.matchAll(/<metadataType [^>]*?name="([^"]*)"/g)].map((m) => m[1]);
+  const dynamicBlocks = blocks(
+    /<futureMetadata name="XLDAPR"[^>]*>([\s\S]*?)<\/futureMetadata>/.exec(metadata)?.[1],
+  ).map((block) => /fDynamic="1"/.test(block));
+  const cellBlocks = blocks(
+    /<cellMetadata[^>]*>([\s\S]*?)<\/cellMetadata>/.exec(metadata)?.[1],
+  ).map((block) =>
+    [...block.matchAll(/<rc t="(\d+)" v="(\d+)"\/>/g)].map((rc) => ({
+      t: Number(rc[1]),
+      v: Number(rc[2]),
+    })),
+  );
+  const marked = (cm: string | undefined) =>
+    cm !== undefined &&
+    (cellBlocks[Number(cm) - 1] ?? []).some(
+      ({t, v}) => typeNames[t - 1] === 'XLDAPR' && dynamicBlocks[v] === true,
+    );
+  const attr = (tag: string, name: string) => new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
+  const sheet = partOf(pkg, 'xl/worksheets/sheet1.xml');
+  return Object.fromEntries(
+    [...sheet.matchAll(/<c r="([A-Z]+\d+)"([^>]*)><f(\s[^>]*)?>/g)].map((match) => {
+      const f = match[3] ?? '';
+      return [
+        match[1] ?? '',
+        {
+          t: attr(f, 't') ?? null,
+          ref: attr(f, 'ref') ?? null,
+          dynamic: marked(attr(match[2] ?? '', 'cm')),
+        },
+      ];
+    }),
+  );
+}
+
 export const formulas = {
+  // Excel's workbook of array formulas at `rel`, read and written back → {read, excel, written}.
+  // `read` maps each non-empty cell of the first sheet to its value as the model holds it, a formula
+  // as {kind, ref, dynamic, formula, result}. `excel` and `written` are what the two packages store,
+  // as `storedFormulas` reports it.
+  arrayFormulaReport(rel: string) {
+    const bytes = fixtureBytes(rel);
+    const workbook = readXlsx(bytes);
+    const cells: Untyped[] = workbook.worksheets[0]?.model.cells ?? [];
+    const read = Object.fromEntries(
+      cells
+        .filter((cell) => cell.value !== null)
+        .map((cell) => [encodeAddress(cell.col, cell.row), formulaFacts(cell.value)]),
+    );
+    return {read, excel: storedFormulas(bytes), written: storedFormulas(writeXlsx(workbook))};
+  },
+
+  // A dynamic-array formula over B1:B3 and a Ctrl+Shift+Enter one over D1:D3, authored and written →
+  // what the package stores, as `arrayFormulaReport` reports it.
+  authoredArrayFormulas() {
+    const workbook = new Workbook();
+    const sheet = workbook.addWorksheet('S');
+    sheet.getCell('B1').value = {
+      shareType: 'array',
+      formula: 'SEQUENCE(3)',
+      ref: 'B1:B3',
+      dynamic: true,
+    };
+    sheet.getCell('D1').value = {shareType: 'array', formula: 'A1:A3*2', ref: 'D1:D3'};
+    return storedFormulas(writeXlsx(workbook));
+  },
+
   // Two readings of a data table whose input cell was deleted → { excel, spliced }. `excel` is the cell
   // Excel itself saved after deleting the input row (`<dir>/input-row-deleted.xlsx`, B3), `spliced` the
   // same table read from `<dir>/before.xlsx` (B4) with row 1 spliced out here and the package written.

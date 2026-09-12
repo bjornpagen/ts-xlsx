@@ -32,6 +32,7 @@ import {
   commentsPart,
   CORE_PROPS_PART,
   drawingPart,
+  METADATA_PART,
   PERSONS_PART,
   pivotCacheDefinitionPart,
   pivotCacheRecordsPart,
@@ -69,6 +70,7 @@ const CT = {
   // than the `openxmlformats-officedocument` one every standard part carries.
   threadedComments: 'application/vnd.ms-excel.threadedcomments+xml',
   person: 'application/vnd.ms-excel.person+xml',
+  sheetMetadata: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml',
 } as const;
 
 // A preserved workbook reference with the relationship id recorded for it (see the writer's
@@ -115,6 +117,7 @@ export interface ContentTypeInputs {
   readonly preservedWorkbookRefs: readonly PreservedWorkbookReferencePlan[];
   readonly threadedCommentNumbers: readonly number[];
   readonly hasPersons: boolean;
+  readonly hasCellMetadata: boolean;
 }
 
 export function contentTypesXml(inputs: ContentTypeInputs): string {
@@ -202,6 +205,7 @@ function contentTypeOverrides(
     pivots,
     hasSharedStrings,
     hasPersons,
+    hasCellMetadata,
     preservedParts,
     preservedWorkbookRefs,
   } = inputs;
@@ -236,6 +240,7 @@ function contentTypeOverrides(
     override(STYLES_PART, CT.styles),
     ...(hasSharedStrings ? [override(SHARED_STRINGS_PART, CT.sharedStrings)] : []),
     ...(hasPersons ? [override(PERSONS_PART, CT.person)] : []),
+    ...(hasCellMetadata ? [override(METADATA_PART, CT.sheetMetadata)] : []),
     override(CORE_PROPS_PART, CT.core),
     override(APP_PROPS_PART, CT.app),
     ...preservedOverrides,

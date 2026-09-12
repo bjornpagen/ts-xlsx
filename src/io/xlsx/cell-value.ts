@@ -30,6 +30,10 @@ export interface RawCell {
   readonly type: string;
   readonly hasFormula: boolean;
   readonly formula: string;
+  /** The range an `<f t="array">` fills when it starts at this cell, as Excel spells a `ref`. */
+  readonly arrayRef?: string | undefined;
+  /** Whether the cell's `cm` points at cell metadata marking a dynamic array. */
+  readonly dynamicArray?: boolean;
   /** Whether a `<v>` was present, `<v/>` included. */
   readonly hasValue: boolean;
   readonly valueText: string;
@@ -43,7 +47,8 @@ export interface RawCell {
 
 /**
  * Decode a gathered cell into its model value. A formula cell becomes a `{formula, result?}`
- * object (the on-disk `_xlfn.`/`_xlpm.` mangling stripped back to the readable name); a plain
+ * object (the on-disk `_xlfn.`/`_xlpm.` mangling stripped back to the readable name), or an array
+ * formula over its range, dynamic when the cell's metadata says so; a plain
  * numeric cell under a date number format becomes a {@link Date}; everything else decodes by its
  * `t` type. `numFmt` is the cell's resolved number-format code, used only for date detection, and
  * `epoch` the workbook's date system, which is what a serial under such a format counts from.
@@ -62,7 +67,17 @@ export function decodeCellContent(
     const result = raw.hasValue
       ? decodeFormulaResult(raw.type, raw.valueText, numFmt, epoch)
       : undefined;
-    return result === undefined ? {formula: stored} : {formula: stored, result};
+    const cached = result === undefined ? {} : {result};
+    if (raw.arrayRef !== undefined) {
+      return {
+        shareType: 'array',
+        formula: stored,
+        ref: raw.arrayRef,
+        ...(raw.dynamicArray === true ? {dynamic: true} : {}),
+        ...cached,
+      };
+    }
+    return {formula: stored, ...cached};
   }
   // An inline string built from `<r>` runs is rich text: surface its runs rather than flattening
   // them to the concatenated `inlineText` a plain string would decode to.

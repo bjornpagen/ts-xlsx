@@ -21,6 +21,7 @@ import {formatSerialDate} from '../../core/date-format.ts';
 import {
   type CellValue,
   cellValueToText,
+  isArrayFormulaValue,
   isDataTableFormulaValue,
   isFormulaValue,
   isSharedFormulaValue,
@@ -212,7 +213,12 @@ function csvFieldText(value: CellValue, options: CsvWriteOptions): string {
   if (value instanceof Date && options.dateFormat !== undefined) {
     return formatSerialDate(value, options.dateFormat, options.dateUTC ?? false);
   }
-  if (isFormulaValue(value) || isSharedFormulaValue(value) || isDataTableFormulaValue(value)) {
+  if (
+    isFormulaValue(value) ||
+    isSharedFormulaValue(value) ||
+    isArrayFormulaValue(value) ||
+    isDataTableFormulaValue(value)
+  ) {
     return value.result === undefined ? '' : csvFieldText(value.result, options);
   }
   return cellValueToText(value);

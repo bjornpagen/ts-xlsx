@@ -26,6 +26,8 @@ export const SHARED_STRINGS_PART = 'xl/sharedStrings.xml';
 /** Singular and unnumbered, unlike the per-sheet thread parts: one identity registry serves the
  * whole workbook's threaded comments. */
 export const PERSONS_PART = 'xl/persons/person.xml';
+/** The cell metadata a `<c cm>` indexes, which is what marks a formula a dynamic array. */
+export const METADATA_PART = 'xl/metadata.xml';
 export const CORE_PROPS_PART = 'docProps/core.xml';
 export const APP_PROPS_PART = 'docProps/app.xml';
 

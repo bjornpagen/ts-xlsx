@@ -14,7 +14,13 @@
 // what is genuinely its own -- what committing a cell means, and whether rich runs are read at all
 // -- and falls through to this for the rest.
 
-import {encodeAddress, MAX_COLUMN, tryDecodeCellRef} from '../../core/address.ts';
+import {
+  encodeAddress,
+  encodeRange,
+  MAX_COLUMN,
+  tryDecodeAnchoredRange,
+  tryDecodeCellRef,
+} from '../../core/address.ts';
 import type {DateEpoch} from '../../core/date.ts';
 import {translateFormula} from '../../core/formula-references.ts';
 import {unmangleFunctions} from '../../core/formula.ts';
@@ -63,6 +69,8 @@ export class CellAccumulator {
   #style = -1;
   #col = -1;
   #row = -1;
+  // The cell's `cm`: which block of the workbook's cell metadata it points at, or -1 for none.
+  #cellMetadata = -1;
   // Whether an in-grid `<row>` is open, the only place a cell can be placed.
   #rowOpen = false;
   // Where a `<c>` with no `r` of its own sits: the column after the last one placed in this row.
@@ -74,6 +82,8 @@ export class CellAccumulator {
   #formulaSi = -1;
   #sharedClone = false;
   #dataTable: DataTableDeclaration | null = null;
+  // The range an `<f t="array">` fills, spelled as Excel spells it, when it starts at this cell.
+  #arrayRef: string | undefined = undefined;
   #valueText = '';
   #hasFormula = false;
   #hasValue = false;
@@ -94,10 +104,13 @@ export class CellAccumulator {
   // The workbook's defined names, held for the sheet on the same terms: whether a function a formula
   // passes as a value sheds its `_xleta.` depends on them.
   readonly #definedNames: ReadonlySet<string>;
+  // The `cm` values the workbook's cell metadata marks as dynamic arrays, on the same terms again.
+  readonly #dynamicArrayCells: ReadonlySet<number>;
 
   constructor(options: {
     readonly dateEpoch: DateEpoch;
     readonly definedNames: ReadonlySet<string>;
+    readonly dynamicArrayCells: ReadonlySet<number>;
   }) {
     // Both worksheet readers read an inline string's runs. A pooled string's runs are read for both
     // by the shared-string reader, so flattening here only made the streamed value depend on whether
@@ -105,6 +118,7 @@ export class CellAccumulator {
     this.#runs = new RunAccumulator({container: 'is', readRuns: true});
     this.#dateEpoch = options.dateEpoch;
     this.#definedNames = options.definedNames;
+    this.#dynamicArrayCells = options.dynamicArrayCells;
   }
 
   /** This cell's `<c r>` address (`"B3"`), or '' when it carried none. */
@@ -146,10 +160,11 @@ export class CellAccumulator {
   }
 
   // Begin a new `<c>`: record its address/type/style and clear every per-cell gathered field so the
-  // last cell's formula, value, runs, or shared/data-table declaration cannot bleed into this one.
+  // last cell's formula, value, runs, or shared/data-table/array declaration cannot bleed into this one.
   #beginCell(attrs: XmlAttributes): void {
     this.#type = attrs.t ?? '';
     this.#style = numInteger(attrs.s, 0) ?? -1;
+    this.#cellMetadata = numInteger(attrs.cm, 1) ?? -1;
     this.#placeCell(attrs.r);
     this.#formula = '';
     this.#valueText = '';
@@ -160,6 +175,7 @@ export class CellAccumulator {
     this.#formulaSi = -1;
     this.#sharedClone = false;
     this.#dataTable = null;
+    this.#arrayRef = undefined;
   }
 
   /**
@@ -195,9 +211,9 @@ export class CellAccumulator {
     if (this.#col > 0) this.#nextCol = this.#col + 1;
   }
 
-  // Begin an `<f>`: record its shared-formula grouping and any data-table declaration. A self-closing
-  // `<f t="shared" si/>` is a clone, firing no close and carrying no text, so mark it here to
-  // resolve against its master when the cell finalises.
+  // Begin an `<f>`: record its shared-formula grouping and any data-table or array declaration. A
+  // self-closing `<f t="shared" si/>` is a clone, firing no close and carrying no text, so mark it here
+  // to resolve against its master when the cell finalises.
   #beginFormula(attrs: XmlAttributes, selfClosing: boolean): void {
     this.#formulaShared = attrs.t === 'shared';
     this.#formulaSi = numInteger(attrs.si, 0) ?? -1;
@@ -212,6 +228,12 @@ export class CellAccumulator {
         del1: attrs.del1,
         del2: attrs.del2,
       };
+    }
+    // An array formula states itself on the cell its range starts at. A range starting anywhere else
+    // says nothing about this cell, so the formula reads as the plain one its text is.
+    if (attrs.t === 'array' && attrs.ref !== undefined && this.#col > 0) {
+      const range = tryDecodeAnchoredRange(attrs.ref, this.#col, this.#row);
+      if (range !== undefined) this.#arrayRef = encodeRange(range);
     }
   }
 
@@ -364,12 +386,15 @@ export class CellAccumulator {
   // Decode the gathered pieces into a plain cell value, resolving the shared pool and date formats but
   // NOT the shared-formula / data-table declarations {@link finalize} handles. This is what a data
   // read (the streaming reader) wants: the cell's own value, with a shared-formula clone surfacing its
-  // cached result rather than a translated formula it will not evaluate.
+  // cached result rather than a translated formula it will not evaluate. An array formula is the
+  // cell's own, so both readers see it.
   decode(sharedStrings: readonly SharedString[], style: XfStyle | undefined): CellValue {
     const raw: RawCell = {
       type: this.#type,
       hasFormula: this.#hasFormula,
       formula: this.#formula,
+      arrayRef: this.#arrayRef,
+      dynamicArray: this.#dynamicArrayCells.has(this.#cellMetadata),
       hasValue: this.#hasValue,
       valueText: this.#valueText,
       hasInlineString: this.#runs.opened,

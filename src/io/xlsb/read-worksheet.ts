@@ -17,7 +17,13 @@
 // comes *after* those cells in the stream. Those cells are therefore parked and resolved once the
 // whole part has been read.
 
-import {encodeAddress, encodeRect, MAX_COLUMN_INDEX, MAX_ROW_INDEX} from '../../core/address.ts';
+import {
+  encodeAddress,
+  encodeRange,
+  encodeRect,
+  MAX_COLUMN_INDEX,
+  MAX_ROW_INDEX,
+} from '../../core/address.ts';
 import type {Cell} from '../../core/cell.ts';
 import {coerceDateSerial, type DateEpoch} from '../../core/date.ts';
 import {unmangleFunctions} from '../../core/formula.ts';
@@ -125,9 +131,10 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
   // row has one of its own, so the default is what tells the two apart. See {@link applyRow}.
   // `BrtWsFmtInfo` precedes the cell table, so it is always known by the time a row is read.
   let defaultRowHeight = -1;
-  // The formula of each array-formula group, keyed by the group's top-left cell, and the member cells
-  // waiting on one. Both are needed because `BrtArrFmla` follows the cells it speaks for.
-  const groups = new Map<string, {rgce: Uint8Array; rgcb: Uint8Array}>();
+  // The formula of each array-formula group and the range it fills, keyed by the group's top-left cell,
+  // and the member cells waiting on one. Both are needed because `BrtArrFmla` follows the cells it
+  // speaks for.
+  const groups = new Map<string, {ref: string | undefined; rgce: Uint8Array; rgcb: Uint8Array}>();
   const deferred: DeferredFormula[] = [];
   const columnBudget = new ColumnRecordBudget();
   const protection = new SheetProtectionRecords();
@@ -164,9 +171,18 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
     } else if (record.type === BRT.SheetProtectionIso) {
       protection.iso(reader);
     } else if (record.type === BRT.ArrFmla) {
-      const {rowFirst, colFirst} = reader.range();
+      const {rowFirst, rowLast, colFirst, colLast} = reader.range();
       reader.skip(1); // fAlwaysCalc: a recalculation hint, not part of the formula.
+      const inGridRange = inGrid(colFirst, rowFirst) && inGrid(colLast, rowLast);
       groups.set(groupKey(rowFirst, colFirst), {
+        ref: inGridRange
+          ? encodeRange({
+              top: rowFirst + 1,
+              left: colFirst + 1,
+              bottom: rowLast + 1,
+              right: colLast + 1,
+            })
+          : undefined,
         rgce: reader.bytes(reader.u32()),
         rgcb: reader.bytes(reader.u32()),
       });
@@ -187,7 +203,12 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
     member.cell.value =
       group === undefined || !own
         ? (member.result ?? null)
-        : formulaValue(decodeFormula(group.rgce, group.rgcb, scope), member.result, definedNames);
+        : arrayFormulaValue(
+            decodeFormula(group.rgce, group.rgcb, scope),
+            group.ref,
+            member.result,
+            definedNames,
+          );
   }
 }
 
@@ -287,6 +308,22 @@ function formulaValue(
   // Strip the on-disk mangling, as the XML reader does, so the model never holds it.
   const stored = unmangleFunctions(formula, definedNames);
   return result === undefined ? {formula: stored} : {formula: stored, result};
+}
+
+// An array group's formula on the cell its range starts at, as the XML reader gives the same cell: the
+// array kind over the group's range. A range leaving the grid names no cells, and the formula is the
+// plain one its text is, which is the XML reader's answer to a `ref` it cannot read. The binary form
+// keeps a dynamic array's mark somewhere this reader does not look yet, so every group reads as legacy.
+function arrayFormulaValue(
+  formula: string | undefined,
+  ref: string | undefined,
+  result: FormulaResult | undefined,
+  definedNames: ReadonlySet<string>,
+): CellValue {
+  if (formula === undefined || ref === undefined)
+    return formulaValue(formula, result, definedNames);
+  const stored = unmangleFunctions(formula, definedNames);
+  return {shareType: 'array', formula: stored, ref, ...(result === undefined ? {} : {result})};
 }
 
 // Excel's grid bounds, zero-based as the binary format counts. [MS-XLSB] states them as MUST

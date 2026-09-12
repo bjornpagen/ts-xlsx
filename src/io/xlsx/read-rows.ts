@@ -34,6 +34,7 @@ import {admitting, repairedSheetNames} from '../read-policy/read-repair.ts';
 import {CellStyleResolver} from '../style/cell-style-resolution.ts';
 import type {XfStyle} from '../style/xf-style.ts';
 import {CellAccumulator, WORKSHEET_BODY_EMPTY_CLOSES} from './cell-accumulator.ts';
+import {parseDynamicArrayCellMetadata} from './cell-metadata.ts';
 import type {SharedString} from './cell-value.ts';
 import {takeColumnSpan} from './column-span.ts';
 import {XlsxParseError} from './errors.ts';
@@ -205,6 +206,9 @@ interface SheetTables {
   /** Every name the workbook defines, as `definedNameKeys` spells them: whether a function a formula
    * passes as a value sheds its `_xleta.` depends on them, as it does in the buffered reader. */
   readonly definedNames: ReadonlySet<string>;
+  /** The `cm` values the workbook's cell metadata marks as dynamic arrays, as the buffered reader
+   * reads them: a streamed array formula is the same kind it is there. */
+  readonly dynamicArrayCells: ReadonlySet<number>;
 }
 
 function openPackage(data: Uint8Array, maxUncompressedBytes: number | undefined): OpenPackage {
@@ -247,6 +251,7 @@ function openPackage(data: Uint8Array, maxUncompressedBytes: number | undefined)
     xfStyles,
     dateEpoch: properties.dateEpoch,
     definedNames: namesPass.spellings(),
+    dynamicArrayCells: parseDynamicArrayCellMetadata(rels.relatedText('sheetMetadata') ?? ''),
     sheetXml(relId: string): string | undefined {
       const target = rels.byId(relId)?.target;
       return target === undefined ? undefined : text(rels.pathOf(target));
@@ -337,7 +342,7 @@ function* scanSheet(
   hiddenColumns: Set<number>,
   merges: WorksheetMerges,
 ): Generator<StreamedRow, void, undefined> {
-  const {sharedStrings, xfStyles, dateEpoch, definedNames} = tables;
+  const {sharedStrings, xfStyles, dateEpoch, definedNames, dynamicArrayCells} = tables;
   let rowNumber = 0;
   let rowHidden = false;
   let cells: StreamedCell[] = [];
@@ -349,7 +354,7 @@ function* scanSheet(
   // cell's plain decoded value (via decode) rather than through the shared-formula / data-table
   // resolution the buffered finalize adds, which a data read does not want. A rich string keeps its
   // runs here as it does there, whether the producer inlined it or pooled it.
-  const cell = new CellAccumulator({dateEpoch, definedNames});
+  const cell = new CellAccumulator({dateEpoch, definedNames, dynamicArrayCells});
 
   const finalizeCell = (): void => {
     // Whether a cell was placed at all, a row past the grid included, is the accumulator's decision.

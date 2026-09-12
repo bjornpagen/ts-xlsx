@@ -7,6 +7,7 @@
 // one row look like" is a question with an answer independent of the sheet, and a module boundary is
 // the honest way to say so.
 
+import {encodeRange, tryDecodeAnchoredRange} from '../../core/address.ts';
 import {type Cell, cellHasOwnStyle} from '../../core/cell.ts';
 import {type DateEpoch, DEFAULT_DATE_NUMFMT, dateToSerial} from '../../core/date.ts';
 import {mangleFormula} from '../../core/formula.ts';
@@ -15,6 +16,7 @@ import {CELL_STYLE_FACETS, type CellStyle, type Fill} from '../../core/style.ts'
 import {
   type FormulaResult,
   detectValueType,
+  isArrayFormulaValue,
   isDataTableFormulaValue,
   isErrorCode,
   isErrorValue,
@@ -23,7 +25,7 @@ import {
   isSharedFormulaValue,
 } from '../../core/value.ts';
 import type {ColumnProperties, RowProperties, Worksheet} from '../../core/worksheet.ts';
-import {AuthoringError, InternalError} from '../../errors.ts';
+import {AuthoringError, InternalError, quoted} from '../../errors.ts';
 import {
   boolAttr,
   checkedToken,
@@ -36,6 +38,7 @@ import {
   textElement,
 } from '../../xml/xml.ts';
 import type {XfStyle} from '../style/xf-style.ts';
+import type {CellMetadataTable} from './cell-metadata.ts';
 import type {CommentCell} from './comments.ts';
 import {richTextRunsXml} from './rich-text.ts';
 import type {SharedFormulaRole} from './shared-formulas.ts';
@@ -159,6 +162,9 @@ export interface RowRenderContext {
   /** The defined names a bare name in this sheet's formulas resolves to, as `formulaNamesInScope`
    * gives them: a function passed as a value is written bare where one of them captures its name. */
   readonly formulaNames: ReadonlySet<string>;
+  /** The workbook's cell metadata, which a dynamic-array formula's cell points into. Shared by every
+   * row of every sheet, since the part it becomes is the workbook's. */
+  readonly cellMetadata: CellMetadataTable;
 }
 
 /**
@@ -286,7 +292,8 @@ function dateDefaultNumFmt(value: Cell['value']): string | undefined {
   const date =
     value instanceof Date
       ? value
-      : (isFormulaValue(value) || isSharedFormulaValue(value)) && value.result instanceof Date
+      : (isFormulaValue(value) || isSharedFormulaValue(value) || isArrayFormulaValue(value)) &&
+          value.result instanceof Date
         ? value.result
         : undefined;
   return date !== undefined && !Number.isNaN(date.getTime()) ? DEFAULT_DATE_NUMFMT : undefined;
@@ -299,10 +306,11 @@ function dateDefaultNumFmt(value: Cell['value']): string | undefined {
 //
 // An empty `body` is the self-closing form. A formatted-but-empty cell, a value with no OOXML
 // spelling, and a formula whose result was not cached all arrive here that way: they differ in why
-// there is nothing to say, not in what Excel reads back.
-function cellElement(ref: string, s: string, type: string, body: string): string {
+// there is nothing to say, not in what Excel reads back. `cm` is the cell-metadata attribute, after
+// `t` where Excel writes it.
+function cellElement(ref: string, s: string, type: string, body: string, cm = ''): string {
   const t = type === '' ? '' : ` t="${type}"`;
-  return body === '' ? `<c r="${ref}"${s}${t}/>` : `<c r="${ref}"${s}${t}>${body}</c>`;
+  return body === '' ? `<c r="${ref}"${s}${t}${cm}/>` : `<c r="${ref}"${s}${t}${cm}>${body}</c>`;
 }
 
 // A cell's type token and its `<v>` text. `v` is null when there is no `<v>` at all, which is not the
@@ -364,7 +372,7 @@ function cellXml(
   const value = cell.value;
   const s = style !== 0 ? ` s="${style}"` : '';
 
-  const formula = cellFormulaXml(ref, s, value, shared, ctx);
+  const formula = cellFormulaXml(cell, s, shared, ctx);
   if (formula !== undefined) return formula;
 
   const body = valueBody(value, epoch);
@@ -390,17 +398,17 @@ function cellXml(
   );
 }
 
-// Serialise a formula cell (a shared-formula master or clone, a What-If data table, or a plain
-// formula) into its `<c>` element, or return undefined when the value is not a formula so `cellXml`
-// falls through to its value dispatch.
+// Serialise a formula cell (a shared-formula master or clone, a What-If data table, an array formula,
+// or a plain formula) into its `<c>` element, or return undefined when the value is not a formula so
+// `cellXml` falls through to its value dispatch.
 function cellFormulaXml(
-  ref: string,
+  cell: Cell,
   s: string,
-  value: Cell['value'],
   shared: SharedFormulaRole | undefined,
   ctx: RowRenderContext,
 ): string | undefined {
   const {dateEpoch: epoch, formulaNames} = ctx;
+  const {address: ref, value} = cell;
   // A shared-formula master seeds the group with its formula text under `t="shared" ref si`; a clone
   // carries no text of its own, only a back-reference to the master's `si`. Its cached result still
   // travels with the cell.
@@ -426,6 +434,13 @@ function cellFormulaXml(
       textAttr('r2', value.r2);
     return formulaBodyXml(ref, s, `<f t="dataTable" ${attrs}/>`, value.result, epoch);
   }
+  if (isArrayFormulaValue(value)) {
+    // A dynamic array differs from a legacy array formula only by the cell metadata its `cm` points
+    // at; without that link Excel opens it as a Ctrl+Shift+Enter formula that no longer spills.
+    const cm = value.dynamic === true ? ` cm="${ctx.cellMetadata.markDynamicArray()}"` : '';
+    const f = `<f t="array" ref="${arrayFormulaRange(cell, value.ref)}">${escapeText(mangleFormula(value.formula, formulaNames))}</f>`;
+    return formulaBodyXml(ref, s, f, value.result, epoch, cm);
+  }
   if (isFormulaValue(value)) {
     return formulaBodyXml(
       ref,
@@ -438,24 +453,38 @@ function cellFormulaXml(
   return undefined;
 }
 
-// Wrap a prepared `<f>` element (a plain formula, or a shared master/slave `<f>`) with the cell
-// element and its cached result.
+// The range an array formula fills, as Excel spells it. The range starts at the cell holding the
+// formula, the only cell Excel states it on, so a `ref` starting anywhere else describes no formula
+// this cell can hold and is refused rather than written.
+function arrayFormulaRange(cell: Cell, ref: string): string {
+  const range = tryDecodeAnchoredRange(ref, cell.col, cell.row);
+  if (range === undefined) {
+    throw new AuthoringError(
+      `the array formula in ${cell.address} fills ${quoted(ref)}, which is not a range starting at ${cell.address}`,
+    );
+  }
+  return encodeRange(range);
+}
+
+// Wrap a prepared `<f>` element (a plain formula, an array formula, or a shared master/slave `<f>`)
+// with the cell element and its cached result.
 function formulaBodyXml(
   ref: string,
   s: string,
   f: string,
   result: FormulaResult | undefined,
   epoch: DateEpoch,
+  cm = '',
 ): string {
   // An uncalculated formula caches nothing, and the cell is the formula alone.
-  if (result === undefined) return cellElement(ref, s, '', f);
+  if (result === undefined) return cellElement(ref, s, '', f, cm);
   const body = valueBody(result, epoch);
-  if (body !== undefined) return cellElement(ref, s, body.type, f + vElement(body.v));
+  if (body !== undefined) return cellElement(ref, s, body.type, f + vElement(body.v), cm);
   if (typeof result === 'string') {
     // The cached result of a string formula is a cell value, not structure, so it carries the
     // `_xHHHH_` escape a `<t>` does, and Excel decodes it here too (verified over COM: a `<v>` of
     // `_x0041_` under t="str" reads back as "A" with calculation held manual).
-    return cellElement(ref, s, 'str', f + vElement(escapeSpreadsheetText(result)));
+    return cellElement(ref, s, 'str', f + vElement(escapeSpreadsheetText(result)), cm);
   }
   // Every FormulaResult kind is handled above; this guards a value that reached here past the model.
   throw new InternalError(

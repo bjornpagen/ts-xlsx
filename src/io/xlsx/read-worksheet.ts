@@ -163,7 +163,8 @@ class AutoFilterAccumulator {
  * the same events, so they all share one parse of it rather than scanning it once each.
  *
  * `definedNames` is every name the workbook defines, as `definedNameKeys` spells them: the workbook
- * part is read before any sheet, so they are known before the first formula is.
+ * part is read before any sheet, so they are known before the first formula is. `dynamicArrayCells`
+ * is the `cm` values the workbook's cell metadata marks as dynamic arrays, read from its own part.
  */
 export function worksheetPass(
   sheet: Worksheet,
@@ -171,10 +172,11 @@ export function worksheetPass(
   xfStyles: ReadonlyArray<XfStyle>,
   dateEpoch: DateEpoch,
   definedNames: ReadonlySet<string>,
+  dynamicArrayCells: ReadonlySet<number>,
 ): SaxPass {
   // The one `<c>` currently being read: its address/type/style, formula, value, inline text, rich
   // runs, and the sheet-spanning shared-formula master map. Each `<c>` resets it and commits it.
-  const cell = new CellAccumulator({dateEpoch, definedNames});
+  const cell = new CellAccumulator({dateEpoch, definedNames, dynamicArrayCells});
   const autoFilter = new AutoFilterAccumulator();
   const pageBreaks = new PageBreakAccumulator();
   const styleResolution = new CellStyleResolver();

@@ -4,14 +4,14 @@
 // everything downstream (serialization, number-format application, formula results).
 // The honest shape here is a discriminated union: a value is either a JS primitive
 // (null / number / string / boolean / Date) or one of the structural OOXML value
-// shapes (error, formula, shared formula, data table, rich text). A hyperlink is not one: it lives
-// beside the grid, on the sheet, as OOXML stores it (see `core/hyperlink.ts`). There is no
-// stringly-typed sentinel and no silent coercion between kinds: a numeric-looking
+// shapes (error, formula, shared formula, array formula, data table, rich text). A hyperlink is not
+// one: it lives beside the grid, on the sheet, as OOXML stores it (see `core/hyperlink.ts`). There is
+// no stringly-typed sentinel and no silent coercion between kinds: a numeric-looking
 // string stays a string, because the caller's chosen type is the source of truth.
 
 import type {Font} from './style.ts';
 
-/** The observable kind of a cell's value. Both formula shapes report as `Formula`. */
+/** The observable kind of a cell's value. Every formula kind reports as `Formula`. */
 export const ValueType = {
   Null: 'null',
   Number: 'number',
@@ -100,6 +100,27 @@ export interface SharedFormulaValue {
 }
 
 /**
+ * A cell holding an array formula (`<f t="array">`): one formula whose result fills {@link ref}, a
+ * range starting at this cell. The other cells of the range hold only the values the formula
+ * produced, which is how Excel stores them, so they are plain values here too.
+ *
+ * Excel stores two kinds this way. A legacy array formula, entered with Ctrl+Shift+Enter, shows in
+ * braces and fills the range it was entered over. A dynamic-array formula is {@link dynamic}: it
+ * spills, `ref` is the range its last calculation filled, and no braces are shown. Excel keeps that
+ * mark in the workbook's cell metadata rather than on the formula, and a formula that loses it opens
+ * as a legacy array formula that no longer spills.
+ */
+export interface ArrayFormulaValue {
+  readonly shareType: 'array';
+  readonly formula: string;
+  /** The range the result fills, starting at this cell: `'B1:B3'`, or `'B1'` for one cell. */
+  readonly ref: string;
+  /** Whether Excel evaluates the formula as a dynamic array rather than a Ctrl+Shift+Enter one. */
+  readonly dynamic?: boolean;
+  readonly result?: FormulaResult;
+}
+
+/**
  * A cell computed by a What-If-Analysis data table (`<f t="dataTable">`), the OOXML formula kind that
  * fills a range by re-evaluating a model against a grid of substituted input cells. The library does
  * not evaluate it; it preserves the declaration so a read-modify-write cycle re-emits it verbatim
@@ -138,6 +159,7 @@ export type CellValue =
   | ErrorValue
   | FormulaValue
   | SharedFormulaValue
+  | ArrayFormulaValue
   | DataTableFormulaValue
   | RichTextValue;
 
@@ -159,20 +181,27 @@ export function isErrorValue(value: CellValue): value is ErrorValue {
 }
 
 /**
- * Whether a value is a cell's own formula ({@link FormulaValue}): a master, or a formula
- * belonging to no shared group. A shared-formula clone is **not** one of these; see
- * {@link isSharedFormulaValue}. Both report as `ValueType.Formula`, so a caller that means "any
- * formula-shaped cell" wants {@link detectValueType}, not this.
+ * Whether a value is a cell's own plain formula ({@link FormulaValue}): a shared-formula master, or a
+ * formula belonging to no group. A shared-formula clone is **not** one of these, and nor is an array
+ * formula; see {@link isSharedFormulaValue} and {@link isArrayFormulaValue}. Every formula kind reports
+ * as `ValueType.Formula`, so a caller that means "any formula-shaped cell" wants
+ * {@link detectValueType}, not this.
  */
 export function isFormulaValue(value: CellValue): value is FormulaValue {
   // A shared-formula clone resolved on read carries both its master address (`sharedFormula`) and the
-  // translated `formula`; it is a SharedFormulaValue, so exclude it here to keep the two kinds distinct.
-  return hasKey(value, 'formula') && !('sharedFormula' in value);
+  // translated `formula`, and an array formula carries `formula` beside its `shareType`; each is its
+  // own kind, so both are excluded here.
+  return hasKey(value, 'formula') && !('sharedFormula' in value) && !('shareType' in value);
 }
 
 /** Whether a value is a clone participating in a shared formula ({@link SharedFormulaValue}). */
 export function isSharedFormulaValue(value: CellValue): value is SharedFormulaValue {
   return hasKey(value, 'sharedFormula');
+}
+
+/** Whether a value is an array formula, legacy or dynamic ({@link ArrayFormulaValue}). */
+export function isArrayFormulaValue(value: CellValue): value is ArrayFormulaValue {
+  return hasKey(value, 'shareType') && value.shareType === 'array';
 }
 
 /** Whether a value is a What-If-Analysis data-table formula ({@link DataTableFormulaValue}). */
@@ -211,8 +240,8 @@ export function richTextToPlain(value: RichTextValue): string {
  * - a `Date` → a full ISO-8601 timestamp
  * - an error → its literal, e.g. `"#REF!"`, the same string the grid shows
  * - rich text → every run concatenated ({@link richTextToPlain})
- * - any of the three formula kinds → the text of the *cached result*, and `""` when the cell
- *   carries no cached result: the formula source is not text the sheet ever displayed
+ * - any formula kind → the text of the *cached result*, and `""` when the cell carries no cached
+ *   result: the formula source is not text the sheet ever displayed
  */
 export function cellValueToText(value: CellValue): string {
   return classify(value, TO_TEXT);
@@ -237,7 +266,7 @@ interface ValuePayload {
   boolean: boolean;
   date: Date;
   error: ErrorValue;
-  formula: FormulaValue | SharedFormulaValue | DataTableFormulaValue;
+  formula: FormulaValue | SharedFormulaValue | ArrayFormulaValue | DataTableFormulaValue;
   richText: RichTextValue;
 }
 
@@ -266,7 +295,12 @@ function classify<R>(value: CellValue, visit: ValueVisitor<R>): R {
       break;
   }
   if (value instanceof Date) return visit.date(value);
-  if (isFormulaValue(value) || isSharedFormulaValue(value) || isDataTableFormulaValue(value)) {
+  if (
+    isFormulaValue(value) ||
+    isSharedFormulaValue(value) ||
+    isArrayFormulaValue(value) ||
+    isDataTableFormulaValue(value)
+  ) {
     return visit.formula(value);
   }
   if (isRichTextValue(value)) return visit.richText(value);
@@ -332,7 +366,7 @@ export function coerceCellValue(value: CellValue | undefined): CellValue {
   // detectValueType throws on an unrecognised object shape, so this both validates
   // and gives a precise error at the assignment site rather than deep in serialization.
   detectValueType(value);
-  if (isFormulaValue(value)) {
+  if (isFormulaValue(value) || isArrayFormulaValue(value)) {
     const formula = stripLeadingEquals(value.formula);
     return formula === value.formula ? value : {...value, formula};
   }

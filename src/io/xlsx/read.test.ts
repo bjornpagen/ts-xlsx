@@ -1389,7 +1389,9 @@ test('the worksheet part is read in one pass, not once per reader', () => {
   const xml = sheetXml(writeXlsx(workbook));
 
   const apart = countingSource(xml);
-  parseXmlPasses(apart.source, [worksheetPass(new Worksheet('S', 1), [], [], 1900, new Set())]);
+  parseXmlPasses(apart.source, [
+    worksheetPass(new Worksheet('S', 1), [], [], 1900, new Set(), new Set()),
+  ]);
   parseXmlPasses(apart.source, [sheetHyperlinkPass()]);
   parseXmlPasses(apart.source, [dataValidationPass(new Set())]);
   parseXmlPasses(apart.source, [extendedDataValidationPass(new Set())]);
@@ -1397,7 +1399,7 @@ test('the worksheet part is read in one pass, not once per reader', () => {
 
   const together = countingSource(xml);
   parseXmlPasses(together.source, [
-    worksheetPass(new Worksheet('S', 1), [], [], 1900, new Set()),
+    worksheetPass(new Worksheet('S', 1), [], [], 1900, new Set(), new Set()),
     sheetHyperlinkPass(),
     dataValidationPass(new Set()),
     extendedDataValidationPass(new Set()),

@@ -66,6 +66,12 @@ export const DATABAR_LINK_EXT_URI = '{B025F937-C7B1-47D3-B67F-A62EFF666E3E}';
 export const DATA_VALIDATION_EXT_URI = '{CCE6A557-97BC-4b89-ADB6-D9C93CAAB3DF}';
 export const SLICER_LIST_EXT_URI = '{A8765BA9-456A-4dab-B4F3-ACF838C121DE}';
 export const SLICER_CACHES_EXT_URI = '{BBE1A952-AA13-448e-AADC-164F8A28A991}';
+/** The extension a dynamic-array formula's cell-metadata block carries its properties in. */
+export const DYNAMIC_ARRAY_PROPERTIES_EXT_URI = '{bdbb8cdc-fa1e-496e-a857-3c3f30c029c3}';
+
+/** The 2017 dynamic-array namespace (`xda:`), which scopes those properties in `xl/metadata.xml`. */
+export const DYNAMIC_ARRAY_NS =
+  'http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray';
 
 /**
  * Whether an element belongs to the standard SpreadsheetML vocabulary rather than to an extension.

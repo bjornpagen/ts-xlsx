@@ -19,7 +19,7 @@ function sheet(body: string) {
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
       body +
       '</worksheet>',
-    [worksheetPass(worksheet, [], [], 1900, new Set())],
+    [worksheetPass(worksheet, [], [], 1900, new Set(), new Set())],
   );
   return worksheet;
 }

@@ -18,6 +18,7 @@ import {pickStyleFacets} from '../../core/style.ts';
 import type {ColumnProperties, Worksheet, WorksheetProperties} from '../../core/worksheet.ts';
 import {AuthoringError, InternalError, quoted} from '../../errors.ts';
 import {escapeAttr, numberText, XML_DECLARATION} from '../../xml/xml.ts';
+import type {CellMetadataTable} from './cell-metadata.ts';
 import {
   type ConditionalFormattingPlan,
   conditionalFormattingsExtXml,
@@ -85,6 +86,7 @@ export interface WorksheetXmlInputs {
   readonly references: SheetReferences;
   readonly hyperlinks: readonly HyperlinkPlan[];
   readonly sharedStrings: SharedStringTable | null;
+  readonly cellMetadata: CellMetadataTable;
   readonly dateEpoch: DateEpoch;
   /** The defined names a bare name in this sheet's formulas resolves to; see `formulaNamesInScope`. */
   readonly formulaNames: ReadonlySet<string>;
@@ -102,6 +104,7 @@ export function worksheetXml(inputs: WorksheetXmlInputs): string {
     references,
     hyperlinks,
     sharedStrings,
+    cellMetadata,
     dateEpoch,
     formulaNames,
     active,
@@ -137,6 +140,7 @@ export function worksheetXml(inputs: WorksheetXmlInputs): string {
     collapsedSummaries,
     dateEpoch,
     formulaNames,
+    cellMetadata,
   };
 
   const liveRows: {number: number; xml: string}[] = [];

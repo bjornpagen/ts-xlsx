@@ -18,6 +18,7 @@ import {type SheetSplice, spliceFormula} from './formula-references.ts';
 import {INTERNAL} from './internal.ts';
 import {
   type CellValue,
+  isArrayFormulaValue,
   isErrorValue,
   isFormulaValue,
   isRichTextValue,
@@ -505,7 +506,7 @@ function scalarOf(value: CellValue): PivotItem {
   if (value instanceof Date) return {kind: 'string', value: value.toISOString()};
   if (isRichTextValue(value)) return {kind: 'string', value: richTextToPlain(value)};
   if (isErrorValue(value)) return {kind: 'string', value: value.error};
-  if (isFormulaValue(value) || isSharedFormulaValue(value)) {
+  if (isFormulaValue(value) || isSharedFormulaValue(value) || isArrayFormulaValue(value)) {
     return value.result === undefined ? BLANK : scalarOf(value.result);
   }
   return BLANK;

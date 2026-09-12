@@ -6,6 +6,7 @@ import {
   cellValueToText,
   coerceCellValue,
   detectValueType,
+  isArrayFormulaValue,
   isDataTableFormulaValue,
   isErrorCode,
   isErrorValue,
@@ -26,6 +27,26 @@ test('detectValueType classifies each primitive', () => {
 
 test('an invalid Date is still a Date-typed value', () => {
   assert.equal(detectValueType(new Date(Number.NaN)), ValueType.Date);
+});
+
+test('an array formula is its own formula kind, never a plain formula', () => {
+  const value: CellValue = {
+    shareType: 'array',
+    formula: '=SEQUENCE(3)',
+    ref: 'B1:B3',
+    dynamic: true,
+    result: 1,
+  };
+  assert.equal(isArrayFormulaValue(value), true);
+  assert.equal(isFormulaValue(value), false, 'it carries formula text, and is still not plain');
+  assert.equal(isDataTableFormulaValue(value), false);
+  assert.equal(detectValueType(value), ValueType.Formula);
+  assert.equal(cellValueToText(value), '1', 'its text is its cached result');
+  assert.deepEqual(
+    coerceCellValue(value),
+    {...value, formula: 'SEQUENCE(3)'},
+    'its text is stored without the leading =',
+  );
 });
 
 test('NaN and Infinity remain Number-typed: the model does not judge finiteness', () => {

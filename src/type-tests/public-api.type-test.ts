@@ -5,6 +5,7 @@
 
 import type {
   AddImageOptions,
+  ArrayFormulaValue,
   AuthoringError,
   AutoFilter,
   CellAddress,
@@ -22,6 +23,7 @@ import type {
   FormulaValue,
   Hyperlink,
   InternalError,
+  isArrayFormulaValue,
   isDataTableFormulaValue,
   isErrorValue,
   isFormulaValue,
@@ -86,6 +88,7 @@ export type ValueGuardContracts = [
   Expect<Equal<typeof isErrorValue, (value: CellValue) => value is ErrorValue>>,
   Expect<Equal<typeof isFormulaValue, (value: CellValue) => value is FormulaValue>>,
   Expect<Equal<typeof isSharedFormulaValue, (value: CellValue) => value is SharedFormulaValue>>,
+  Expect<Equal<typeof isArrayFormulaValue, (value: CellValue) => value is ArrayFormulaValue>>,
   Expect<
     Equal<typeof isDataTableFormulaValue, (value: CellValue) => value is DataTableFormulaValue>
   >,

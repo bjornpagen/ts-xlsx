@@ -44,6 +44,7 @@ export const REL = {
   pivotTable: `${NS.docRels}/pivotTable`,
   pivotCacheDefinition: `${NS.docRels}/pivotCacheDefinition`,
   pivotCacheRecords: `${NS.docRels}/pivotCacheRecords`,
+  sheetMetadata: `${NS.docRels}/sheetMetadata`,
   // Threaded comments are a Microsoft extension, so both types live under the 2017/10 Office
   // relationships namespace rather than the standard officeDocument one.
   threadedComment: `${MS_OFFICE_2017_RELS_NS}/threadedComment`,

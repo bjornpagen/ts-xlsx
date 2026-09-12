@@ -156,6 +156,8 @@ export default {
         const cell = api.xlsbFormula('Calc', 'F1');
         assert.equal(cell.formula, 'SUM(A1:A5*2)');
         assert.equal(cell.result, 30);
+        // And it reads as the array formula it is, over the range the group record names.
+        assert.equal(cell.arrayRef, 'F1');
       },
     },
     {

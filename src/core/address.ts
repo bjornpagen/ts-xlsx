@@ -214,6 +214,17 @@ export function encodeRect(rect: GridRect): string {
   return `${encodeAddress(rect.left, rect.top)}:${encodeAddress(rect.right, rect.bottom)}`;
 }
 
+/**
+ * A bounded rectangle as a formula's `ref` spells it: {@link encodeRect}'s `"B1:B3"`, except that one
+ * cell is its bare address, `"B1"`. Excel writes an array formula over a single cell that way, and a
+ * range that moves keeps the spelling it would be saved with.
+ */
+export function encodeRange(rect: GridRect): string {
+  return rect.top === rect.bottom && rect.left === rect.right
+    ? encodeAddress(rect.left, rect.top)
+    : encodeRect(rect);
+}
+
 /** Build a {@link CellAddress} corner straight from optional numeric axes: the address string is
  * assembled from the parts we already hold, so no encode-then-decode round-trip is needed. An axis the
  * corner omits stays `undefined`; both absent yields the empty address (`""`). */
@@ -340,6 +351,23 @@ export function tryDecodeRange(reference: string): RangeAddress | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The rectangle `reference` names when its top-left cell is (`col`, `row`), or `undefined` for a
+ * reference that does not parse, is unbounded, names a sheet, or starts at another cell. That is the
+ * shape of the range an array formula fills: Excel states the formula on the cell the range starts at,
+ * so a `ref` read from a file and one handed to the writer are both held to it.
+ */
+export function tryDecodeAnchoredRange(
+  reference: string,
+  col: number,
+  row: number,
+): GridRect | undefined {
+  const range = tryDecodeRange(reference);
+  if (range === undefined || range.sheetName !== undefined) return undefined;
+  const rect = boundedRect(range);
+  return rect !== undefined && rect.left === col && rect.top === row ? rect : undefined;
 }
 
 /**
