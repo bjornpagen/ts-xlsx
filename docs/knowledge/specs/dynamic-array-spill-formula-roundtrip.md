@@ -54,6 +54,14 @@ formula, destroying the spill.
   an array wrapper that was never in the source.
 - Authoring: should the public API let a caller _create_ a dynamic-array formula (spilling) distinctly
   from a CSE array formula, or is preservation-on-round-trip the first milestone?
+- Rich-value errors ride the same metadata. Excel 16.0 (build 20326) stores `#SPILL!` (errorType 8),
+  `#CALC!` (13) and the other newer errors as `<v>#VALUE!</v>` with a `vm` index pointing through
+  `xl/metadata.xml` at a rich value of structure `_error` in `xl/richData/rdrichvalue.xml`, and a
+  spilling formula's cell carries `cm` and `vm` together (recorded in
+  `test/corpus/fixtures/excel-oracle/error-literals.json`). Such a cell reads as `#VALUE!` today and the
+  `vm` link and the rich-data parts are dropped on write, so the error belongs with the formula model:
+  the reader that resolves `cm` through the metadata is the one that resolves `vm`, and the errorType
+  numbers of the errors not yet observed must come from Excel rather than be guessed.
 
 Related: `formula-cell-value-type-minimal-required-fields`, `formula-recalculation-expectations`,
 `shared-formula-master-survives-roundtrip-and-splice`.
