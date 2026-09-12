@@ -75,7 +75,7 @@ import {
 import type {ColumnProperties, Worksheet} from '../../core/worksheet.ts';
 import {AuthoringError, quoted} from '../../errors.ts';
 import {FIXED_ENTRY_MTIME} from '../opc/zip-mtime.ts';
-import {CellMetadataTable} from './cell-metadata.ts';
+import {WorkbookMetadataTable} from './cell-metadata.ts';
 import {type CommentCell, collectNotes} from './comments.ts';
 import {
   buildColumnDefaults,
@@ -220,7 +220,7 @@ export class WorksheetStreamWriter {
   // names defined by then.
   readonly #definedNames: readonly DefinedName[];
   // The workbook's cell metadata, shared with every sheet for the reason the style registry is.
-  readonly #cellMetadata: CellMetadataTable;
+  readonly #cellMetadata: WorkbookMetadataTable;
 
   // Private, and reached from `WorkbookStreamWriter.addWorksheet` through the static channel below.
   // A caller never builds one of these -- they receive it from `addWorksheet` -- and the parameters
@@ -230,7 +230,7 @@ export class WorksheetStreamWriter {
     sheet: Worksheet,
     eager: boolean,
     styles: StyleRegistry,
-    cellMetadata: CellMetadataTable,
+    cellMetadata: WorkbookMetadataTable,
     dateEpoch: DateEpoch,
     definedNames: readonly DefinedName[],
   ) {
@@ -489,7 +489,7 @@ export interface WorksheetStreamWriterFactory {
     sheet: Worksheet,
     eager: boolean,
     styles: StyleRegistry,
-    cellMetadata: CellMetadataTable,
+    cellMetadata: WorkbookMetadataTable,
     dateEpoch: DateEpoch,
     definedNames: readonly DefinedName[],
   ): WorksheetStreamWriter;
@@ -538,8 +538,9 @@ export class WorkbookStreamWriter {
   // The single style registry shared by the eager per-row flush and the commit-time serialisation, so a
   // flushed row's style ids match the styles.xml built from the same table.
   readonly #styles: StyleRegistry;
-  // Shared the same way: a flushed row's dynamic-array formula points into the part this decides on.
-  readonly #cellMetadata = new CellMetadataTable();
+  // Shared the same way: a flushed row's dynamic-array formula or rich-value error points into the
+  // parts this decides on.
+  readonly #cellMetadata = new WorkbookMetadataTable();
   // Eager per-row flushing runs with strings inline; a shared-strings pool is inherently whole-workbook,
   // so it cannot bound memory: turning it on keeps every row live until commit.
   readonly #eager: boolean;

@@ -26,6 +26,7 @@ import {AuthoringError, quoted} from '../../errors.ts';
 import {numInteger} from '../../xml/xml-attrs.ts';
 import {closeEmptyElements, parseXmlPasses} from '../../xml/xml-read.ts';
 import {boolStrict, localName, type XmlAttributes, xmlEvents} from '../../xml/xml-scan.ts';
+import type {CellMetadataIndex} from '../cell-metadata/metadata.ts';
 import {openSpreadsheetPackage, readPartRelationships} from '../opc/read-opc.ts';
 import type {ReadPackageOptions} from '../opc/read-options.ts';
 import {unsupportedWorkbookPart} from '../opc/sniff-format.ts';
@@ -34,7 +35,7 @@ import {admitting, repairedSheetNames} from '../read-policy/read-repair.ts';
 import {CellStyleResolver} from '../style/cell-style-resolution.ts';
 import type {XfStyle} from '../style/xf-style.ts';
 import {CellAccumulator, WORKSHEET_BODY_EMPTY_CLOSES} from './cell-accumulator.ts';
-import {parseDynamicArrayCellMetadata} from './cell-metadata.ts';
+import {readCellMetadata} from './cell-metadata.ts';
 import type {SharedString} from './cell-value.ts';
 import {takeColumnSpan} from './column-span.ts';
 import {XlsxParseError} from './errors.ts';
@@ -206,9 +207,9 @@ interface SheetTables {
   /** Every name the workbook defines, as `definedNameKeys` spells them: whether a function a formula
    * passes as a value sheds its `_xleta.` depends on them, as it does in the buffered reader. */
   readonly definedNames: ReadonlySet<string>;
-  /** The `cm` values the workbook's cell metadata marks as dynamic arrays, as the buffered reader
-   * reads them: a streamed array formula is the same kind it is there. */
-  readonly dynamicArrayCells: ReadonlySet<number>;
+  /** What the workbook's `cm` and `vm` values resolve to, as the buffered reader resolves them: a
+   * streamed array formula or rich-value error is the same value it is there. */
+  readonly cellMetadata: CellMetadataIndex;
 }
 
 function openPackage(data: Uint8Array, maxUncompressedBytes: number | undefined): OpenPackage {
@@ -251,7 +252,7 @@ function openPackage(data: Uint8Array, maxUncompressedBytes: number | undefined)
     xfStyles,
     dateEpoch: properties.dateEpoch,
     definedNames: namesPass.spellings(),
-    dynamicArrayCells: parseDynamicArrayCellMetadata(rels.relatedText('sheetMetadata') ?? ''),
+    cellMetadata: readCellMetadata(rels),
     sheetXml(relId: string): string | undefined {
       const target = rels.byId(relId)?.target;
       return target === undefined ? undefined : text(rels.pathOf(target));
@@ -342,7 +343,7 @@ function* scanSheet(
   hiddenColumns: Set<number>,
   merges: WorksheetMerges,
 ): Generator<StreamedRow, void, undefined> {
-  const {sharedStrings, xfStyles, dateEpoch, definedNames, dynamicArrayCells} = tables;
+  const {sharedStrings, xfStyles, dateEpoch, definedNames, cellMetadata} = tables;
   let rowNumber = 0;
   let rowHidden = false;
   let cells: StreamedCell[] = [];
@@ -354,7 +355,7 @@ function* scanSheet(
   // cell's plain decoded value (via decode) rather than through the shared-formula / data-table
   // resolution the buffered finalize adds, which a data read does not want. A rich string keeps its
   // runs here as it does there, whether the producer inlined it or pooled it.
-  const cell = new CellAccumulator({dateEpoch, definedNames, dynamicArrayCells});
+  const cell = new CellAccumulator({dateEpoch, definedNames, cellMetadata});
 
   const finalizeCell = (): void => {
     // Whether a cell was placed at all, a row past the grid included, is the accumulator's decision.

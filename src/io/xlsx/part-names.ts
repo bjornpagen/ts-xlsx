@@ -26,8 +26,12 @@ export const SHARED_STRINGS_PART = 'xl/sharedStrings.xml';
 /** Singular and unnumbered, unlike the per-sheet thread parts: one identity registry serves the
  * whole workbook's threaded comments. */
 export const PERSONS_PART = 'xl/persons/person.xml';
-/** The cell metadata a `<c cm>` indexes, which is what marks a formula a dynamic array. */
+/** The metadata a `<c cm>` and `<c vm>` index: what marks a formula a dynamic array, and what names
+ * the error behind a `#VALUE!`. */
 export const METADATA_PART = 'xl/metadata.xml';
+/** The rich values a value-metadata block names, and the structures they are read against. */
+export const RICH_VALUES_PART = 'xl/richData/rdrichvalue.xml';
+export const RICH_VALUE_STRUCTURES_PART = 'xl/richData/rdrichvaluestructure.xml';
 export const CORE_PROPS_PART = 'docProps/core.xml';
 export const APP_PROPS_PART = 'docProps/app.xml';
 

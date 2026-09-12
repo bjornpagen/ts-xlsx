@@ -11,6 +11,7 @@ import {
   decodeAddress,
   decodeRange,
   detectValueType,
+  encodeAddress,
   fixtureBytes,
   readFixture,
   readWorkbookStream,
@@ -38,6 +39,56 @@ import {
   themePrefixReport,
   selfClosingDefinedNameReport,
 } from './xml-probes.ts';
+
+// Each error cell a package's first sheet stores, keyed by address → {v, errorType}: the `<v>` text of
+// the `t="e"` cell, and the `errorType` its `vm` names, through the value metadata and the rich-value
+// parts, or null when it points at none. Read with patterns rather than with the library, so a reader
+// and a writer agreeing with each other cannot pass for agreeing with the package Excel saved.
+function storedErrors(pkg: Uint8Array) {
+  const parts = partMapOf(pkg);
+  const metadata = parts['xl/metadata.xml'] ?? '';
+  const typeNames = [...metadata.matchAll(/<metadataType [^>]*?name="([^"]*)"/g)].map((m) => m[1]);
+  const richBlocks = /<futureMetadata name="XLRICHVALUE"[^>]*>([\s\S]*?)<\/futureMetadata>/.exec(
+    metadata,
+  )?.[1];
+  const richValueOfBlock = [...(richBlocks ?? '').matchAll(/<xlrd:rvb i="(\d+)"\/>/g)].map((m) =>
+    Number(m[1]),
+  );
+  const valueBlocks = [
+    ...(/<valueMetadata[^>]*>([\s\S]*?)<\/valueMetadata>/.exec(metadata)?.[1] ?? '').matchAll(
+      /<bk><rc t="(\d+)" v="(\d+)"\/><\/bk>/g,
+    ),
+  ].map((m) => ({type: Number(m[1]), value: Number(m[2])}));
+  const structureKeys = [
+    ...(parts['xl/richData/rdrichvaluestructure.xml'] ?? '').matchAll(/<s [^>]*>([\s\S]*?)<\/s>/g),
+  ].map((m) => [...(m[1] ?? '').matchAll(/<k n="([^"]*)"/g)].map((k) => k[1]));
+  const richValues = [
+    ...(parts['xl/richData/rdrichvalue.xml'] ?? '').matchAll(/<rv s="(\d+)">([\s\S]*?)<\/rv>/g),
+  ].map((m) => ({
+    structure: Number(m[1]),
+    values: [...(m[2] ?? '').matchAll(/<v>([^<]*)<\/v>/g)].map((v) => v[1]),
+  }));
+  const errorTypeOf = (vm: string | undefined): number | null => {
+    const block = vm === undefined ? undefined : valueBlocks[Number(vm) - 1];
+    if (block === undefined || typeNames[block.type - 1] !== 'XLRICHVALUE') return null;
+    const rich = richValues[richValueOfBlock[block.value] ?? -1];
+    const key =
+      rich === undefined ? -1 : (structureKeys[rich.structure] ?? []).indexOf('errorType');
+    return rich === undefined || key < 0 ? null : Number(rich.values[key]);
+  };
+  const sheet = parts['xl/worksheets/sheet1.xml'] ?? '';
+  return Object.fromEntries(
+    [...sheet.matchAll(/<c r="([A-Z]+\d+)"([^>]*?)(?<!\/)>([\s\S]*?)<\/c>/g)]
+      .filter((m) => /\st="e"/.test(m[2] ?? ''))
+      .map((m) => [
+        m[1] ?? '',
+        {
+          v: /<v>([^<]*)<\/v>/.exec(m[3] ?? '')?.[1] ?? null,
+          errorType: errorTypeOf(/\svm="(\d+)"/.exec(m[2] ?? '')?.[1]),
+        },
+      ]),
+  );
+}
 
 // The characters XML 1.0 cannot carry, restated here rather than imported: a case asserts on
 // behaviour, and reading the rule out of the code under test would make the assertion circular.
@@ -237,8 +288,9 @@ export const core = {
     return {source, rewritten};
   },
 
-  // Author each code as a cell's error value, write, and read back → a map of code → { written, readBack,
-  // refused }. `written` is the `<v>` of the typed cell, `readBack` the value the package reads as, and
+  // Author each code as a cell's error value, write, and read back → a map of code → { written,
+  // errorType, readBack, refused }. `written` is the `<v>` of the typed cell, `errorType` the one its `vm`
+  // names through the rich-value parts (null for none), `readBack` the value the package reads as, and
   // `refused` the writer's message when it declined to write the cell at all.
   errorLiteralReport(codes: string[]) {
     return Object.fromEntries(
@@ -248,20 +300,43 @@ export const core = {
         workbook.addWorksheet('S').getCell('A1').value = {error: code} as Untyped;
         try {
           const bytes = writeXlsx(workbook);
-          const sheet = partMapOf(bytes)['xl/worksheets/sheet1.xml'] ?? '';
+          const stored = storedErrors(bytes).A1;
           return [
             code,
             {
-              written: /<c r="A1"[^>]*t="e"[^>]*><v>([^<]*)<\/v>/.exec(sheet)?.[1] ?? null,
+              written: stored?.v ?? null,
+              errorType: stored?.errorType ?? null,
               readBack: readXlsx(bytes).worksheets[0]?.getCell('A1').value ?? null,
               refused: null,
             },
           ];
         } catch (error) {
-          return [code, {written: null, readBack: null, refused: messageOf(error)}];
+          return [
+            code,
+            {written: null, errorType: null, readBack: null, refused: messageOf(error)},
+          ];
         }
       }),
     );
+  },
+
+  // Excel's workbook of computed and pasted errors at `rel`, read and written back → {read, excel,
+  // written}. `read` maps each cell of the first sheet holding an error, as its value or as its formula's
+  // cached result, to that error's code; `excel` and `written` are what the two packages store for each
+  // error cell, as {v, errorType}.
+  richValueErrorReport(rel: string) {
+    const bytes = fixtureBytes(rel);
+    const workbook = readXlsx(bytes);
+    const cells: Untyped[] = workbook.worksheets[0]?.model.cells ?? [];
+    const read = Object.fromEntries(
+      cells
+        .map((cell) => [
+          encodeAddress(cell.col, cell.row),
+          cell.value?.error ?? cell.value?.result?.error ?? null,
+        ])
+        .filter(([, error]) => error !== null),
+    );
+    return {read, excel: storedErrors(bytes), written: storedErrors(writeXlsx(workbook))};
   },
 
   // Write a non-finite numeric cell (NaN / Infinity / -Infinity) and report whether the sheet XML

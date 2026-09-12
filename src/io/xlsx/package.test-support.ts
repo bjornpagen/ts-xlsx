@@ -212,6 +212,8 @@ const FOUND_BY_TYPE: ReadonlySet<string> = new Set([
   'theme',
   'sharedStrings',
   'sheetMetadata',
+  'rdRichValue',
+  'rdRichValueStructure',
   'person',
   'comments',
   'threadedComment',

@@ -38,7 +38,7 @@ import {
   textElement,
 } from '../../xml/xml.ts';
 import type {XfStyle} from '../style/xf-style.ts';
-import type {CellMetadataTable} from './cell-metadata.ts';
+import type {WorkbookMetadataTable} from './cell-metadata.ts';
 import type {CommentCell} from './comments.ts';
 import {richTextRunsXml} from './rich-text.ts';
 import type {SharedFormulaRole} from './shared-formulas.ts';
@@ -162,9 +162,9 @@ export interface RowRenderContext {
   /** The defined names a bare name in this sheet's formulas resolves to, as `formulaNamesInScope`
    * gives them: a function passed as a value is written bare where one of them captures its name. */
   readonly formulaNames: ReadonlySet<string>;
-  /** The workbook's cell metadata, which a dynamic-array formula's cell points into. Shared by every
-   * row of every sheet, since the part it becomes is the workbook's. */
-  readonly cellMetadata: CellMetadataTable;
+  /** The workbook's metadata, which a dynamic-array formula's cell and a rich-value error's cell point
+   * into. Shared by every row of every sheet, since the parts it becomes are the workbook's. */
+  readonly cellMetadata: WorkbookMetadataTable;
 }
 
 /**
@@ -306,19 +306,21 @@ function dateDefaultNumFmt(value: Cell['value']): string | undefined {
 //
 // An empty `body` is the self-closing form. A formatted-but-empty cell, a value with no OOXML
 // spelling, and a formula whose result was not cached all arrive here that way: they differ in why
-// there is nothing to say, not in what Excel reads back. `cm` is the cell-metadata attribute, after
-// `t` where Excel writes it.
-function cellElement(ref: string, s: string, type: string, body: string, cm = ''): string {
-  const t = type === '' ? '' : ` t="${type}"`;
-  return body === '' ? `<c r="${ref}"${s}${t}${cm}/>` : `<c r="${ref}"${s}${t}${cm}>${body}</c>`;
+// there is nothing to say, not in what Excel reads back. `cm` and `vm` are the cell- and
+// value-metadata attributes, after `t` in the order Excel writes them.
+function cellElement(ref: string, s: string, type: string, body: string, cm = '', vm = ''): string {
+  const attrs = `${s}${type === '' ? '' : ` t="${type}"`}${cm}${vm}`;
+  return body === '' ? `<c r="${ref}"${attrs}/>` : `<c r="${ref}"${attrs}>${body}</c>`;
 }
 
 // A cell's type token and its `<v>` text. `v` is null when there is no `<v>` at all, which is not the
 // same as an empty one: a formula whose cached result is the empty string caches `<v></v>`, and
-// collapsing that to a self-closing cell would lose the fact that it was calculated.
+// collapsing that to a self-closing cell would lose the fact that it was calculated. `vm` is the
+// value-metadata attribute an error Excel has no literal for is written with.
 interface CellBody {
   readonly type: string;
   readonly v: string | null;
+  readonly vm?: string;
 }
 
 // A value the format has no way to spell, kept as a styled but empty cell rather than emitted as a
@@ -339,7 +341,10 @@ const vElement = (v: string | null): string => (v === null ? '' : `<v>${v}</v>`)
  * between the callers -- a bare string may be pooled into the shared table, a cached one is always
  * `t="str"` -- so each caller spells its own.
  */
-function valueBody(value: Cell['value'] | FormulaResult, epoch: DateEpoch): CellBody | undefined {
+function valueBody(
+  value: Cell['value'] | FormulaResult,
+  ctx: RowRenderContext,
+): CellBody | undefined {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? {type: '', v: numberText(value)} : UNWRITABLE;
   }
@@ -349,14 +354,19 @@ function valueBody(value: Cell['value'] | FormulaResult, epoch: DateEpoch): Cell
     // number format (applied when its style is composed) reads back as a Date.
     return Number.isNaN(value.getTime())
       ? UNWRITABLE
-      : {type: '', v: numberText(dateToSerial(value, epoch))};
+      : {type: '', v: numberText(dateToSerial(value, ctx.dateEpoch))};
   }
   // The code goes into `<v>` unescaped, which is sound only for the canonical spellings in ERROR_CODES.
   // `isErrorValue` asks for an `error` key and nothing more, so the set is checked here, as every closed
   // token is at the write boundary: a code smuggled past the type closed the cell and wrote markup of
-  // its own into the sheet.
+  // its own into the sheet. An error Excel has no literal for is written as Excel stores it, `#VALUE!`
+  // beside the rich value naming it.
   if (isErrorValue(value)) {
-    return {type: 'e', v: checkedToken(value.error, isErrorCode, 'cell error value')};
+    checkedToken(value.error, isErrorCode, 'cell error value');
+    const vm = ctx.cellMetadata.markRichValueError(value.error);
+    return vm === undefined
+      ? {type: 'e', v: value.error}
+      : {type: 'e', v: '#VALUE!', vm: ` vm="${vm}"`};
   }
   return undefined;
 }
@@ -367,7 +377,7 @@ function cellXml(
   shared: SharedFormulaRole | undefined,
   ctx: RowRenderContext,
 ): string {
-  const {sharedStrings, dateEpoch: epoch} = ctx;
+  const {sharedStrings} = ctx;
   const ref = cell.address;
   const value = cell.value;
   const s = style !== 0 ? ` s="${style}"` : '';
@@ -375,8 +385,8 @@ function cellXml(
   const formula = cellFormulaXml(cell, s, shared, ctx);
   if (formula !== undefined) return formula;
 
-  const body = valueBody(value, epoch);
-  if (body !== undefined) return cellElement(ref, s, body.type, vElement(body.v));
+  const body = valueBody(value, ctx);
+  if (body !== undefined) return cellElement(ref, s, body.type, vElement(body.v), '', body.vm);
 
   // A string and rich text are one arm, not two: with shared strings on, both are pooled as an `<si>`
   // and the cell holds only the pool index (`t="s"`); with them off, both live inline in the cell.
@@ -407,7 +417,7 @@ function cellFormulaXml(
   shared: SharedFormulaRole | undefined,
   ctx: RowRenderContext,
 ): string | undefined {
-  const {dateEpoch: epoch, formulaNames} = ctx;
+  const {formulaNames} = ctx;
   const {address: ref, value} = cell;
   // A shared-formula master seeds the group with its formula text under `t="shared" ref si`; a clone
   // carries no text of its own, only a back-reference to the master's `si`. Its cached result still
@@ -415,10 +425,10 @@ function cellFormulaXml(
   if (shared !== undefined) {
     if (shared.ref !== undefined && isFormulaValue(value)) {
       const f = `<f t="shared" ref="${shared.ref}" si="${shared.si}">${escapeText(mangleFormula(value.formula, formulaNames))}</f>`;
-      return formulaBodyXml(ref, s, f, value.result, epoch);
+      return formulaBodyXml(ref, s, f, value.result, ctx);
     }
     const result = isSharedFormulaValue(value) ? value.result : undefined;
-    return formulaBodyXml(ref, s, `<f t="shared" si="${shared.si}"/>`, result, epoch);
+    return formulaBodyXml(ref, s, `<f t="shared" si="${shared.si}"/>`, result, ctx);
   }
   if (isDataTableFormulaValue(value)) {
     // A data-table formula carries no expression text, only its declaration attributes, which we
@@ -432,14 +442,14 @@ function cellFormulaXml(
       (value.r2Deleted === true ? ' del2="1"' : '') +
       textAttr('r1', value.r1) +
       textAttr('r2', value.r2);
-    return formulaBodyXml(ref, s, `<f t="dataTable" ${attrs}/>`, value.result, epoch);
+    return formulaBodyXml(ref, s, `<f t="dataTable" ${attrs}/>`, value.result, ctx);
   }
   if (isArrayFormulaValue(value)) {
     // A dynamic array differs from a legacy array formula only by the cell metadata its `cm` points
     // at; without that link Excel opens it as a Ctrl+Shift+Enter formula that no longer spills.
     const cm = value.dynamic === true ? ` cm="${ctx.cellMetadata.markDynamicArray()}"` : '';
     const f = `<f t="array" ref="${arrayFormulaRange(cell, value.ref)}">${escapeText(mangleFormula(value.formula, formulaNames))}</f>`;
-    return formulaBodyXml(ref, s, f, value.result, epoch, cm);
+    return formulaBodyXml(ref, s, f, value.result, ctx, cm);
   }
   if (isFormulaValue(value)) {
     return formulaBodyXml(
@@ -447,7 +457,7 @@ function cellFormulaXml(
       s,
       `<f>${escapeText(mangleFormula(value.formula, formulaNames))}</f>`,
       value.result,
-      epoch,
+      ctx,
     );
   }
   return undefined;
@@ -473,13 +483,15 @@ function formulaBodyXml(
   s: string,
   f: string,
   result: FormulaResult | undefined,
-  epoch: DateEpoch,
+  ctx: RowRenderContext,
   cm = '',
 ): string {
   // An uncalculated formula caches nothing, and the cell is the formula alone.
   if (result === undefined) return cellElement(ref, s, '', f, cm);
-  const body = valueBody(result, epoch);
-  if (body !== undefined) return cellElement(ref, s, body.type, f + vElement(body.v), cm);
+  const body = valueBody(result, ctx);
+  if (body !== undefined) {
+    return cellElement(ref, s, body.type, f + vElement(body.v), cm, body.vm);
+  }
   if (typeof result === 'string') {
     // The cached result of a string formula is a cell value, not structure, so it carries the
     // `_xHHHH_` escape a `<t>` does, and Excel decodes it here too (verified over COM: a `<v>` of

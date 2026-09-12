@@ -23,6 +23,7 @@ import {INTERNAL} from '../../core/internal.ts';
 import {Workbook} from '../../core/workbook.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
 import {parseXmlPasses} from '../../xml/xml-read.ts';
+import type {CellMetadataIndex} from '../cell-metadata/metadata.ts';
 import {UnsupportedFormatError} from '../opc/errors.ts';
 import {
   contentTypeResolver,
@@ -33,7 +34,7 @@ import type {ReadPackageOptions} from '../opc/read-options.ts';
 import {admitting, repairedSheetNames} from '../read-policy/read-repair.ts';
 import type {XfStyle} from '../style/xf-style.ts';
 import {readXlsbPackage} from '../xlsb/read.ts';
-import {parseDynamicArrayCellMetadata} from './cell-metadata.ts';
+import {readCellMetadata} from './cell-metadata.ts';
 import type {SharedString} from './cell-value.ts';
 import {applyConditionalFormattings, conditionalFormattingPass} from './conditional-formatting.ts';
 import {
@@ -133,9 +134,7 @@ export function readXlsx(data: Uint8Array, options: ReadPackageOptions = {}): Wo
     contentTypeOf,
     sharedStrings,
     xfStyles,
-    dynamicArrayCells: parseDynamicArrayCellMetadata(
-      workbookRels.relatedText('sheetMetadata') ?? '',
-    ),
+    cellMetadata: readCellMetadata(workbookRels),
     // A picture used on more than one sheet is one media part; caching by media path across the
     // whole loop keeps it a single workbook image so a re-write does not duplicate the bytes.
     imageIdByMediaPath: new Map<string, number>(),
@@ -236,8 +235,8 @@ export function readXlsx(data: Uint8Array, options: ReadPackageOptions = {}): Wo
 interface SheetReadContext extends PackageReadContext {
   readonly sharedStrings: readonly SharedString[];
   readonly xfStyles: readonly XfStyle[];
-  /** The `cm` values the workbook's cell metadata marks as dynamic arrays, for the sheet's formulas. */
-  readonly dynamicArrayCells: ReadonlySet<number>;
+  /** What the workbook's `cm` and `vm` values resolve to, for the sheet's cells. */
+  readonly cellMetadata: CellMetadataIndex;
   /** Every name the workbook defines, as `definedNameKeys` spells them, for the sheet's formulas. */
   readonly definedNames: ReadonlySet<string>;
 }
@@ -262,7 +261,7 @@ interface SheetReadContext extends PackageReadContext {
  * the order rather than vanishing from the workbook.
  */
 function readSheet(sheet: Worksheet, path: string | undefined, context: SheetReadContext): void {
-  const {pkg, workbook, sharedStrings, xfStyles, definedNames, dynamicArrayCells} = context;
+  const {pkg, workbook, sharedStrings, xfStyles, definedNames, cellMetadata} = context;
   const {partText} = pkg;
   const sheetXml = path === undefined ? undefined : partText(path);
 
@@ -278,14 +277,7 @@ function readSheet(sheet: Worksheet, path: string | undefined, context: SheetRea
   const references = worksheetReferencePass();
   if (sheetXml !== undefined) {
     parseXmlPasses(sheetXml, [
-      worksheetPass(
-        sheet,
-        sharedStrings,
-        xfStyles,
-        workbook.dateEpoch,
-        definedNames,
-        dynamicArrayCells,
-      ),
+      worksheetPass(sheet, sharedStrings, xfStyles, workbook.dateEpoch, definedNames, cellMetadata),
       hyperlinks,
       validations,
       extendedValidations,

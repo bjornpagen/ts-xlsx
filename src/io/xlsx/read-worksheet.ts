@@ -22,6 +22,7 @@ import type {Worksheet} from '../../core/worksheet.ts';
 import {decodeSpreadsheetText, numFinite, numInteger} from '../../xml/xml-attrs.ts';
 import {type SaxHandlers, type SaxPass, TextCapture} from '../../xml/xml-read.ts';
 import {boolPresent, boolStrict, localName, type XmlAttributes} from '../../xml/xml-scan.ts';
+import type {CellMetadataIndex} from '../cell-metadata/metadata.ts';
 import {ColumnRecordBudget} from '../read-policy/column-budget.ts';
 import {admitting} from '../read-policy/read-repair.ts';
 import {CellStyleResolver} from '../style/cell-style-resolution.ts';
@@ -163,8 +164,8 @@ class AutoFilterAccumulator {
  * the same events, so they all share one parse of it rather than scanning it once each.
  *
  * `definedNames` is every name the workbook defines, as `definedNameKeys` spells them: the workbook
- * part is read before any sheet, so they are known before the first formula is. `dynamicArrayCells`
- * is the `cm` values the workbook's cell metadata marks as dynamic arrays, read from its own part.
+ * part is read before any sheet, so they are known before the first formula is. `cellMetadata` is
+ * what the workbook's `cm` and `vm` values resolve to, read from the parts they index.
  */
 export function worksheetPass(
   sheet: Worksheet,
@@ -172,11 +173,11 @@ export function worksheetPass(
   xfStyles: ReadonlyArray<XfStyle>,
   dateEpoch: DateEpoch,
   definedNames: ReadonlySet<string>,
-  dynamicArrayCells: ReadonlySet<number>,
+  cellMetadata: CellMetadataIndex,
 ): SaxPass {
   // The one `<c>` currently being read: its address/type/style, formula, value, inline text, rich
   // runs, and the sheet-spanning shared-formula master map. Each `<c>` resets it and commits it.
-  const cell = new CellAccumulator({dateEpoch, definedNames, dynamicArrayCells});
+  const cell = new CellAccumulator({dateEpoch, definedNames, cellMetadata});
   const autoFilter = new AutoFilterAccumulator();
   const pageBreaks = new PageBreakAccumulator();
   const styleResolution = new CellStyleResolver();

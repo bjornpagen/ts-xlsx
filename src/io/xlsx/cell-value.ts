@@ -9,6 +9,7 @@ import {coerceDateSerial, type DateEpoch, parseDateText} from '../../core/date.t
 import {unmangleFunctions} from '../../core/formula.ts';
 import {
   type CellValue,
+  type ErrorCode,
   type FormulaResult,
   isErrorCode,
   type RichTextRun,
@@ -34,6 +35,8 @@ export interface RawCell {
   readonly arrayRef?: string | undefined;
   /** Whether the cell's `cm` points at cell metadata marking a dynamic array. */
   readonly dynamicArray?: boolean;
+  /** The error the cell's `vm` names through a rich value, which is the error a `t="e"` cell holds. */
+  readonly valueError?: ErrorCode | undefined;
   /** Whether a `<v>` was present, `<v/>` included. */
   readonly hasValue: boolean;
   readonly valueText: string;
@@ -65,7 +68,7 @@ export function decodeCellContent(
   if (raw.hasFormula) {
     const stored = unmangleFunctions(raw.formula, definedNames);
     const result = raw.hasValue
-      ? decodeFormulaResult(raw.type, raw.valueText, numFmt, epoch)
+      ? decodeFormulaResult(raw.type, raw.valueText, numFmt, epoch, raw.valueError)
       : undefined;
     const cached = result === undefined ? {} : {result};
     if (raw.arrayRef !== undefined) {
@@ -121,9 +124,7 @@ function decodeValue(raw: RawCell, sharedStrings: readonly SharedString[]): Cell
       return boolTristate(valueText) ?? null;
     case 'e':
       if (valueText === '') return null;
-      // A code this library does not list keeps its text: an error Excel stores only beside a rich value
-      // (`#SPILL!`, `#FIELD!`) is not a literal, and a producer that writes one anyway wrote data.
-      return isErrorCode(valueText) ? {error: valueText} : valueText;
+      return errorOf(valueText, raw.valueError);
     default:
       // Not a bare `Number()`, which reads an unparseable token as `NaN`, a number that satisfies every
       // guard downstream and that the writer then refuses to emit, and an empty `<v>` as zero.
@@ -140,8 +141,17 @@ export function decodeFormulaResult(
   valueText: string,
   numFmt: string | undefined,
   epoch: DateEpoch,
+  valueError?: ErrorCode,
 ): FormulaResult | undefined {
-  return coerceDateSerial(decodeResult(type, valueText), numFmt, epoch);
+  return coerceDateSerial(decodeResult(type, valueText, valueError), numFmt, epoch);
+}
+
+// A typed error cell's error. Excel stores an error it has no literal for as `#VALUE!` and names the real
+// one through the cell's `vm`, which therefore wins over the `<v>`. A code this library does not list
+// keeps its text: a producer writing `#PYTHON!` literally wrote data, not an error Excel reads.
+function errorOf(valueText: string, valueError: ErrorCode | undefined): FormulaResult {
+  if (valueError !== undefined) return {error: valueError};
+  return isErrorCode(valueText) ? {error: valueText} : valueText;
 }
 
 // The formula-result subset of `decodeValue`: a cached result is only ever a string, boolean,
@@ -153,7 +163,11 @@ export function decodeFormulaResult(
 // `t="b"`, `t="e"` and a number exactly as it showed a formula with no `<v>`: an empty string, not
 // FALSE, an error or 0 (`test/corpus/fixtures/excel-oracle/formula-empty-cached-result.json`). Under
 // `t="str"` a present `<v>` is text, as it is on a plain cell.
-function decodeResult(type: string, valueText: string): FormulaResult | undefined {
+function decodeResult(
+  type: string,
+  valueText: string,
+  valueError: ErrorCode | undefined,
+): FormulaResult | undefined {
   switch (type) {
     case 'str':
       // The cached result of a string formula is a cell value, and Excel escapes and decodes it as
@@ -165,7 +179,7 @@ function decodeResult(type: string, valueText: string): FormulaResult | undefine
       return boolTristate(valueText);
     case 'e':
       if (valueText === '') return undefined;
-      return isErrorCode(valueText) ? {error: valueText} : valueText;
+      return errorOf(valueText, valueError);
     default:
       // Narrowed exactly as a plain numeric cell is: an unparseable cached result is no cached
       // result, which is the state the cell would have reached anyway on the next write.

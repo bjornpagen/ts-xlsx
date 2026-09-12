@@ -37,6 +37,8 @@ import {
   pivotCacheDefinitionPart,
   pivotCacheRecordsPart,
   pivotTablePart,
+  RICH_VALUE_STRUCTURES_PART,
+  RICH_VALUES_PART,
   SHARED_STRINGS_PART,
   STYLES_PART,
   tablePart,
@@ -71,6 +73,8 @@ const CT = {
   threadedComments: 'application/vnd.ms-excel.threadedcomments+xml',
   person: 'application/vnd.ms-excel.person+xml',
   sheetMetadata: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml',
+  richValues: 'application/vnd.ms-excel.rdrichvalue+xml',
+  richValueStructures: 'application/vnd.ms-excel.rdrichvaluestructure+xml',
 } as const;
 
 // A preserved workbook reference with the relationship id recorded for it (see the writer's
@@ -118,6 +122,7 @@ export interface ContentTypeInputs {
   readonly threadedCommentNumbers: readonly number[];
   readonly hasPersons: boolean;
   readonly hasCellMetadata: boolean;
+  readonly hasRichValues: boolean;
 }
 
 export function contentTypesXml(inputs: ContentTypeInputs): string {
@@ -206,6 +211,7 @@ function contentTypeOverrides(
     hasSharedStrings,
     hasPersons,
     hasCellMetadata,
+    hasRichValues,
     preservedParts,
     preservedWorkbookRefs,
   } = inputs;
@@ -241,6 +247,12 @@ function contentTypeOverrides(
     ...(hasSharedStrings ? [override(SHARED_STRINGS_PART, CT.sharedStrings)] : []),
     ...(hasPersons ? [override(PERSONS_PART, CT.person)] : []),
     ...(hasCellMetadata ? [override(METADATA_PART, CT.sheetMetadata)] : []),
+    ...(hasRichValues
+      ? [
+          override(RICH_VALUES_PART, CT.richValues),
+          override(RICH_VALUE_STRUCTURES_PART, CT.richValueStructures),
+        ]
+      : []),
     override(CORE_PROPS_PART, CT.core),
     override(APP_PROPS_PART, CT.app),
     ...preservedOverrides,

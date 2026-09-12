@@ -73,6 +73,12 @@ export const DYNAMIC_ARRAY_PROPERTIES_EXT_URI = '{bdbb8cdc-fa1e-496e-a857-3c3f30
 export const DYNAMIC_ARRAY_NS =
   'http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray';
 
+/** The extension a rich-value metadata block names its rich value in (`<xlrd:rvb i>`). */
+export const RICH_VALUE_BLOCK_EXT_URI = '{3e2802c4-a4d2-4d8b-9148-e3be6c30e623}';
+
+/** The 2017 rich-data namespace (`xlrd:`): the rich values, their structures, and the blocks naming them. */
+export const RICH_DATA_NS = 'http://schemas.microsoft.com/office/spreadsheetml/2017/richdata';
+
 /**
  * Whether an element belongs to the standard SpreadsheetML vocabulary rather than to an extension.
  *

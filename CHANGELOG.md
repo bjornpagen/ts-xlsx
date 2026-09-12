@@ -14,6 +14,16 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Added
 
+- **Errors Excel has no literal for keep their kind.** `ErrorCode` gains `#SPILL!`, `#CONNECT!`,
+  `#BLOCKED!`, `#UNKNOWN!`, `#FIELD!` and `#CALC!`, so an exhaustive switch over it needs six more arms.
+  Excel stores each of them as `<v>#VALUE!</v>` with a `vm` pointing through `xl/metadata.xml` at a rich
+  value whose `errorType` names the real error. A read used to take such a cell for `#VALUE!` and a save
+  dropped the rich value, so a spill error or an empty FILTER came back as `#VALUE!`; the writer refused
+  the six outright. `readXlsx` and `readSheetRows` now read the error the rich value names, whether the
+  cell holds it or a formula cached it, and both writers store each of the six as Excel does, beside the
+  value metadata and the rich-value parts. A `t="e"` cell spelling one of them literally reads as that
+  error too.
+
 - **Array formulas keep their range and their kind.** `ArrayFormulaValue`
   (`{shareType: 'array', formula, ref, dynamic?, result?}`, guarded by `isArrayFormulaValue`) is a cell
   holding `<f t="array">`: a legacy Ctrl+Shift+Enter formula, or, with `dynamic`, a dynamic-array formula

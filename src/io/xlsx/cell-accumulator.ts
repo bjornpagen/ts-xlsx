@@ -33,6 +33,7 @@ import type {
 import type {Worksheet} from '../../core/worksheet.ts';
 import {numInteger} from '../../xml/xml-attrs.ts';
 import {boolStrict, type XmlAttributes} from '../../xml/xml-scan.ts';
+import type {CellMetadataIndex} from '../cell-metadata/metadata.ts';
 import {applyXfToCell, type XfStyle} from '../style/xf-style.ts';
 import {
   decodeCellContent,
@@ -69,8 +70,9 @@ export class CellAccumulator {
   #style = -1;
   #col = -1;
   #row = -1;
-  // The cell's `cm`: which block of the workbook's cell metadata it points at, or -1 for none.
-  #cellMetadata = -1;
+  // The cell's `cm` and `vm`: which block of the workbook's cell and value metadata it points at, or -1.
+  #cellMetadataBlock = -1;
+  #valueMetadataBlock = -1;
   // Whether an in-grid `<row>` is open, the only place a cell can be placed.
   #rowOpen = false;
   // Where a `<c>` with no `r` of its own sits: the column after the last one placed in this row.
@@ -104,13 +106,13 @@ export class CellAccumulator {
   // The workbook's defined names, held for the sheet on the same terms: whether a function a formula
   // passes as a value sheds its `_xleta.` depends on them.
   readonly #definedNames: ReadonlySet<string>;
-  // The `cm` values the workbook's cell metadata marks as dynamic arrays, on the same terms again.
-  readonly #dynamicArrayCells: ReadonlySet<number>;
+  // What the workbook's `cm` and `vm` values resolve to, on the same terms again.
+  readonly #cellMetadata: CellMetadataIndex;
 
   constructor(options: {
     readonly dateEpoch: DateEpoch;
     readonly definedNames: ReadonlySet<string>;
-    readonly dynamicArrayCells: ReadonlySet<number>;
+    readonly cellMetadata: CellMetadataIndex;
   }) {
     // Both worksheet readers read an inline string's runs. A pooled string's runs are read for both
     // by the shared-string reader, so flattening here only made the streamed value depend on whether
@@ -118,7 +120,7 @@ export class CellAccumulator {
     this.#runs = new RunAccumulator({container: 'is', readRuns: true});
     this.#dateEpoch = options.dateEpoch;
     this.#definedNames = options.definedNames;
-    this.#dynamicArrayCells = options.dynamicArrayCells;
+    this.#cellMetadata = options.cellMetadata;
   }
 
   /** This cell's `<c r>` address (`"B3"`), or '' when it carried none. */
@@ -164,7 +166,8 @@ export class CellAccumulator {
   #beginCell(attrs: XmlAttributes): void {
     this.#type = attrs.t ?? '';
     this.#style = numInteger(attrs.s, 0) ?? -1;
-    this.#cellMetadata = numInteger(attrs.cm, 1) ?? -1;
+    this.#cellMetadataBlock = numInteger(attrs.cm, 1) ?? -1;
+    this.#valueMetadataBlock = numInteger(attrs.vm, 1) ?? -1;
     this.#placeCell(attrs.r);
     this.#formula = '';
     this.#valueText = '';
@@ -379,7 +382,13 @@ export class CellAccumulator {
   // writer will emit for it either way.
   #cachedResult(style: XfStyle | undefined): {result?: FormulaResult} {
     if (!this.#hasValue) return {};
-    const result = decodeFormulaResult(this.#type, this.#valueText, style?.numFmt, this.#dateEpoch);
+    const result = decodeFormulaResult(
+      this.#type,
+      this.#valueText,
+      style?.numFmt,
+      this.#dateEpoch,
+      this.#cellMetadata.valueErrors.get(this.#valueMetadataBlock),
+    );
     return result === undefined ? {} : {result};
   }
 
@@ -394,7 +403,8 @@ export class CellAccumulator {
       hasFormula: this.#hasFormula,
       formula: this.#formula,
       arrayRef: this.#arrayRef,
-      dynamicArray: this.#dynamicArrayCells.has(this.#cellMetadata),
+      dynamicArray: this.#cellMetadata.dynamicArrayCells.has(this.#cellMetadataBlock),
+      valueError: this.#cellMetadata.valueErrors.get(this.#valueMetadataBlock),
       hasValue: this.#hasValue,
       valueText: this.#valueText,
       hasInlineString: this.#runs.opened,

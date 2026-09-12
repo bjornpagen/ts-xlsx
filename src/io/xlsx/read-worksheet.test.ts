@@ -4,6 +4,7 @@ import {test} from 'node:test';
 import {MAX_COLUMN, MAX_ROW} from '../../core/address.ts';
 import {Workbook} from '../../core/workbook.ts';
 import {parseXmlPasses} from '../../xml/xml-read.ts';
+import {NO_CELL_METADATA} from '../cell-metadata/metadata.ts';
 import {worksheetPass} from './read-worksheet.ts';
 import {sheetViewsXml} from './sheet-properties.ts';
 
@@ -19,7 +20,7 @@ function sheet(body: string) {
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
       body +
       '</worksheet>',
-    [worksheetPass(worksheet, [], [], 1900, new Set(), new Set())],
+    [worksheetPass(worksheet, [], [], 1900, new Set(), NO_CELL_METADATA)],
   );
   return worksheet;
 }

@@ -93,10 +93,15 @@ const RULES: readonly Rule[] = [
     because: 'a rule every reader obeys belongs to no codec, so it may not reach into one',
   },
   {
+    layer: 'src/io/cell-metadata',
+    forbidden: ['src/io/xlsx', 'src/io/xlsb', 'src/io/csv'],
+    because: 'what a cell points into belongs to the workbook, not to the codec that spells it',
+  },
+  {
     layer: 'src/io/xlsb',
     forbidden: ['src/io/xlsx'],
     because:
-      'the BIFF12 and XML codecs are peers; shared code belongs in src/io/opc or src/io/style',
+      'the BIFF12 and XML codecs are peers; shared code belongs in src/io/opc, src/io/style or src/io/cell-metadata',
   },
 ];
 

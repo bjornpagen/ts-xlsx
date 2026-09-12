@@ -9,6 +9,7 @@ import {isFormulaValue} from '../../core/value.ts';
 import {DEFAULT_WORKBOOK_VIEW, Workbook, type WorkbookView} from '../../core/workbook.ts';
 import {Worksheet} from '../../core/worksheet.ts';
 import {parseXmlPasses} from '../../xml/xml-read.ts';
+import {NO_CELL_METADATA} from '../cell-metadata/metadata.ts';
 import {UnsupportedFormatError} from '../opc/errors.ts';
 import {conditionalFormattingPass} from './conditional-formatting.ts';
 import {dataValidationPass, extendedDataValidationPass} from './data-validation.ts';
@@ -1390,7 +1391,7 @@ test('the worksheet part is read in one pass, not once per reader', () => {
 
   const apart = countingSource(xml);
   parseXmlPasses(apart.source, [
-    worksheetPass(new Worksheet('S', 1), [], [], 1900, new Set(), new Set()),
+    worksheetPass(new Worksheet('S', 1), [], [], 1900, new Set(), NO_CELL_METADATA),
   ]);
   parseXmlPasses(apart.source, [sheetHyperlinkPass()]);
   parseXmlPasses(apart.source, [dataValidationPass(new Set())]);
@@ -1399,7 +1400,7 @@ test('the worksheet part is read in one pass, not once per reader', () => {
 
   const together = countingSource(xml);
   parseXmlPasses(together.source, [
-    worksheetPass(new Worksheet('S', 1), [], [], 1900, new Set(), new Set()),
+    worksheetPass(new Worksheet('S', 1), [], [], 1900, new Set(), NO_CELL_METADATA),
     sheetHyperlinkPass(),
     dataValidationPass(new Set()),
     extendedDataValidationPass(new Set()),

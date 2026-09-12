@@ -19,7 +19,7 @@ import {isRelType} from '../../rel-type.ts';
 import {relsPathFor, THEME_PART_PATH} from '../opc/part-paths.ts';
 import {relsPartXml} from '../opc/rels.ts';
 import {FIXED_ENTRY_MTIME} from '../opc/zip-mtime.ts';
-import {CellMetadataTable} from './cell-metadata.ts';
+import {RICH_VALUE_STRUCTURES_XML, WorkbookMetadataTable} from './cell-metadata.ts';
 import {collectComments, commentsXml, liveCells, vmlDrawingXml} from './comments.ts';
 import {planHyperlinks} from './hyperlinks.ts';
 import {type DrawingImage, drawingXml} from './images.ts';
@@ -56,6 +56,8 @@ import {
   pivotCacheRecordsPart,
   pivotTablePart,
   printerSettingsPart,
+  RICH_VALUE_STRUCTURES_PART,
+  RICH_VALUES_PART,
   SHARED_STRINGS_PART,
   STYLES_PART,
   tablePart,
@@ -109,11 +111,11 @@ export interface InternalWriteOptions extends WriteOptions {
   readonly styles?: StyleRegistry;
 
   /**
-   * The cell metadata to record into, in place of a fresh table, for the reason {@link styles} is
-   * shared: a row the streaming writer rendered eagerly may already point a dynamic-array formula at
-   * the part this table decides whether to emit.
+   * The workbook metadata to record into, in place of a fresh table, for the reason {@link styles} is
+   * shared: a row the streaming writer rendered eagerly may already point a dynamic-array formula or a
+   * rich-value error at the parts this table decides whether to emit.
    */
-  readonly cellMetadata?: CellMetadataTable;
+  readonly cellMetadata?: WorkbookMetadataTable;
 
   /**
    * Per-sheet rows already serialised and evicted from the model by the streaming writer, keyed by
@@ -410,11 +412,19 @@ function planWorkbookRelationships(context: {
   readonly hasSharedStrings: boolean;
   readonly hasPersons: boolean;
   readonly hasCellMetadata: boolean;
+  readonly hasRichValues: boolean;
   readonly preservedWorkbook: readonly PreservedWorkbookReferencePlan[];
   readonly pivots: readonly PivotPlan[];
 }): WorkbookRelPlan {
-  const {sheetCount, hasSharedStrings, hasPersons, hasCellMetadata, preservedWorkbook, pivots} =
-    context;
+  const {
+    sheetCount,
+    hasSharedStrings,
+    hasPersons,
+    hasCellMetadata,
+    hasRichValues,
+    preservedWorkbook,
+    pivots,
+  } = context;
   const rels = new RelationshipLedger(WORKBOOK_PART);
   const sheetRelIds = Array.from({length: sheetCount}, (_, i) =>
     rels.add(REL.worksheet, worksheetPart(i + 1)),
@@ -425,8 +435,13 @@ function planWorkbookRelationships(context: {
   // The threaded-comment identity registry every conversation on every sheet resolves its authors and
   // @mentions through. Workbook-level and singular, so this one relationship serves all the sheets.
   if (hasPersons) rels.add(REL.person, PERSONS_PART);
-  // Found by type, like the pool: a cell's `cm` indexes into the part without naming it.
+  // Found by type, like the pool: a cell's `cm` and `vm` index into the part without naming it, and
+  // the rich values a `vm` reaches are found the same way.
   if (hasCellMetadata) rels.add(REL.sheetMetadata, METADATA_PART);
+  if (hasRichValues) {
+    rels.add(REL.rdRichValue, RICH_VALUES_PART);
+    rels.add(REL.rdRichValueStructure, RICH_VALUE_STRUCTURES_PART);
+  }
   const preservedWorkbookRels = preservedWorkbook.map((ref) => ({
     ...ref,
     relId: rels.add(ref.relType, ref.entryPath),
@@ -535,7 +550,7 @@ function serialiseSheets(context: {
   readonly plan: PackagePlan;
   readonly styles: StyleRegistry;
   readonly sharedStrings: SharedStringTable | null;
-  readonly cellMetadata: CellMetadataTable;
+  readonly cellMetadata: WorkbookMetadataTable;
   readonly flushed: InternalWriteOptions['flushed'];
 }): string[] {
   const {workbook, sheets, plan, styles, sharedStrings, cellMetadata, flushed} = context;
@@ -573,7 +588,7 @@ function emitPackageParts(context: {
   readonly plan: PackagePlan;
   readonly styles: StyleRegistry;
   readonly sharedStrings: SharedStringTable | null;
-  readonly cellMetadata: CellMetadataTable;
+  readonly cellMetadata: WorkbookMetadataTable;
   readonly sheetXml: readonly string[];
 }): Record<string, Uint8Array> {
   const {workbook, sheets, plan, styles, sharedStrings, cellMetadata, sheetXml} = context;
@@ -584,8 +599,9 @@ function emitPackageParts(context: {
   // string cells never fabricates an empty table.
   const hasSharedStrings = sharedStrings !== null && !sharedStrings.isEmpty;
   // Filled by the same pass, so known on the same terms: only a sheet that wrote a dynamic-array
-  // formula gives the workbook cell metadata to declare.
+  // formula or an error Excel has no literal for gives the workbook metadata to declare.
   const hasCellMetadata = !cellMetadata.isEmpty;
+  const hasRichValues = cellMetadata.hasRichValues;
 
   const commentNumbers = numbersOf(perSheet, (sheetPlan) => sheetPlan.comments);
   const drawingNumbers = numbersOf(perSheet, (sheetPlan) => sheetPlan.drawing);
@@ -602,6 +618,7 @@ function emitPackageParts(context: {
     hasSharedStrings,
     hasPersons: persons.length > 0,
     hasCellMetadata,
+    hasRichValues,
     preservedWorkbook: preserved.workbook,
     pivots: allPivots,
   });
@@ -625,6 +642,7 @@ function emitPackageParts(context: {
         threadedCommentNumbers,
         hasPersons: persons.length > 0,
         hasCellMetadata,
+        hasRichValues,
       }),
     ),
   );
@@ -655,6 +673,10 @@ function emitPackageParts(context: {
   // Singular and unnumbered, unlike the per-sheet thread parts: one registry serves the whole workbook.
   if (persons.length > 0) files.add(PERSONS_PART, strToU8(personsXml(persons)));
   if (hasCellMetadata) files.add(METADATA_PART, strToU8(cellMetadata.toXml()));
+  if (hasRichValues) {
+    files.add(RICH_VALUES_PART, strToU8(cellMetadata.richValuesXml()));
+    files.add(RICH_VALUE_STRUCTURES_PART, strToU8(RICH_VALUE_STRUCTURES_XML));
+  }
   for (const part of media.parts) {
     files.add(mediaPart(part.number, part.extension), part.data);
   }
@@ -704,7 +726,7 @@ export function buildPackageParts(
   // The streaming writer supplies its own registry (already seeded, and already carrying its eagerly
   // flushed rows' styles); the buffered path seeds a fresh one here.
   const styles = options.styles ?? createStyleRegistry(workbook);
-  const cellMetadata = options.cellMetadata ?? new CellMetadataTable();
+  const cellMetadata = options.cellMetadata ?? new WorkbookMetadataTable();
 
   const plan = planPackage(workbook, sheets, options.flushed);
   const sheetXml = serialiseSheets({

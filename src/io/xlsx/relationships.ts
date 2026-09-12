@@ -26,6 +26,9 @@ export const NS = {
 // through. Local to this table: nothing outside it needs the base URI.
 const MS_OFFICE_2017_RELS_NS = 'http://schemas.microsoft.com/office/2017/10/relationships';
 
+// The Office extension relationships namespace the workbook reaches its rich values through.
+const RICH_DATA_RELS_NS = 'http://schemas.microsoft.com/office/2017/06/relationships';
+
 export const REL = {
   worksheet: `${NS.docRels}/worksheet`,
   styles: `${NS.docRels}/styles`,
@@ -45,6 +48,8 @@ export const REL = {
   pivotCacheDefinition: `${NS.docRels}/pivotCacheDefinition`,
   pivotCacheRecords: `${NS.docRels}/pivotCacheRecords`,
   sheetMetadata: `${NS.docRels}/sheetMetadata`,
+  rdRichValue: `${RICH_DATA_RELS_NS}/rdRichValue`,
+  rdRichValueStructure: `${RICH_DATA_RELS_NS}/rdRichValueStructure`,
   // Threaded comments are a Microsoft extension, so both types live under the 2017/10 Office
   // relationships namespace rather than the standard officeDocument one.
   threadedComment: `${MS_OFFICE_2017_RELS_NS}/threadedComment`,

@@ -102,7 +102,10 @@ const DIST = join(ROOT, 'dist');
 // drawing rather than refused, 1.3 KB over.
 //
 // Raised again, from 652, when an array formula began reading and writing its range and the cell metadata that marks a dynamic array.
-const TOTAL_BUDGET_BYTES = 662 * 1024;
+//
+// Raised again, from 662, when an error Excel has no literal for began to be read from and written
+// to the value metadata and rich-value parts that name it, 8.5 KB over.
+const TOTAL_BUDGET_BYTES = 672 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -221,7 +224,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 639, by the same picture merge as `/xlsx`, 0.9 KB over.
   //
   // Raised again, from 640, when an array formula began reading and writing its range and the cell metadata that marks a dynamic array.
-  '.': 650,
+  //
+  // Raised again, from 650, by the same rich-value errors as `/xlsx`, 8.8 KB over.
+  '.': 660,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -324,7 +329,11 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // drawing, its anchors and relationships numbered past the drawing's own, 0.5 KB over.
   //
   // Raised again, from 622, when an array formula began reading and writing its range and the cell metadata that marks a dynamic array.
-  './xlsx': 632,
+  //
+  // Raised again, from 632, when an error Excel has no literal for began to be read from and written to
+  // the value metadata and rich-value parts that name it, in `io/cell-metadata/` for the model both
+  // codecs resolve a cell through and in the XML codec for the parts, 8.3 KB over.
+  './xlsx': 642,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -482,7 +491,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 466, by the same picture merge as `/xlsx`, 0.9 KB over.
   //
   // Raised again, from 467, when an array formula began reading and writing its range and the cell metadata that marks a dynamic array.
-  './node': 475,
+  //
+  // Raised again, from 475, by the same rich-value errors as `/xlsx`, 8.6 KB over.
+  './node': 485,
   // Raised from 50 when the MS-OVBA encoder stopped rescanning its whole back-window for every
   // output byte. The hash chain that replaced the rescan is the cost, and it buys a time bound on a
   // path an untrusted `.xlsm` reaches through `removeVbaModule`; the CFB and `dir` guards landed
