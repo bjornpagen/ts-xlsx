@@ -45,7 +45,9 @@ is dropped on save.
   image drawing shares the same drawing part that also hosts a chart. A drawing part can mix
   charts and images, so partial ownership must be handled without corrupting the shared XML.
 - Relationship-id and part-name collision handling when the library also adds its own new parts
-  (images, tables) to a workbook that already carries preserved chart parts.
+  (images, tables) to a workbook that already carries preserved chart parts. For a picture on the
+  sheet a chart's drawing sits on, the answer is recorded by `picture-joins-a-kept-drawing`: the
+  picture joins the kept drawing, its relationship and shape ids numbered past the drawing's own.
 - Interaction with the streaming write path, which builds the package incrementally and may have
   no place to stash preserved parts.
 - Whether preserved parts should be exposed read-only in the public API, as an inventory of

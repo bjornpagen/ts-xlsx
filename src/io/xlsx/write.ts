@@ -13,7 +13,7 @@ import type {Person} from '../../core/comment-thread.ts';
 import {formulaNamesInScope} from '../../core/formula.ts';
 import {pictureProperties} from '../../core/image.ts';
 import type {Workbook} from '../../core/workbook.ts';
-import {refuseImagesBesideKeptDrawing, type Worksheet} from '../../core/worksheet.ts';
+import type {Worksheet} from '../../core/worksheet.ts';
 import {AuthoringError, InternalError, quoted} from '../../errors.ts';
 import {isRelType} from '../../rel-type.ts';
 import {relsPathFor, THEME_PART_PATH} from '../opc/part-paths.ts';
@@ -27,6 +27,7 @@ import {
   type CommentPlan,
   type DrawingPlan,
   type MediaPlan,
+  type PicturesJoiningDrawing,
   type PivotPlan,
   type PlannedRelationship,
   type PreservedPartPlan,
@@ -205,6 +206,34 @@ interface PartNumbering {
   pivot: number;
 }
 
+// The source path of the drawing a sheet kept whole from a file, because it holds content the image
+// model cannot write back, or `undefined` for a sheet that kept none.
+function keptDrawingPath(sheet: Worksheet): string | undefined {
+  return sheet.preservedReferences.find((reference) => reference.element === 'drawing')?.entryPath;
+}
+
+// Lay out a sheet's pictures for a drawing, recording each one's media and link relationships in the
+// drawing's own ledger, whether that drawing is one the writer generates or one kept from a file.
+function drawingImages(
+  sheet: Worksheet,
+  media: MediaPlan,
+  drawingRels: RelationshipLedger,
+): DrawingImage[] {
+  return sheet.images.map((image): DrawingImage => {
+    const {number: mediaNumber, image: registered} = media.resolve(image.imageId);
+    const embedId = drawingRels.add(REL.image, mediaPart(mediaNumber, registered.extension));
+    const properties = pictureProperties(image);
+    const target = properties.hyperlink?.target;
+    // A link to a place in this workbook is a hyperlink relationship whose target is the `#` location,
+    // not an external one, which is how Excel writes it; a URL is an external relationship.
+    if (target === undefined) return {anchor: image.anchor, embedId, properties};
+    const hyperlinkId = target.startsWith('#')
+      ? drawingRels.addInDocument(REL.hyperlink, target)
+      : drawingRels.addExternal(REL.hyperlink, target);
+    return {anchor: image.anchor, embedId, properties, hyperlinkId};
+  });
+}
+
 /**
  * Plan one sheet's parts, recording every sheet-local relationship in that sheet's own ledger as its
  * id is taken, in the one canonical order the package wires them: tables, drawing, comments (VML +
@@ -234,32 +263,19 @@ function planSheet(context: {
   });
 
   let drawing: DrawingPlan | null = null;
-  if (sheet.images.length > 0) {
-    // The authoring doors refuse this already; every write path comes through here, so this is the
-    // guarantee that a kept drawing is never left unreferenced by a planned one.
-    refuseImagesBesideKeptDrawing(sheet);
+  // A sheet that kept a drawing from a file writes its pictures into that drawing instead (see
+  // `planPackage`): a worksheet references one drawing, and a second one of the pictures' own would
+  // leave the kept one, and the chart or shape in it, unreferenced.
+  if (sheet.images.length > 0 && keptDrawingPath(sheet) === undefined) {
     const number = ++numbering.drawing;
     const path = drawingPart(number);
     // An image's embed relationship belongs to the drawing part, so it is recorded in the drawing's
     // own ledger rather than the sheet's.
     const drawingRels = new RelationshipLedger(path);
-    const images = sheet.images.map((image): DrawingImage => {
-      const {number: mediaNumber, image: registered} = media.resolve(image.imageId);
-      const embedId = drawingRels.add(REL.image, mediaPart(mediaNumber, registered.extension));
-      const properties = pictureProperties(image);
-      const target = properties.hyperlink?.target;
-      // A link to a place in this workbook is a hyperlink relationship whose target is the `#` location,
-      // not an external one, which is how Excel writes it; a URL is an external relationship.
-      if (target === undefined) return {anchor: image.anchor, embedId, properties};
-      const hyperlinkId = target.startsWith('#')
-        ? drawingRels.addInDocument(REL.hyperlink, target)
-        : drawingRels.addExternal(REL.hyperlink, target);
-      return {anchor: image.anchor, embedId, properties, hyperlinkId};
-    });
     drawing = {
       number,
       relId: rels.add(REL.drawing, path),
-      images,
+      images: drawingImages(sheet, media, drawingRels),
       relationships: drawingRels.relationships,
     };
   }
@@ -347,10 +363,9 @@ function numbersOf(
 
 // Resolve one sheet's tail reference ids (the `<drawing>`/`<legacyDrawing>`/`<legacyDrawingHF>`/
 // `<picture>` slots and the slicer list) from its plan. A preserved `<drawing>` and a modeled one never
-// share a sheet (`planSheet` refuses one that has both), so the drawing slot takes whichever exists; a
-// comment's VML rides the legacy-
-// drawing slot; and each preserved slicer surfaces its rel id so the `<x14:slicerList>` can reactivate
-// the widget rather than orphan its part.
+// share a sheet, since a sheet that kept a drawing writes its pictures into it, so the drawing slot
+// takes whichever exists; a comment's VML rides the legacy-drawing slot; and each preserved slicer
+// surfaces its rel id so the `<x14:slicerList>` can reactivate the widget rather than orphan its part.
 function resolveSheetReferences(plan: SheetPlan): SheetReferences {
   const refs = plan.preservedRefs;
   const preservedDrawingRelId = refs.find((ref) => ref.element === 'drawing')?.relId ?? null;
@@ -455,7 +470,16 @@ function planPackage(
   // paths. Preserved parts are renumbered past the parts the writer generates of the same kind
   // (drawings, VML, media), so resolving them needs only those generated counts; each sheet's
   // preserved references take their sheet-local rel ids in canonical position below.
-  const generatedDrawingCount = sheets.filter((sheet) => sheet.images.length > 0).length;
+  // A sheet that kept a drawing from a file writes its pictures into that drawing rather than into one
+  // of their own, so it generates none; its pictures reach the planner keyed by the kept drawing's path.
+  const pictures = new Map<string, PicturesJoiningDrawing>();
+  let generatedDrawingCount = 0;
+  for (const sheet of sheets) {
+    if (sheet.images.length === 0) continue;
+    const kept = keptDrawingPath(sheet);
+    if (kept === undefined) generatedDrawingCount += 1;
+    else pictures.set(kept, (ledger) => drawingImages(sheet, media, ledger));
+  }
   // Pivots are numbered globally across the workbook, so the count of authored ones is what a
   // preserved pivot's parts must be renumbered past.
   const generatedPivotCount = sheets.reduce((total, sheet) => total + sheet.pivotTables.length, 0);
@@ -464,6 +488,7 @@ function planPackage(
     generatedDrawingCount,
     media.parts.length,
     generatedPivotCount,
+    pictures,
   );
 
   // The part numbers that are global across the workbook (tables, drawings, pivots) run through one

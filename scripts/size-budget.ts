@@ -97,7 +97,10 @@ const DIST = join(ROOT, 'dist');
 // Raised again, from 648, when a data bar's 2010 facets (lengths, border, direction, axis,
 // negative colours, automatic anchors) began to be read from and written to its extension, 1.9 KB
 // over.
-const TOTAL_BUDGET_BYTES = 650 * 1024;
+//
+// Raised again, from 650, when a picture added beside a kept drawing began to be written into that
+// drawing rather than refused, 1.3 KB over.
+const TOTAL_BUDGET_BYTES = 652 * 1024;
 
 // Roughly a tenth of headroom over the measured closure, per entry: enough that ordinary growth is
 // not a chore, tight enough that a whole codec crossing a boundary cannot hide inside it.
@@ -212,7 +215,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 627, by the same extension-form conditional formats as `/xlsx`, 9.0 KB over.
   //
   // Raised again, from 637, by the same data-bar facets as `/xlsx`, 1.5 KB over.
-  '.': 639,
+  //
+  // Raised again, from 639, by the same picture merge as `/xlsx`, 0.9 KB over.
+  '.': 640,
   // Raised from 207 when the VBA editors started writing `dir` records and cutting `PROJECT` lines as
   // bytes, rather than as spread arrays and re-encoded text. `Workbook` reaches the VBA editors, so
   // every entry that carries the model pays for it, and this one went over by a tenth of a kilobyte.
@@ -308,7 +313,10 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   //
   // Raised again, from 618, when the conditional-format codec began reading and writing a data bar's
   // 2010 facets, 2.1 KB over.
-  './xlsx': 621,
+  //
+  // Raised again, from 621, when a picture added to a sheet that kept its drawing began to join that
+  // drawing, its anchors and relationships numbered past the drawing's own, 0.5 KB over.
+  './xlsx': 622,
   // Raised from 282 when the style primitives gained real clone plans. A font, a border and a fill
   // were each copied with a spread, which shares everything one level down, so the plans and their
   // exhaustiveness proofs are the fix rather than an addition. They sit in `core/style.ts`, which
@@ -458,7 +466,9 @@ const ENTRY_BUDGETS_KB: Readonly<Record<string, number>> = {
   // Raised again, from 454, by the same extension-form conditional formats as `/xlsx`, 9.1 KB over.
   //
   // Raised again, from 464, by the same data-bar facets as `/xlsx`, 1.5 KB over.
-  './node': 466,
+  //
+  // Raised again, from 466, by the same picture merge as `/xlsx`, 0.9 KB over.
+  './node': 467,
   // Raised from 50 when the MS-OVBA encoder stopped rescanning its whole back-window for every
   // output byte. The hash chain that replaced the rescan is the cost, and it buys a time bound on a
   // path an untrusted `.xlsm` reaches through `removeVbaModule`; the CFB and `dir` guards landed

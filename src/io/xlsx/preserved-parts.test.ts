@@ -112,31 +112,114 @@ test('a worksheet drawing holding only a vector shape survives read→write', ()
   );
 });
 
-// A worksheet references one drawing. A kept one and a picture the model draws would need two, and the
-// writer referenced only the new one, so the chart or shape was dropped from the file without a word.
-test('a picture cannot be added beside a kept drawing, and the refusal leaves the sheet as it was', () => {
+// Sheet `S`, whose one drawing holds a picture and a chart, the drawing's relationships `rId1` and
+// `rId2` naming each.
+function mixedDrawingPackage(): Uint8Array {
+  return typedForeignPackage({
+    '[Content_Types].xml': contentTypes(
+      '<Default Extension="png" ContentType="image/png"/>' +
+        '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' +
+        '<Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>',
+    ),
+    [SHEET1]: worksheet('<drawing r:id="rId1"/>'),
+    [SHEET1_RELS]: rels(relationship('rId1', 'drawing', '../drawings/drawing1.xml')),
+    'xl/drawings/drawing1.xml': MIXED_DRAWING,
+    'xl/drawings/_rels/drawing1.xml.rels': rels(
+      relationship('rId1', 'image', '../media/image1.png') +
+        relationship('rId2', 'chart', '../charts/chart1.xml'),
+    ),
+    'xl/media/image1.png': PNG,
+    'xl/charts/chart1.xml': CHART,
+  });
+}
+
+// A worksheet references one drawing. A picture added to a sheet that kept one joins it: a drawing of
+// the picture's own would leave the kept one, and the chart or shape in it, unreferenced.
+test('a picture added beside a kept drawing is written into it, beside the shape', () => {
   const workbook = readXlsx(shapeDrawingPackage());
   const sheet = workbook.requireWorksheet('S');
-  const refusal = (error: unknown): boolean =>
-    error instanceof AuthoringError &&
-    error.message.includes('sheet "S"') &&
-    error.message.includes('does not model');
-  const id = workbook.addImage({buffer: PNG, extension: 'png'});
-  assert.throws(() => sheet.addImage(id, PICTURE_AT_A1), refusal);
+  sheet.addImage(workbook.addImage({buffer: PNG, extension: 'png'}), PICTURE_AT_A1);
+  const out = writeXlsx(workbook);
 
-  // An import replaces a sheet's pictures and background, so it must refuse before clearing either.
-  sheet.addBackgroundImage(id);
+  const drawings = partNames(out).filter((name) => /^xl\/drawings\/drawing\d+\.xml$/.test(name));
+  assert.deepEqual(drawings, ['xl/drawings/drawing1.xml'], 'one drawing, the kept one');
+  assert.equal([...partText(out, SHEET1).matchAll(/<drawing\b/g)].length, 1);
+  const drawing = partText(out, 'xl/drawings/drawing1.xml');
+  assert.match(drawing, /<xdr:sp\b/, 'the shape is still there');
+  // The kept root binds no `r`, and a foreign one need not bind `xdr` as `xdr`, so the picture says.
+  assert.match(drawing, /<xdr:oneCellAnchor xmlns:xdr="[^"]+" xmlns:a="[^"]+" xmlns:r="[^"]+">/);
+  assert.match(drawing, /<xdr:cNvPr id="3" name="Picture 3"\/>/, 'numbered past the shape');
+  const embed = drawing.match(/r:embed="([^"]+)"/)?.[1];
+  const media = partText(out, 'xl/drawings/_rels/drawing1.xml.rels').match(
+    new RegExp(`Id="${embed}"[^>]*Target="\\.\\./media/([^"]+)"`),
+  )?.[1];
+  assert.ok(media !== undefined, 'the embed names a relationship of the drawing');
+  assert.deepEqual(partBytes(out, `xl/media/${media}`), PNG);
+
+  // Read back, the drawing still holds a shape, so it is kept whole again, the picture inside it.
+  const back = readXlsx(out);
+  assert.equal(back.requireWorksheet('S').images.length, 0);
+  assert.match(partText(writeXlsx(back), 'xl/drawings/drawing1.xml'), /<xdr:pic>/);
+});
+
+test("a picture joining a kept drawing takes ids past the drawing's own relationships and shapes", () => {
+  const workbook = readXlsx(mixedDrawingPackage());
+  const logo = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 7, 7]);
+  workbook
+    .requireWorksheet('S')
+    .addImage(workbook.addImage({buffer: logo, extension: 'png'}), PICTURE_AT_A1, {
+      description: 'Logo',
+    });
+  const out = writeXlsx(workbook);
+
+  const drawingRels = partMatching(out, /^xl\/drawings\/_rels\/drawing\d+\.xml\.rels$/);
+  const ids = [...drawingRels.matchAll(/Id="([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(new Set(ids).size, 3, `three distinct relationship ids: ${ids.join(', ')}`);
+  assert.match(drawingRels, /Target="\.\.\/charts\/chart\d+\.xml"/, 'the chart relationship stays');
+  const drawing = partMatching(out, /^xl\/drawings\/drawing\d+\.xml$/);
+  assert.match(drawing, /<xdr:cNvPr id="3" name="Picture 3" descr="Logo"\/>/);
+  const embed = [...drawing.matchAll(/r:embed="([^"]+)"/g)].map((match) => match[1]).at(-1);
+  assert.ok(embed !== 'rId1' && embed !== 'rId2', `the picture's embed id is new, not ${embed}`);
+});
+
+test('pictures imported onto a sheet that kept a drawing join that drawing', () => {
+  const workbook = readXlsx(shapeDrawingPackage());
+  const sheet = workbook.requireWorksheet('S');
   const source = new Workbook();
   const pictured = source.addWorksheet('P');
   pictured.addImage(source.addImage({buffer: PNG, extension: 'png'}), PICTURE_AT_A1);
-  assert.throws(() => workbook.importImages(sheet, source.exportImages(pictured)), refusal);
-  assert.equal(sheet.backgroundImageId, id, 'the refused import cleared nothing');
+  workbook.importImages(sheet, source.exportImages(pictured));
 
-  assert.equal(sheet.images.length, 0);
-  assert.match(partText(writeXlsx(workbook), 'xl/drawings/drawing1.xml'), /<xdr:sp\b/);
+  assert.equal(sheet.images.length, 1);
+  const drawing = partText(writeXlsx(workbook), 'xl/drawings/drawing1.xml');
+  assert.match(drawing, /<xdr:sp\b/);
+  assert.match(drawing, /<xdr:pic>/);
 });
 
-test('the writer refuses a picture beside a kept drawing, however the two came to share a sheet', () => {
+test('a picture opens a kept drawing whose root is empty', () => {
+  const workbook = readXlsx(
+    typedForeignPackage({
+      '[Content_Types].xml': contentTypes(
+        '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>',
+      ),
+      [SHEET1]: worksheet('<drawing r:id="rId1"/>'),
+      [SHEET1_RELS]: rels(relationship('rId1', 'drawing', '../drawings/drawing1.xml')),
+      'xl/drawings/drawing1.xml':
+        '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"/>',
+    }),
+  );
+  const sheet = workbook.requireWorksheet('S');
+  sheet.addImage(workbook.addImage({buffer: PNG, extension: 'png'}), PICTURE_AT_A1);
+  const out = writeXlsx(workbook);
+
+  assert.match(
+    partText(out, 'xl/drawings/drawing1.xml'),
+    /<xdr:wsDr xmlns:xdr="[^"]+"><xdr:oneCellAnchor [\s\S]*<\/xdr:oneCellAnchor><\/xdr:wsDr>$/,
+  );
+  assert.equal(readXlsx(out).requireWorksheet('S').images.length, 1, 'a picture alone is modelled');
+});
+
+test('a kept part that is not a drawing refuses a picture rather than hiding it in markup', () => {
   const kept = readXlsx(shapeDrawingPackage())
     .requireWorksheet('S')
     .preservedReferences.find((reference) => reference.element === 'drawing');
@@ -144,8 +227,13 @@ test('the writer refuses a picture beside a kept drawing, however the two came t
   const workbook = new Workbook();
   const sheet = workbook.addWorksheet('S');
   sheet.addImage(workbook.addImage({buffer: PNG, extension: 'png'}), PICTURE_AT_A1);
-  // Only a codec reaches this channel. It stands in for any path that skips the authoring refusal.
-  sheet[INTERNAL].addPreservedReference(kept);
+  // Only a codec reaches this channel. It stands in for a kept part whose bytes hold no drawing root.
+  sheet[INTERNAL].addPreservedReference({
+    ...kept,
+    parts: kept.parts.map((part) =>
+      part.path === kept.entryPath ? {...part, bytes: new TextEncoder().encode('<other/>')} : part,
+    ),
+  });
   assert.throws(() => writeXlsx(workbook), AuthoringError);
 });
 

@@ -16,7 +16,7 @@ import {
 } from '../../core/image.ts';
 import {assertWritableNumber, AuthoringError} from '../../errors.ts';
 import {enumToken, numFinite, numInteger} from '../../xml/xml-attrs.ts';
-import {parseXml, TextCapture} from '../../xml/xml-read.ts';
+import {elementRange, openElements, parseXml, TextCapture} from '../../xml/xml-read.ts';
 import {localName} from '../../xml/xml-scan.ts';
 import {
   checkedToken,
@@ -65,23 +65,53 @@ export interface DrawingImage {
   readonly hyperlinkId?: string;
 }
 
+// The namespaces a picture anchor spells its elements and its media link in. A drawing written here
+// declares them once on its root. An anchor joining a drawing kept from a file declares them on itself,
+// because that root binds whatever prefixes its producer chose, and Excel's own binds no `r`.
+const ANCHOR_NAMESPACES = ` xmlns:xdr="${XDR_NS}" xmlns:a="${DRAWINGML_NS}" xmlns:r="${RELATIONSHIPS_NS}"`;
+
 /** The `xl/drawings/drawing{n}.xml` part: one anchor per image, two-cell or one-cell by its shape. */
 export function drawingXml(images: readonly DrawingImage[]): string {
-  const anchors = images.map((image, i) => anchorXml(image, i + 1)).join('');
-  return (
-    XML_DECLARATION +
-    `<xdr:wsDr xmlns:xdr="${XDR_NS}" xmlns:a="${DRAWINGML_NS}" xmlns:r="${RELATIONSHIPS_NS}">` +
-    anchors +
-    '</xdr:wsDr>'
-  );
+  const anchors = images.map((image, i) => anchorXml(image, i + 1, '')).join('');
+  return `${XML_DECLARATION}<xdr:wsDr${ANCHOR_NAMESPACES}>${anchors}</xdr:wsDr>`;
 }
 
-function anchorXml(image: DrawingImage, id: number): string {
+/**
+ * A drawing kept from a file with pictures added to it: each picture's anchor goes after the drawing's
+ * own content, so it draws on top, as a picture inserted last does in Excel.
+ *
+ * A drawing numbers its shapes by `cNvPr id`, unique within it, so the pictures take ids past the
+ * highest one there. Their `r:embed` and link ids are the caller's, allocated past the relationships
+ * the drawing already holds.
+ *
+ * @throws {AuthoringError} if the kept part has no `<wsDr>` root to add a picture to.
+ */
+export function mergePictures(drawing: string, images: readonly DrawingImage[]): string {
+  const root = elementRange(drawing, ['wsDr']);
+  if (root === undefined) {
+    throw new AuthoringError('cannot add a picture to a kept drawing that has no <wsDr> root');
+  }
+  let lastId = 0;
+  for (const {attrs} of openElements(drawing, 'cNvPr')) {
+    lastId = Math.max(lastId, numInteger(attrs.id, 0) ?? 0);
+  }
+  const anchors = images
+    .map((image, i) => anchorXml(image, lastId + i + 1, ANCHOR_NAMESPACES))
+    .join('');
+  if (root.contentStart === root.end) {
+    // An empty root, `<xdr:wsDr/>`, has no inside to add to until it is opened.
+    const open = drawing.slice(root.start, root.end).replace(/\s*\/>$/, '>');
+    return `${drawing.slice(0, root.start)}${open}${anchors}</${root.name}>${drawing.slice(root.end)}`;
+  }
+  return drawing.slice(0, root.contentEnd) + anchors + drawing.slice(root.contentEnd);
+}
+
+function anchorXml(image: DrawingImage, id: number, namespaces: string): string {
   const {anchor} = image;
   const pic = picXml(image, id, anchor.rotation);
   return isOneCellAnchor(anchor)
-    ? oneCellAnchorXml(anchor.from, anchor.ext, pic)
-    : twoCellAnchorXml(anchor.from, anchor.to, anchor.editAs ?? 'oneCell', pic);
+    ? oneCellAnchorXml(anchor.from, anchor.ext, pic, namespaces)
+    : twoCellAnchorXml(anchor.from, anchor.to, anchor.editAs ?? 'oneCell', pic, namespaces);
 }
 
 // A picture anchored between two grid points. The geometry lives entirely in <xdr:from>/<xdr:to>, so
@@ -93,9 +123,10 @@ function twoCellAnchorXml(
   to: AnchorPoint,
   editAs: ImageEditAs,
   pic: string,
+  namespaces: string,
 ): string {
   return (
-    `<xdr:twoCellAnchor editAs="${checkedToken(editAs, isImageEditAs, 'image anchor edit mode')}">` +
+    `<xdr:twoCellAnchor${namespaces} editAs="${checkedToken(editAs, isImageEditAs, 'image anchor edit mode')}">` +
     `<xdr:from>${anchorPointXml(from)}</xdr:from>` +
     `<xdr:to>${anchorPointXml(to)}</xdr:to>` +
     pic +
@@ -106,9 +137,9 @@ function twoCellAnchorXml(
 
 // A picture pinned at one grid point with a fixed EMU extent. editAs is a two-cell-only attribute and
 // the schema forbids it here, so a one-cell anchor never carries one.
-function oneCellAnchorXml(from: AnchorPoint, ext: Extent, pic: string): string {
+function oneCellAnchorXml(from: AnchorPoint, ext: Extent, pic: string, namespaces: string): string {
   return (
-    '<xdr:oneCellAnchor>' +
+    `<xdr:oneCellAnchor${namespaces}>` +
     `<xdr:from>${anchorPointXml(from)}</xdr:from>` +
     `<xdr:ext${numAttr('cx', ext.cx)}${numAttr('cy', ext.cy)}/>` +
     pic +

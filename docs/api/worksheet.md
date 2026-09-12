@@ -684,6 +684,11 @@ anchor to the same logical position.
 `properties` gives the picture alternative text and a title, crops it, or makes it a link; see
 [`PictureProperties`](./images.md#pictureproperties).
 
+A sheet read from a file keeps its drawing whole when the drawing holds a chart, a shape or other
+content the library does not model. A picture added to such a sheet is written into that drawing,
+beside what it holds, and read back it is part of the kept drawing rather than one of
+[`images`](./worksheet.md#worksheetimages).
+
 #### `Worksheet.addImageAnchor`
 
 ```ts

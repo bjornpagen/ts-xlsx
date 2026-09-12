@@ -47,12 +47,7 @@ import type {WorkbookProtection} from './workbook-protection.ts';
 import {type NamedCellStyle, type TableStyleTable, WorkbookStyleTables} from './workbook-styles.ts';
 import {type DeclaredThemeSchemes, WorkbookTheme} from './workbook-theme.ts';
 import {WorkbookVbaProject} from './workbook-vba.ts';
-import {
-  refuseImagesBesideKeptDrawing,
-  type Visibility,
-  Worksheet,
-  type WorksheetState,
-} from './worksheet.ts';
+import {type Visibility, Worksheet, type WorksheetState} from './worksheet.ts';
 
 /**
  * A workbook-level reference to package content the model does not model: a pivot cache
@@ -784,9 +779,6 @@ export class Workbook {
    * sharing one logo, costs one media part.
    */
   importImages(sheet: Worksheet, images: WorksheetImages): void {
-    // Asked before anything is cleared: `addImageAnchor` would refuse too, but only after this had
-    // already removed the sheet's background, leaving half an import applied.
-    if (images.anchored.length > 0) refuseImagesBesideKeptDrawing(sheet);
     for (const id of new Set(sheet.images.map((image) => image.imageId))) sheet.removeImage(id);
     sheet.removeBackgroundImage();
     for (const picture of images.anchored) {

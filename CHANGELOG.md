@@ -67,6 +67,13 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Changed
 
+- **A picture added beside a kept drawing joins it.** A sheet read from a file keeps its drawing whole
+  when the drawing holds a chart, a shape or other content the library does not model, and anchoring a
+  picture on such a sheet used to be refused, since a worksheet references one drawing. The picture is
+  now written into the kept drawing, beside the chart or shape, with relationship and shape ids past
+  the ones the drawing holds, so a report template can take a logo beside its chart. Read back, the
+  picture is part of the kept drawing rather than one of `Worksheet.images`.
+
 - **BREAKING: a hyperlink sits on the sheet, beside the value of the cells it covers.** A link used to be
   a cell value, `{hyperlink, text, tooltip?, range?}`, so a link over a number, a date or a formula had
   no value to be and was dropped on read, and a link over a range was pinned to its top-left cell. It is

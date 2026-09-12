@@ -384,52 +384,77 @@ export const images = {
     return {supported, before, after, removedGone, othersSurvive};
   },
 
-  // Write sheet `S` with one picture, put a vector shape into its drawing, and read it back, so the
-  // drawing is kept whole with no picture modelled. Then try to anchor a picture there → { keptShape,
-  // imagesModeled, addError, shapeAfterAttempt }: whether a plain save keeps the shape, how many
-  // pictures the read modelled, the add's error message or null, and whether a save after the
-  // attempt still carries the shape. "Carries" means in the drawing the saved sheet's `<drawing>`
-  // element references: a drawing part left in the package with nothing pointing at it is lost too.
-  pictureBesideKeptDrawingReport() {
-    const shape =
-      '<xdr:twoCellAnchor><xdr:from><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>3</xdr:row>' +
-      '<xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>5</xdr:col><xdr:colOff>0</xdr:colOff>' +
-      '<xdr:row>6</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:sp macro="" textlink="">' +
-      '<xdr:nvSpPr><xdr:cNvPr id="99" name="Rectangle 1"/><xdr:cNvSpPr/></xdr:nvSpPr>' +
-      '<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:sp>' +
-      '<xdr:clientData/></xdr:twoCellAnchor>';
-    const source = new Workbook();
-    const pictured = source.addWorksheet('S');
-    anchorSpecImage(pictured, source.addImage({buffer: ONE_PX_PNG, extension: 'png'}), 'A1:B2');
-    const read = reloadPatched(writeXlsx(source), {
-      'xl/drawings/drawing1.xml': (xml) => xml.replace('</xdr:wsDr>', `${shape}</xdr:wsDr>`),
-    });
-    const hasShape = (): boolean => {
-      const parts = partMapOf(writeXlsx(read));
-      const relId = attrsOf(
-        (parts['xl/worksheets/sheet1.xml'] ?? '').match(/<drawing\b[^>]*\/>/)?.[0] ?? '<drawing/>',
-      )['r:id'];
-      const relationship = [
-        ...(parts['xl/worksheets/_rels/sheet1.xml.rels'] ?? '').matchAll(
-          /<Relationship\b[^>]*\/>/g,
-        ),
-      ]
-        .map(([element]) => attrsOf(element))
-        .find((attrs) => attrs.Id === relId);
-      const target = relationship?.Target?.replace(/^\.\.\//, 'xl/');
-      return target !== undefined && /<xdr:sp\b/.test(parts[target] ?? '');
-    };
-    const sheet = read.getWorksheet('S');
-    if (sheet === undefined) throw new Error('the patched package lost sheet S');
-    const keptShape = hasShape();
-    const imagesModeled = sheet.images.length;
+  // Read a fixture whose first sheet keeps its drawing whole, anchor a picture on that sheet, save it,
+  // then read the save back and save it again → { imagesModeledOnRead, addError, saved, resaved }, each
+  // save { drawingsReferenced, anchors, pictureReachesMedia, chartReached }: how many `<drawing>`
+  // elements the saved sheet has, what the drawing the first one references holds in order (`chart`,
+  // `shape`, `picture`), whether the picture's embed names a media part in the package, and whether the
+  // drawing's chart relationship names a chart part in it. Everything is read through the relationships
+  // a consumer follows: a part left in the package with nothing pointing at it counts as lost.
+  pictureJoinsKeptDrawingReport(rel: string) {
+    const workbook = readFixture(rel);
+    const sheet = workbook.worksheets[0];
+    if (sheet === undefined) throw new Error(`${rel} has no worksheet`);
+    const imagesModeledOnRead = sheet.images.length;
     let addError: string | null = null;
     try {
-      anchorSpecImage(sheet, read.addImage({buffer: ONE_PX_PNG, extension: 'png'}), 'D1:E2');
+      sheet.addImage(workbook.addImage({buffer: ONE_PX_PNG, extension: 'png'}), {
+        tl: {col: 0, row: 14},
+        ext: {width: 120, height: 40},
+      });
     } catch (error) {
       addError = messageOf(error);
     }
-    return {keptShape, imagesModeled, addError, shapeAfterAttempt: hasShape()};
+    const relationshipsOf = (parts: PartMap, path: string) =>
+      [
+        ...(parts[path.replace(/([^/]+)$/, '_rels/$1.rels')] ?? '').matchAll(
+          /<Relationship\b[^>]*\/>/g,
+        ),
+      ].map(([element]) => attrsOf(element));
+    const packagePath = (target: string | undefined) => target?.replace(/^\.\.\//, 'xl/');
+    const drawingFacts = (pkg: Uint8Array) => {
+      const parts = partMapOf(pkg);
+      const sheetPath = 'xl/worksheets/sheet1.xml';
+      const drawings = [...(parts[sheetPath] ?? '').matchAll(/<drawing\b[^>]*\/>/g)];
+      const relId = attrsOf(drawings[0]?.[0] ?? '<drawing/>')['r:id'];
+      const drawingPath =
+        packagePath(
+          relationshipsOf(parts, sheetPath).find((attrs) => attrs.Id === relId)?.Target,
+        ) ?? '';
+      const drawing = parts[drawingPath] ?? '';
+      const drawingRels = relationshipsOf(parts, drawingPath);
+      const anchors = [
+        ...drawing.matchAll(
+          /<xdr:(twoCellAnchor|oneCellAnchor)\b[\s\S]*?<\/xdr:(?:twoCellAnchor|oneCellAnchor)>/g,
+        ),
+      ].map(([anchor]) =>
+        /<xdr:graphicFrame\b/.test(anchor)
+          ? 'chart'
+          : /<xdr:pic\b/.test(anchor)
+            ? 'picture'
+            : /<xdr:sp\b/.test(anchor)
+              ? 'shape'
+              : 'other',
+      );
+      const embed = /r:embed="([^"]+)"/.exec(drawing)?.[1];
+      const media = packagePath(drawingRels.find((attrs) => attrs.Id === embed)?.Target);
+      const chart = packagePath(
+        drawingRels.find((attrs) => (attrs.Type ?? '').endsWith('/chart'))?.Target,
+      );
+      return {
+        drawingsReferenced: drawings.length,
+        anchors,
+        pictureReachesMedia: media !== undefined && parts[media] !== undefined,
+        chartReached: chart !== undefined && parts[chart] !== undefined,
+      };
+    };
+    const saved = writeXlsx(workbook);
+    return {
+      imagesModeledOnRead,
+      addError,
+      saved: drawingFacts(saved),
+      resaved: drawingFacts(writeXlsx(readXlsx(saved))),
+    };
   },
 
   // Anchor an image and append rows in both orders → { imageFirst, rowsFirst }, each { rowCount,

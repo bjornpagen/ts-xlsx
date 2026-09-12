@@ -14,7 +14,7 @@ import {extensionOf, relativePartPath, relsPathFor, THEME_PART_PATH} from '../op
 import {relsPartXml} from '../opc/rels.ts';
 import type {CommentCell} from './comments.ts';
 import type {HyperlinkPlan} from './hyperlinks.ts';
-import type {DrawingImage} from './images.ts';
+import {type DrawingImage, mergePictures} from './images.ts';
 import {
   drawingPart,
   mediaPart,
@@ -46,15 +46,21 @@ export interface PlannedRelationship {
  *
  * Ids run `rId1`, `rId2`, … in the order parts are added, so no id is derived by summing the ones
  * before it, and the `.rels` part lists them in that same order. One ledger per owning part; ids are
- * scoped to it.
+ * scoped to it. A ledger adding to a part kept from a file skips the ids that part already holds.
  */
 export class RelationshipLedger {
   readonly #owner: string;
+  readonly #taken: ReadonlySet<string>;
   readonly #relationships: PlannedRelationship[] = [];
+  #next = 1;
 
-  /** @param owner the package path of the part whose `.rels` this is, `''` for the package root. */
-  constructor(owner: string) {
+  /**
+   * @param owner the package path of the part whose `.rels` this is, `''` for the package root.
+   * @param taken the ids the part's `.rels` already holds, none of which a new relationship may take.
+   */
+  constructor(owner: string, taken: ReadonlySet<string> = new Set()) {
     this.#owner = owner;
+    this.#taken = taken;
   }
 
   /** Record a relationship to a package part, named by its package path, and return its id. */
@@ -79,7 +85,9 @@ export class RelationshipLedger {
   }
 
   #record(relationship: Omit<PlannedRelationship, 'id'>): string {
-    const id = `rId${this.#relationships.length + 1}`;
+    while (this.#taken.has(`rId${this.#next}`)) this.#next += 1;
+    const id = `rId${this.#next}`;
+    this.#next += 1;
     this.#relationships.push({id, ...relationship});
     return id;
   }
@@ -307,18 +315,27 @@ export function planMedia(workbook: Workbook, sheets: readonly Worksheet[]): Med
   };
 }
 
+/**
+ * The pictures a sheet adds to the drawing it kept from a file, laid out once that drawing's path in the
+ * package is known: each picture's media and link relationships go into `ledger`, the drawing's own,
+ * which already skips the ids the drawing holds.
+ */
+export type PicturesJoiningDrawing = (ledger: RelationshipLedger) => readonly DrawingImage[];
+
 // Resolve every sheet's verbatim-preserved worksheet references (a vector-shape drawing, a
 // header/footer image) into the parts to emit and the per-sheet reference data that wires them. Each
 // reference's captured part closure is re-numbered onto collision-proof `preservedP{n}` paths, so
 // preserved content never clobbers a generated drawing/VML/media part, with the closure's internal
 // relationships rewritten to the new sibling paths. Part numbering is the only cross-sheet concern
 // here; each reference's sheet-local relationship is recorded by the caller in the sheet's
-// {@link RelationshipLedger}, so this function stays free of sheet-local ids.
+// {@link RelationshipLedger}, so this function stays free of sheet-local ids. `pictures` maps a kept
+// drawing's source path to the pictures its sheet adds, which are written into that drawing.
 export function planPreservedParts(
   workbook: Workbook,
   generatedDrawingCount: number,
   generatedMediaCount: number,
   generatedPivotCount: number,
+  pictures: ReadonlyMap<string, PicturesJoiningDrawing>,
 ): PreservedPlan {
   const sheets = workbook.worksheets;
   // Every kind the writer generates of its own is re-numbered past the generated ones, so a preserved
@@ -379,23 +396,33 @@ export function planPreservedParts(
           ? []
           : [{id: rel.id, type: rel.type, target: relativePartPath(newPath, target)}];
       });
-      // The two ways a preserved part's *bytes* can change. A theme the caller authored over is
+      // Three ways a preserved part's *bytes* can change. A theme the caller authored over is
       // composed onto the source part rather than carried verbatim, so the format scheme, the
       // unauthored slots' encoding, and the relationships below all still ride through; only the
-      // authored elements differ. And a part that spells references to the sheets, a chart or a pivot
-      // cache, has the splices made since the read replayed over them.
+      // authored elements differ. A part that spells references to the sheets, a chart or a pivot
+      // cache, has the splices made since the read replayed over them. And a kept drawing its sheet
+      // adds pictures to gains their anchors, and its relationships one per picture past its own.
       const overrides = newPath === THEME_PART_PATH ? workbook.themeOverrides : undefined;
+      let bytes =
+        overrides === undefined
+          ? splicePreservedPart(part.bytes, part.contentType, splices)
+          : new TextEncoder().encode(
+              applyThemeOverrides(new TextDecoder().decode(part.bytes), overrides),
+            );
+      let relationships: readonly PlannedRelationship[] = rels;
+      const joining = pictures.get(part.path);
+      if (joining !== undefined) {
+        const ledger = new RelationshipLedger(newPath, new Set(rels.map((rel) => rel.id)));
+        const images = joining(ledger);
+        bytes = new TextEncoder().encode(mergePictures(new TextDecoder().decode(bytes), images));
+        relationships = [...rels, ...ledger.relationships];
+      }
       emitted.set(newPath, {
         path: newPath,
-        bytes:
-          overrides === undefined
-            ? splicePreservedPart(part.bytes, part.contentType, splices)
-            : new TextEncoder().encode(
-                applyThemeOverrides(new TextDecoder().decode(part.bytes), overrides),
-              ),
+        bytes,
         contentType: part.contentType,
-        relsPath: rels.length === 0 ? null : relsPathFor(newPath),
-        relsXml: rels.length === 0 ? null : relsPartXml(rels),
+        relsPath: relationships.length === 0 ? null : relsPathFor(newPath),
+        relsXml: relationships.length === 0 ? null : relsPartXml(relationships),
       });
     }
   }
