@@ -18,6 +18,7 @@ import {DataValidationOverlay} from './data-validation-overlay.ts';
 import type {DataValidation, DataValidationEntry} from './data-validation.ts';
 import {type SheetSplice, translateFormula} from './formula-references.ts';
 import {GridEdits} from './grid-edits.ts';
+import {type Hyperlink, HyperlinkOverlay} from './hyperlink.ts';
 import type {
   AnchoredImage,
   AnchorPoint,
@@ -201,6 +202,7 @@ export interface WorksheetModel {
   rows: {number: number; properties: RowProperties}[];
   cells: CellModel[];
   merges: string[];
+  hyperlinks: Hyperlink[];
   dataValidations: DataValidationEntry[];
   conditionalFormattings: ConditionalFormatting[];
   tables: TableOptions[];
@@ -318,10 +320,12 @@ export class Worksheet {
   // drawing, a header/footer image), captured verbatim on read so a round-trip re-emits them rather
   // than dropping them. Empty for a sheet authored from scratch.
   readonly #preservedReferences: PreservedWorksheetReference[] = [];
-  // Data validations and conditional formattings are sheet-level overlays keyed by range, each owning
-  // its own storage/cloning/lookup. See DataValidationOverlay and ConditionalFormattingOverlay.
+  // Data validations, conditional formattings and hyperlinks are sheet-level overlays keyed by range,
+  // each owning its own storage/cloning/lookup. See DataValidationOverlay, ConditionalFormattingOverlay
+  // and HyperlinkOverlay.
   readonly #dataValidations = new DataValidationOverlay();
   readonly #conditionalFormattings = new ConditionalFormattingOverlay();
+  readonly #hyperlinks = new HyperlinkOverlay();
   // Sheet-level protection is a single overlay switch, absent until `protect` is called.
   #protection: SheetProtection | undefined;
   // What moves the formulas outside this sheet when a splice moves its lines: set by the workbook that
@@ -365,6 +369,7 @@ export class Worksheet {
       images: this.#images.anchors,
       dataValidations: this.#dataValidations,
       conditionalFormattings: this.#conditionalFormattings,
+      hyperlinks: this.#hyperlinks,
       comments: this.#comments,
       rowBreaks: this.rowBreaks,
       columnBreaks: this.columnBreaks,
@@ -863,6 +868,48 @@ export class Worksheet {
   }
 
   /**
+   * Put a hyperlink on a cell or a rectangle of cells: `{ref: 'B2', target: 'https://example.com'}`,
+   * or `{ref: 'D1:H1', target: '#Summary!A1', tooltip: 'Back to the summary'}`. A `#`-prefixed target
+   * is a place in this workbook; any other is a URL or a path, written as given.
+   *
+   * A link is not part of a cell's value, so it goes on a number, a date, a formula or an empty cell as
+   * readily as on text, and the value stays whatever it is. A link over the same `ref` as one already
+   * on the sheet replaces it. One over a different range is added beside it: where two cover a cell,
+   * {@link hyperlinkAt} reports the later, and Excel keeps both.
+   *
+   * A row or column splice moves a link with the cells it covers, growing it when lines are inserted
+   * inside it and shrinking it when some of its lines are deleted, as Excel does.
+   *
+   * @throws {SyntaxError} if `ref` is not a reference.
+   * @throws {AuthoringError} if `ref` names a whole row or column rather than cells.
+   */
+  addHyperlink(link: Hyperlink): void {
+    this.#hyperlinks.add(link);
+  }
+
+  /**
+   * Remove the hyperlink whose `ref` is `ref`, and report whether there was one. A link over a wider
+   * range that merely covers `ref` stays.
+   */
+  removeHyperlink(ref: string): boolean {
+    return this.#hyperlinks.remove(ref);
+  }
+
+  /** The hyperlinks on this sheet, in the order they were added. */
+  get hyperlinks(): readonly Hyperlink[] {
+    return this.#hyperlinks.entries;
+  }
+
+  /**
+   * The hyperlink a cell opens, or `undefined` when none covers it. Of two links covering the cell, the
+   * one added later.
+   */
+  hyperlinkAt(reference: string): Hyperlink | undefined {
+    const cell = tryDecodeCellRef(reference);
+    return cell === undefined ? undefined : this.#hyperlinks.at(cell.col, cell.row);
+  }
+
+  /**
    * Remove `count` rows starting at the 1-based `start`, then insert the given rows in their place.
    * Rows below the edit shift by `inserts.length - count`: a delete pulls the tail up, an insert
    * pushes it down, and doing both at once is a replace. Each inserted row takes either
@@ -1028,6 +1075,9 @@ export class Worksheet {
     }
     for (let i = 1; i <= count; i++) this.#rows.set(start + i, snapshot(start + i));
     for (let i = 1; i <= count; i++) copyProperties(start + i);
+    // A link on the source row lives beside the grid, so the cell copies do not carry it; each copy
+    // gets its own, as Excel's row copy gives it one.
+    for (let i = 1; i <= count; i++) this.#hyperlinks.copyRow(start, start + i);
     this.#afterStructuralEdit();
   }
 
@@ -1144,6 +1194,7 @@ export class Worksheet {
     this.#merges.clear();
     this.#dataValidations.clear();
     this.#conditionalFormattings.clear();
+    this.#hyperlinks.clear();
     this.#tables.length = 0;
     this.#extent.reset();
   }

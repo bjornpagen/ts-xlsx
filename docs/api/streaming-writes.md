@@ -190,6 +190,7 @@ class WorksheetStreamWriter {
   addRows(rows: CellValue[][]): StreamedRow[];
   getCell(reference: string): Cell;
   addDataValidation(sqref: string, rule: DataValidation, options: {extended?: boolean} = {}): void;
+  addHyperlink(link: Hyperlink): void;
   addConditionalFormatting(formatting: ConditionalFormatting): void;
   addImage(imageId: number, anchor: {readonly tl: AnchorPoint; readonly br: AnchorPoint}): void;
   set autoFilter(filter: string | AutoFilter | undefined);
@@ -258,6 +259,16 @@ addDataValidation(sqref: string, rule: DataValidation, options: {extended?: bool
 Attach a data validation to a range before the sheet is committed. Delegates to the model, so the
 streamed package emits the `<dataValidations>` block in its CT_Worksheet position, before
 `<hyperlinks>`, because both writers share one worksheet serializer.
+
+#### `WorksheetStreamWriter.addHyperlink`
+
+```ts
+addHyperlink(link: Hyperlink): void;
+```
+
+Put a hyperlink on a cell or a rectangle of cells before the sheet is committed; mirrors
+[`Worksheet.addHyperlink`](./worksheet.md#worksheetaddhyperlink). A link lives beside the grid rather than in a row, so it may cover
+cells of a row that is already committed.
 
 #### `WorksheetStreamWriter.addConditionalFormatting`
 

@@ -18,11 +18,9 @@ import {
   isDataTableFormulaValue,
   isErrorValue,
   isFormulaValue,
-  isHyperlinkValue,
   isRichTextValue,
   isSharedFormulaValue,
   readXlsx,
-  richTextToPlain,
   type Workbook,
   type Worksheet,
   writeXlsx,
@@ -209,6 +207,11 @@ function comparableSheet(sheet: Worksheet): Comparable {
       state: sheet.view.state ?? null,
     },
     tables: sheet.tables.map((table) => ({name: table.name, ref: table.range})),
+    hyperlinks: sheet.hyperlinks.map(({ref, target, tooltip}) => ({
+      ref,
+      target,
+      tooltip: tooltip ?? null,
+    })),
     cells,
   };
 }
@@ -257,13 +260,6 @@ function comparableValue(value: CellValue): Comparable {
   if (isRichTextValue(value)) {
     return {
       richText: value.richText.map((run) => ({text: run.text, font: json(run.font ?? null)})),
-    };
-  }
-  if (isHyperlinkValue(value)) {
-    return {
-      hyperlink: value.hyperlink,
-      text: typeof value.text === 'string' ? value.text : richTextToPlain(value.text),
-      tooltip: value.tooltip ?? null,
     };
   }
   return null;

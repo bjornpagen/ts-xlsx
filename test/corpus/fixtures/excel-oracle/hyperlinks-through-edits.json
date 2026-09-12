@@ -1,0 +1,35 @@
+{
+  "invariant": "hyperlinks-through-edits",
+  "description": "Where Excel keeps a hyperlink, and what its edits do to one. Links were added through Worksheet.Hyperlinks.Add in fresh workbooks, the edits made over COM, the links read back through Hyperlink.Range.Address after each step, and each workbook saved so the stored <hyperlinks> element could be read. A link on a number, a date formula, a plain formula and a boolean leaves the value and its type alone. A link added over B1 inside a link over A1:C1 is kept beside it. A row inserted inside a link over A2:A4 grows it to A2:A5; deleting row 2, its first row, then shrinks it to A2:A4 rather than taking it; deleting rows 2 to 4 takes it. Row 1 copied onto row 3 gives row 3 its own link, and a column inserted before A moves both.",
+  "probe": "a one-off COM script: Workbooks.Add, Hyperlinks.Add, Rows().Insert(), Rows().Delete(), Rows().Copy(Destination), Columns().Insert(), Range.ClearContents, SaveAs",
+  "excel": {
+    "version": "16.0",
+    "build": 20326
+  },
+  "capturedAt": "2026-09-12",
+  "openClass": "headless COM (DisplayAlerts off), workbooks created in the session",
+  "nonText": {
+    "fixture": "hyperlinks-beside-any-cell/excel-saved.xlsx",
+    "values": {"A1": "42", "A2": "=DATE(2024,1,2) = 1/2/2024", "A3": "=1+1 = 2", "A4": "TRUE", "A5": "the URL, which Hyperlinks.Add types into an empty cell"},
+    "stored": "<hyperlink ref=\"A1\" r:id=\"rId1\" tooltip=\"tip\" display=\"https://example.com/\"/> and likewise for A2 to A4; A5 carries no display attribute"
+  },
+  "overlap": {
+    "before": ["A1:C1 -> https://one.example/"],
+    "afterAddingB1": ["A1:C1 -> https://one.example/", "B1 -> https://two.example/"],
+    "stored": "<hyperlink ref=\"A1:C1\" .../><hyperlink ref=\"B1\" .../>, in that order"
+  },
+  "splice": {
+    "linkedRange": "A2:A4",
+    "afterInsertingRow3": ["A2:A5"],
+    "afterDeletingRow2": ["A2:A4"],
+    "afterDeletingRows2To4": []
+  },
+  "copyAndColumn": {
+    "afterCopyingRow1OntoRow3": ["A1", "A3"],
+    "afterInsertingColumnA": ["B1", "B3"]
+  },
+  "clearContents": {
+    "note": "Range.ClearContents on A1 also removed A1's link; A2's stayed. The model does not mirror this: assigning a cell the empty value is not Excel's Clear Contents command, and leaves a link covering the cell in place.",
+    "afterClearingA1": ["A2 -> https://clear.example/"]
+  }
+}

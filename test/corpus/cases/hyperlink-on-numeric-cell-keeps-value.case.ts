@@ -2,49 +2,51 @@
 //
 // Real-world scenario: OOXML stores a hyperlink beside the cell, in a sheet-level `<hyperlinks>` list,
 // so Excel lets a link sit on any cell: a total, a date, a formula. A reader that folds the link into
-// the cell's value as a text label has nothing to label with when the value is not text, and replacing
-// `42` with an empty label destroys the number, its type and any formula, after which a save writes an
-// empty string where the value was. Losing the link is recoverable; losing the value is not.
+// the cell's value as a text label has nothing to label with when the value is not text: it either
+// destroys the number, its type and any formula, or drops the link. Neither is necessary, because a
+// link is not part of the value at all.
 
 import type {Assert, Case, CorpusApi} from '../case.ts';
 
-const LINK = {hyperlink: '#S!H1'};
+const REFS = ['A1', 'B1', 'C1', 'D1', 'E1', 'F1'];
 
 export default {
   id: 'hyperlink-on-numeric-cell-keeps-value',
   provenance: {source: 'audit'},
   cluster: 'xlsx-io',
   description:
-    'A hyperlink over a number, a boolean, a formula or a date leaves that value and its type intact, ' +
-    'before and after a save, while a hyperlink over a text label or an empty cell still reads as a ' +
-    'hyperlink carrying that label.',
+    'A hyperlink over a number, a boolean, a formula, a date, a text label or an empty cell is read, ' +
+    'and the value beneath it keeps its type, before and after a save.',
 
   behavior: [
     {
-      name: 'a number, a boolean, a formula and a date keep their values under a link',
+      name: 'a number, a boolean, a formula, a date and a label keep their values under a link',
       expect(api: CorpusApi, assert: Assert) {
-        const {read} = api.hyperlinkOverNonTextCellsReport();
-        assert.deepEqual(read.A1, {kind: 'number', value: 42});
-        assert.deepEqual(read.B1, {kind: 'boolean', value: true});
-        assert.deepEqual(read.C1, {kind: 'formula', value: {formula: '1+1', result: 2}});
-        assert.deepEqual(read.D1, {kind: 'date', value: '2024-01-15T00:00:00.000Z'});
+        const {cells} = api.hyperlinkOverNonTextCellsReport().read;
+        assert.deepEqual(cells.A1, {kind: 'number', value: 42});
+        assert.deepEqual(cells.B1, {kind: 'boolean', value: true});
+        assert.deepEqual(cells.C1, {kind: 'formula', value: {formula: '1+1', result: 2}});
+        assert.deepEqual(cells.D1, {kind: 'date', value: '2024-01-15T00:00:00.000Z'});
+        assert.deepEqual(cells.E1, {kind: 'string', value: 'label'});
+        assert.deepEqual(cells.F1, {kind: 'null', value: null});
       },
     },
     {
-      name: 'a text label and an empty cell still read as links',
+      name: 'every one of the six links is read, whatever the cell beneath it holds',
       expect(api: CorpusApi, assert: Assert) {
-        const {read} = api.hyperlinkOverNonTextCellsReport();
-        assert.deepEqual(read.E1, {kind: 'hyperlink', value: {...LINK, text: 'label'}});
-        assert.deepEqual(read.F1, {kind: 'hyperlink', value: {...LINK, text: ''}});
+        assert.deepEqual(
+          api.hyperlinkOverNonTextCellsReport().read.links,
+          REFS.map((ref) => ({ref, target: '#S!H1'})),
+        );
       },
     },
     {
-      name: 'a save keeps every value it read',
+      name: 'a save keeps every value and every link it read',
       expect(api: CorpusApi, assert: Assert) {
         const {read, rewritten} = api.hyperlinkOverNonTextCellsReport();
         assert.deepEqual(rewritten, read);
         assert.deepEqual(
-          rewritten.A1,
+          rewritten.cells.A1,
           {kind: 'number', value: 42},
           'pinned, not only self-consistent',
         );

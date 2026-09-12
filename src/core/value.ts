@@ -4,7 +4,8 @@
 // everything downstream (serialization, number-format application, formula results).
 // The honest shape here is a discriminated union: a value is either a JS primitive
 // (null / number / string / boolean / Date) or one of the structural OOXML value
-// shapes (error, formula, shared formula, rich text, hyperlink). There is no
+// shapes (error, formula, shared formula, data table, rich text). A hyperlink is not one: it lives
+// beside the grid, on the sheet, as OOXML stores it (see `core/hyperlink.ts`). There is no
 // stringly-typed sentinel and no silent coercion between kinds: a numeric-looking
 // string stays a string, because the caller's chosen type is the source of truth.
 
@@ -20,7 +21,6 @@ export const ValueType = {
   Error: 'error',
   Formula: 'formula',
   RichText: 'richText',
-  Hyperlink: 'hyperlink',
 } as const;
 
 export type ValueType = (typeof ValueType)[keyof typeof ValueType];
@@ -73,17 +73,6 @@ export interface RichTextRun {
 /** A value composed of independently-formatted text runs. */
 export interface RichTextValue {
   readonly richText: readonly RichTextRun[];
-}
-
-/** A hyperlink cell: a URL plus the text (plain or rich) shown in the cell. */
-export interface HyperlinkValue {
-  readonly hyperlink: string;
-  readonly text: string | RichTextValue;
-  readonly tooltip?: string;
-  /** The clickable extent (`'D1:H1'`) when the link spans a range whose top-left corner is this
-   * cell. Absent for an ordinary single-cell link. The destination and label live on the top-left
-   * cell; `range` records how far Excel highlights the clickable area so it survives a round-trip. */
-  readonly range?: string;
 }
 
 /** The cached result a formula carries: any scalar, a date, or an error. */
@@ -150,8 +139,7 @@ export type CellValue =
   | FormulaValue
   | SharedFormulaValue
   | DataTableFormulaValue
-  | RichTextValue
-  | HyperlinkValue;
+  | RichTextValue;
 
 const ERROR_SET: ReadonlySet<string> = new Set(ERROR_CODES);
 
@@ -164,7 +152,7 @@ function hasKey<K extends string>(value: unknown, key: K): value is Record<K, un
 /**
  * Whether a value is an in-cell error ({@link ErrorValue}). The narrowing counterpart of
  * `detectValueType(value) === ValueType.Error`: use this one when the branch goes on to read
- * `.error`, and {@link detectValueType} when it dispatches over all nine kinds at once.
+ * `.error`, and {@link detectValueType} when it dispatches over all eight kinds at once.
  */
 export function isErrorValue(value: CellValue): value is ErrorValue {
   return hasKey(value, 'error');
@@ -201,14 +189,6 @@ export function isRichTextValue(value: CellValue): value is RichTextValue {
 }
 
 /**
- * Whether a value is a hyperlink ({@link HyperlinkValue}). Note that its `text` is itself either
- * a string or a {@link RichTextValue}, so reading the label out means one more narrowing.
- */
-export function isHyperlinkValue(value: CellValue): value is HyperlinkValue {
-  return hasKey(value, 'hyperlink');
-}
-
-/**
  * Flatten a rich-text value to its plain text by concatenating every run's text in order. This is the
  * text a consumer that cannot render per-run formatting (a CSV field, a pivot cache entry) sees, and
  * the string a rich cell reads as when its formatting is discarded.
@@ -231,7 +211,6 @@ export function richTextToPlain(value: RichTextValue): string {
  * - a `Date` → a full ISO-8601 timestamp
  * - an error → its literal, e.g. `"#REF!"`, the same string the grid shows
  * - rich text → every run concatenated ({@link richTextToPlain})
- * - a hyperlink → its label, never its destination
  * - any of the three formula kinds → the text of the *cached result*, and `""` when the cell
  *   carries no cached result: the formula source is not text the sheet ever displayed
  */
@@ -249,7 +228,7 @@ export function detectValueType(value: CellValue): ValueType {
   return classify(value, TO_TYPE);
 }
 
-// What each {@link ValueType} is carried by. Keyed by the type rather than listed, so a tenth kind
+// What each {@link ValueType} is carried by. Keyed by the type rather than listed, so a ninth kind
 // added to `ValueType` is a compile error here and in every visitor below, naming the kind.
 interface ValuePayload {
   null: null;
@@ -260,7 +239,6 @@ interface ValuePayload {
   error: ErrorValue;
   formula: FormulaValue | SharedFormulaValue | DataTableFormulaValue;
   richText: RichTextValue;
-  hyperlink: HyperlinkValue;
 }
 
 /** One answer per {@link ValueType}, given the narrowed value that kind is carried by. */
@@ -269,9 +247,9 @@ type ValueVisitor<R> = {[K in ValueType]: (value: ValuePayload[K]) => R};
 /**
  * The one ladder that decides which kind a cell value is.
  *
- * Its order is load-bearing and not obvious: the *outer* shape wins, so a hyperlink whose label is
- * rich text is a hyperlink and not rich text, and a formula carrying a cached result is a formula and
- * not whatever the result is. Deciding that twice -- which is what naming the kind and rendering it
+ * Its order is load-bearing and not obvious: the *outer* shape wins, so a formula carrying a cached
+ * result is a formula and not whatever the result is, and a data table, which carries one too, is a
+ * formula as well. Deciding that twice -- which is what naming the kind and rendering it
  * used to do, each with a comment pointing at the other -- is two chances to get it right and one
  * ordering that nothing checks. Here the callers supply only the per-kind answer.
  */
@@ -288,7 +266,6 @@ function classify<R>(value: CellValue, visit: ValueVisitor<R>): R {
       break;
   }
   if (value instanceof Date) return visit.date(value);
-  if (isHyperlinkValue(value)) return visit.hyperlink(value);
   if (isFormulaValue(value) || isSharedFormulaValue(value) || isDataTableFormulaValue(value)) {
     return visit.formula(value);
   }
@@ -306,7 +283,6 @@ const TO_TYPE: ValueVisitor<ValueType> = {
   error: () => ValueType.Error,
   formula: () => ValueType.Formula,
   richText: () => ValueType.RichText,
-  hyperlink: () => ValueType.Hyperlink,
 };
 
 const TO_TEXT: ValueVisitor<string> = {
@@ -319,7 +295,6 @@ const TO_TEXT: ValueVisitor<string> = {
   // Every formula kind carries a `result` of the same optional shape; one recursion renders it.
   formula: (value) => (value.result === undefined ? '' : cellValueToText(value.result)),
   richText: richTextToPlain,
-  hyperlink: (value) => (typeof value.text === 'string' ? value.text : richTextToPlain(value.text)),
 };
 
 /**

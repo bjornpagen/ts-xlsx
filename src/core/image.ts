@@ -116,7 +116,7 @@ export interface ImageCrop {
 }
 
 /** Where clicking a picture goes: a URL, or a `#`-prefixed place in this workbook (`#Sheet1!C3`), as a
- * cell's {@link HyperlinkValue.hyperlink} spells one. */
+ * sheet hyperlink's `target` spells one. */
 export interface ImageHyperlink {
   readonly target: string;
   /** The text shown when the pointer rests on the picture. */

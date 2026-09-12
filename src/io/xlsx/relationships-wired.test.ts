@@ -43,8 +43,10 @@ function everyRelationshipKind(): Workbook {
   sheet.getCell('A10').note = 'a note';
   sheet.addCommentThread(threadAt('B10'));
   sheet.pageSetup.printerSettings = Uint8Array.of(1, 2, 3);
-  sheet.getCell('A12').value = {text: 'site', hyperlink: 'https://example.invalid/'};
-  sheet.getCell('A13').value = {text: 'here', hyperlink: '#Data!A1'};
+  sheet.getCell('A12').value = 'site';
+  sheet.addHyperlink({ref: 'A12', target: 'https://example.invalid/'});
+  sheet.getCell('A13').value = 'here';
+  sheet.addHyperlink({ref: 'A13', target: '#Data!A1'});
 
   const source = workbook.addWorksheet('Source');
   source.addRow(['Name', 'Region', 'Amount']);
@@ -109,7 +111,7 @@ test('ids in a generated .rels part run in order from rId1, whatever kinds a she
 
 test('a sheet that relates to nothing gets no .rels part', () => {
   const workbook = new Workbook();
-  workbook.addWorksheet('S').getCell('A1').value = {text: 'here', hyperlink: '#S!B2'};
+  workbook.addWorksheet('S').addHyperlink({ref: 'A1', target: '#S!B2'});
   assert.equal(
     optionalPartText(writeXlsx(workbook), 'xl/worksheets/_rels/sheet1.xml.rels'),
     undefined,

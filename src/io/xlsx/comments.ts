@@ -23,6 +23,7 @@
 import {tryDecodeCellRef} from '../../core/address.ts';
 import type {Cell} from '../../core/cell.ts';
 import type {CommentThread} from '../../core/comment-thread.ts';
+import type {Worksheet} from '../../core/worksheet.ts';
 import {escapeText, textAttr, textElement, XML_DECLARATION} from '../../xml/xml.ts';
 import {MARKUP_COMPATIBILITY_NS, REVISION_NS, SPREADSHEETML_NS} from './namespaces.ts';
 
@@ -217,4 +218,10 @@ export function vmlDrawingXml(comments: readonly CommentCell[]): string {
     })
     .join('');
   return `${VML_HEADER}${shapes}</xml>`;
+}
+
+/** Every cell a sheet still holds, row-major: what the writer gathers a sheet's notes from, beside the
+ * notes the streaming writer took off the rows it already flushed. */
+export function* liveCells(sheet: Worksheet): Generator<Cell, void, undefined> {
+  for (const {cells} of sheet.rows()) yield* cells;
 }

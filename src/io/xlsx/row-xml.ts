@@ -19,7 +19,6 @@ import {
   isErrorCode,
   isErrorValue,
   isFormulaValue,
-  isHyperlinkValue,
   isRichTextValue,
   isSharedFormulaValue,
 } from '../../core/value.ts';
@@ -38,7 +37,6 @@ import {
 } from '../../xml/xml.ts';
 import type {XfStyle} from '../style/xf-style.ts';
 import type {CommentCell} from './comments.ts';
-import type {CollectedHyperlink} from './hyperlinks.ts';
 import {richTextRunsXml} from './rich-text.ts';
 import type {SharedFormulaRole} from './shared-formulas.ts';
 import type {SharedStringTable} from './shared-strings.ts';
@@ -123,13 +121,11 @@ export interface FlushedSheet {
     {readonly outlineLevel: number; readonly hidden: boolean}
   >;
   /**
-   * The hyperlinks and notes the flushed rows carried, on the same terms and for the same reason.
-   * Both are serialised outside the `<row>`: a hyperlink into the sheet's `<hyperlinks>` element plus
-   * an external relationship, a note into the comments and VML parts. The buffered pass gathers them
-   * by walking the sheet's rows at commit time, which finds nothing on a row whose cells have already
-   * been evicted, so a streamed row's link kept its visible label and silently lost its destination.
+   * The notes the flushed rows carried, on the same terms and for the same reason. A note is
+   * serialised outside the `<row>`, into the comments and VML parts, and the buffered pass gathers
+   * notes by walking the sheet's rows at commit time, which finds nothing on a row whose cells have
+   * already been evicted. A hyperlink needs no such record: it lives beside the grid, on the sheet.
    */
-  readonly hyperlinks: readonly CollectedHyperlink[];
   readonly notes: readonly CommentCell[];
 }
 
@@ -383,16 +379,6 @@ function cellXml(
     }
     const inline = typeof value === 'string' ? textElement(value) : richTextRunsXml(value.richText);
     return cellElement(ref, s, 'inlineStr', `<is>${inline}</is>`);
-  }
-  if (isHyperlinkValue(value)) {
-    // The cell holds only the visible label; the link itself rides in the sheet's <hyperlinks>.
-    // The label is either a plain string or rich text, serialised the same way a cell value of
-    // that kind would be.
-    const label =
-      typeof value.text === 'string'
-        ? textElement(value.text)
-        : richTextRunsXml(value.text.richText);
-    return cellElement(ref, s, 'inlineStr', `<is>${label}</is>`);
   }
   // A null value only reaches here for a formatted-but-empty cell (the row loop keeps it for its
   // style); emit the styled cell with no <v>, exactly how Excel stores a formatted blank.

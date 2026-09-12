@@ -408,7 +408,8 @@ export const streaming = {
   async streamWriteCfHyperlinkOrder() {
     const writer = new WorkbookStreamWriter();
     const sheet = writer.addWorksheet('S');
-    sheet.getCell('A1').value = {text: 'link', hyperlink: 'https://example.com'};
+    sheet.getCell('A1').value = 'link';
+    sheet.addHyperlink({ref: 'A1', target: 'https://example.com'});
     sheet.addConditionalFormatting({
       ref: 'A1:A10',
       rules: [
@@ -447,7 +448,8 @@ export const streaming = {
   async streamWriteDvHyperlinkOrder() {
     const writer = new WorkbookStreamWriter();
     const sheet = writer.addWorksheet('S');
-    sheet.getCell('A1').value = {text: 'link', hyperlink: 'https://example.com'};
+    sheet.getCell('A1').value = 'link';
+    sheet.addHyperlink({ref: 'A1', target: 'https://example.com'});
     sheet.addDataValidation('B1', {type: 'list', allowBlank: true, formulae: ['"x,y,z"']});
     sheet.addRow(['r']).commit();
     sheet.commit();
@@ -637,14 +639,16 @@ export const streaming = {
   // rows, sheetFormatPr } alongside the same sheet written by the BUFFERED writer, so the two are
   // compared rather than each being judged alone. Everything here is serialised OUTSIDE the `<row>`
   // or derived from rows other than the one being written, which is precisely what a writer that
-  // finalises and evicts a row cannot do afterwards: the buffered pass gathers hyperlinks and notes by
-  // walking `sheet.rows()` at commit, and finds nothing on a row already gone.
+  // finalises and evicts a row cannot do afterwards: the buffered pass gathers notes by walking
+  // `sheet.rows()` at commit, and finds nothing on a row already gone. `reread.a1` is A1's value, link
+  // and tooltip as { text, hyperlink, tooltip }.
   async streamedRowSideContentReport() {
-    const link = {text: 'link', hyperlink: 'https://example.com/a', tooltip: 'go'};
+    const link = {ref: 'A1', target: 'https://example.com/a', tooltip: 'go'};
 
     const writer = new WorkbookStreamWriter();
     const streamedSheet = writer.addWorksheet('S');
-    const first = streamedSheet.addRow([link, 'noted']);
+    const first = streamedSheet.addRow(['link', 'noted']);
+    streamedSheet.addHyperlink(link);
     streamedSheet.getCell('B1').note = 'a note';
     first.commit();
     for (const number of [2, 3]) {
@@ -659,7 +663,8 @@ export const streaming = {
 
     const wb = new Workbook();
     const buffered = wb.addWorksheet('S');
-    buffered.getCell('A1').value = link;
+    buffered.getCell('A1').value = 'link';
+    buffered.addHyperlink(link);
     buffered.getCell('B1').value = 'noted';
     buffered.getCell('B1').note = 'a note';
     for (const number of [2, 3]) {
@@ -685,7 +690,11 @@ export const streaming = {
         rows: sheetXml.match(/<row\b[^>]*?\/?>/g) ?? [],
         sheetFormatPr: (sheetXml.match(/<sheetFormatPr\b[^>]*\/>/) ?? [])[0] ?? null,
         reread: {
-          a1: reread?.getCell('A1').value ?? null,
+          a1: {
+            text: reread?.getCell('A1').value ?? null,
+            hyperlink: reread?.hyperlinkAt('A1')?.target ?? null,
+            tooltip: reread?.hyperlinkAt('A1')?.tooltip ?? null,
+          },
           b1Note: reread?.getCell('B1').note ?? null,
         },
       };

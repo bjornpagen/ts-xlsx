@@ -20,12 +20,11 @@ import type {
   FilterColumn,
   FilterCriteria,
   FormulaValue,
-  HyperlinkValue,
+  Hyperlink,
   InternalError,
   isDataTableFormulaValue,
   isErrorValue,
   isFormulaValue,
-  isHyperlinkValue,
   isRichTextValue,
   isSharedFormulaValue,
   GridRect,
@@ -91,7 +90,15 @@ export type ValueGuardContracts = [
     Equal<typeof isDataTableFormulaValue, (value: CellValue) => value is DataTableFormulaValue>
   >,
   Expect<Equal<typeof isRichTextValue, (value: CellValue) => value is RichTextValue>>,
-  Expect<Equal<typeof isHyperlinkValue, (value: CellValue) => value is HyperlinkValue>>,
+];
+
+// A hyperlink is sheet state beside the grid, not a kind of cell value, so no CellValue shape carries
+// one: a value that can hold a link cannot also be the number or date the link sits on.
+export type HyperlinkContracts = [
+  Expect<Equal<Extract<CellValue, {readonly hyperlink: unknown}>, never>>,
+  Expect<
+    Equal<Hyperlink, {readonly ref: string; readonly target: string; readonly tooltip?: string}>
+  >,
 ];
 
 // The buffered I/O surface is synchronous: writeXlsx returns bytes and readXlsx a

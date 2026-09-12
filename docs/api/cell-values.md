@@ -19,8 +19,7 @@ type CellValue =
   | FormulaValue
   | SharedFormulaValue
   | DataTableFormulaValue
-  | RichTextValue
-  | HyperlinkValue;
+  | RichTextValue;
 ```
 
 ---
@@ -42,7 +41,6 @@ only the value. What each kind yields:
 - a `Date` → a full ISO-8601 timestamp
 - an error → its literal, e.g. `"#REF!"`, the same string the grid shows
 - rich text → every run concatenated ([`richTextToPlain`](./cell-values.md#richtexttoplain))
-- a hyperlink → its label, never its destination
 - any of the three formula kinds → the text of the *cached result*, and `""` when the cell
   carries no cached result: the formula source is not text the sheet ever displayed
 
@@ -192,26 +190,6 @@ interface FormulaValue {
 
 ---
 
-### `HyperlinkValue`
-
-<sub>interface</sub>
-
-A hyperlink cell: a URL plus the text (plain or rich) shown in the cell.
-
-```ts
-interface HyperlinkValue {
-  readonly hyperlink: string;
-  readonly text: string | RichTextValue;
-  readonly tooltip?: string;
-  /** The clickable extent (`'D1:H1'`) when the link spans a range whose top-left corner is this
-   * cell. Absent for an ordinary single-cell link. The destination and label live on the top-left
-   * cell; `range` records how far Excel highlights the clickable area so it survives a round-trip. */
-  readonly range?: string;
-}
-```
-
----
-
 ### `isDataTableFormulaValue`
 
 <sub>function</sub>
@@ -242,7 +220,7 @@ function isErrorCode(text: string): text is ErrorCode;
 
 Whether a value is an in-cell error ([`ErrorValue`](./cell-values.md#errorvalue)). The narrowing counterpart of
 `detectValueType(value) === ValueType.Error`: use this one when the branch goes on to read
-`.error`, and [`detectValueType`](./cell-values.md#detectvaluetype) when it dispatches over all nine kinds at once.
+`.error`, and [`detectValueType`](./cell-values.md#detectvaluetype) when it dispatches over all eight kinds at once.
 
 ```ts
 function isErrorValue(value: CellValue): value is ErrorValue;
@@ -261,19 +239,6 @@ formula-shaped cell" wants [`detectValueType`](./cell-values.md#detectvaluetype)
 
 ```ts
 function isFormulaValue(value: CellValue): value is FormulaValue;
-```
-
----
-
-### `isHyperlinkValue`
-
-<sub>function</sub>
-
-Whether a value is a hyperlink ([`HyperlinkValue`](./cell-values.md#hyperlinkvalue)). Note that its `text` is itself either
-a string or a [`RichTextValue`](./cell-values.md#richtextvalue), so reading the label out means one more narrowing.
-
-```ts
-function isHyperlinkValue(value: CellValue): value is HyperlinkValue;
 ```
 
 ---
@@ -375,5 +340,5 @@ interface SharedFormulaValue {
 The observable kind of a cell's value. Both formula shapes report as `Formula`.
 
 ```ts
-const ValueType: { readonly Null: 'null'; readonly Number: 'number'; readonly String: 'string'; readonly Boolean: 'boolean'; readonly Date: 'date'; readonly Error: 'error'; readonly Formula: 'formula'; readonly RichText: 'richText'; readonly Hyperlink: 'hyperlink'; }
+const ValueType: { readonly Null: 'null'; readonly Number: 'number'; readonly String: 'string'; readonly Boolean: 'boolean'; readonly Date: 'date'; readonly Error: 'error'; readonly Formula: 'formula'; readonly RichText: 'richText'; }
 ```

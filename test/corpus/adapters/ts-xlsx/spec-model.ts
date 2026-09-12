@@ -5,7 +5,13 @@
 // nobody has wired fails loudly (see `UnsupportedSpecError`) rather than being quietly skipped.
 
 import type {Untyped} from '../../untyped.ts';
-import {decodeAddress, decodeRange, encodeAddress, Workbook} from './runtime.ts';
+import {
+  decodeAddress,
+  decodeRange,
+  encodeAddress,
+  Workbook,
+  type WorksheetInstance,
+} from './runtime.ts';
 
 // Translate a corpus image range, a string like "B2:D6", or a {tl, br?/ext?, editAs?} object, into
 // the model's typed addImage call. A one-cell anchor is a point plus a fixed pixel extent (editAs is a
@@ -374,12 +380,13 @@ export function buildFrom(spec: Untyped = {}) {
       }
       const cell = sheet.getCell(c.ref);
       if ('hyperlink' in c) {
-        // The display label is a plain string or a rich-text value; both serialise faithfully.
-        cell.value = {
-          hyperlink: c.hyperlink,
-          text: c.text ?? '',
+        // The label is the cell's own value, a plain string or rich text, and the link sits beside it.
+        if (c.text !== undefined) cell.value = c.text;
+        sheet.addHyperlink({
+          ref: c.ref,
+          target: c.hyperlink,
           ...(c.tooltip !== undefined ? {tooltip: c.tooltip} : {}),
-        };
+        });
       } else if ('formula' in c) {
         cell.value = 'result' in c ? {formula: c.formula, result: c.result} : {formula: c.formula};
       } else if ('sharedFormula' in c) {
@@ -429,14 +436,17 @@ export function buildFrom(spec: Untyped = {}) {
 // Mirror current.mjs's normalizeCell for the rewrite's Cell: a plain JSON view of the
 // value that survived the round-trip. Style facets are absent until the reader reads
 // them, matching the contract that an unmaterialized facet is simply not present.
-export function normalizeRewriteCell(cell: Untyped) {
+// A cell a hyperlink covers is reported as { hyperlink, text, tooltip? }: the link's target and tooltip,
+// which live on the sheet, and the cell's own value as the label.
+export function normalizeRewriteCell(cell: Untyped, sheet: WorksheetInstance) {
   const v = cell.value;
+  const link = sheet.hyperlinkAt(cell.address);
   let out: Untyped;
-  if (v && typeof v === 'object' && 'hyperlink' in v) {
+  if (link !== undefined) {
     out = {
-      hyperlink: v.hyperlink,
-      text: v.text,
-      ...(v.tooltip !== undefined ? {tooltip: v.tooltip} : {}),
+      hyperlink: link.target,
+      text: v,
+      ...(link.tooltip !== undefined ? {tooltip: link.tooltip} : {}),
     };
   } else if (v && typeof v === 'object' && 'sharedFormula' in v) {
     out = {sharedFormula: v.sharedFormula, formula: v.formula ?? null, result: v.result ?? null};

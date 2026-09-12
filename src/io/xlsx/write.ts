@@ -19,8 +19,8 @@ import {isRelType} from '../../rel-type.ts';
 import {relsPathFor, THEME_PART_PATH} from '../opc/part-paths.ts';
 import {relsPartXml} from '../opc/rels.ts';
 import {FIXED_ENTRY_MTIME} from '../opc/zip-mtime.ts';
-import {collectComments, commentsXml, vmlDrawingXml} from './comments.ts';
-import {collectHyperlinks, liveCells, planHyperlinks} from './hyperlinks.ts';
+import {collectComments, commentsXml, liveCells, vmlDrawingXml} from './comments.ts';
+import {planHyperlinks} from './hyperlinks.ts';
 import {type DrawingImage, drawingXml} from './images.ts';
 import {
   type BackgroundPlan,
@@ -294,15 +294,8 @@ function planSheet(context: {
           relId: rels.add(REL.printerSettings, printerSettingsPart(index + 1)),
         };
 
-  // The live rows plus whatever the streaming writer already flushed and evicted, merged back into
-  // the row-major order Excel writes them in: a committed row's cells are gone from the model, so the
-  // walk alone would silently drop its links.
-  const hyperlinks = planHyperlinks(
-    [...collectHyperlinks(liveCells(sheet)), ...(flushed?.hyperlinks ?? [])].sort(
-      (a, b) => a.row - b.row || a.col - b.col,
-    ),
-    rels,
-  );
+  // Links live beside the grid, so a row the streaming writer flushed and evicted takes none with it.
+  const hyperlinks = planHyperlinks(sheet.hyperlinks, rels);
 
   let background: BackgroundPlan | null = null;
   if (sheet.backgroundImageId !== undefined) {

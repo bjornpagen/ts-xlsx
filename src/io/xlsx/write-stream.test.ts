@@ -351,7 +351,8 @@ test('shared-formula slave cells authored on the stream reload populated, not em
 test('a streamed sheet emits <conditionalFormatting> before <hyperlinks>, per the CT_Worksheet sequence', async () => {
   const writer = new WorkbookStreamWriter();
   const sheet = writer.addWorksheet('S');
-  sheet.getCell('A1').value = {text: 'link', hyperlink: 'https://example.com'};
+  sheet.getCell('A1').value = 'link';
+  sheet.addHyperlink({ref: 'A1', target: 'https://example.com'});
   sheet.addConditionalFormatting({
     ref: 'A1:A10',
     rules: [
@@ -375,7 +376,8 @@ test('a streamed sheet emits <conditionalFormatting> before <hyperlinks>, per th
 test('a streamed sheet emits <dataValidations> before <hyperlinks>, per the CT_Worksheet sequence', async () => {
   const writer = new WorkbookStreamWriter();
   const sheet = writer.addWorksheet('S');
-  sheet.getCell('A1').value = {text: 'link', hyperlink: 'https://example.com'};
+  sheet.getCell('A1').value = 'link';
+  sheet.addHyperlink({ref: 'A1', target: 'https://example.com'});
   sheet.addDataValidation('B1', {type: 'list', allowBlank: true, formulae: ['"x,y,z"']});
   sheet.addRow(['r']).commit();
   sheet.commit();
@@ -390,7 +392,8 @@ test('a streamed sheet emits <dataValidations> before <hyperlinks>, per the CT_W
 test('streamed conditional formatting and data validations reload through the tolerant reader', async () => {
   const writer = new WorkbookStreamWriter();
   const sheet = writer.addWorksheet('S');
-  sheet.getCell('A1').value = {text: 'link', hyperlink: 'https://example.com'};
+  sheet.getCell('A1').value = 'link';
+  sheet.addHyperlink({ref: 'A1', target: 'https://example.com'});
   sheet.addDataValidation('B1', {type: 'list', allowBlank: true, formulae: ['"x,y,z"']});
   sheet.addConditionalFormatting({
     ref: 'A1:A10',
@@ -633,19 +636,20 @@ test('a cell added to an open row through getCell is committed with it, style in
   assert.ok(fill?.type === 'pattern' && fill.pattern === 'solid', 'the added cell kept its fill');
 });
 
-test('a hyperlink and a note set through getCell on an open row survive its commit', async () => {
+test('a note set through getCell on an open row, and a link over it added after, survive its commit', async () => {
   const writer = new WorkbookStreamWriter();
   const sheet = writer.addWorksheet('S');
   const row = sheet.addRow(['a']);
-  sheet.getCell('B1').value = {text: 'link', hyperlink: 'https://example.com'};
+  sheet.getCell('B1').value = 'link';
   sheet.getCell('C1').note = 'a note';
   row.commit();
+  // A link lives beside the grid, so a committed row is no obstacle to one.
+  sheet.addHyperlink({ref: 'B1', target: 'https://example.com'});
 
   const reread = readXlsx(await committed(writer)).getWorksheet('S');
   assert.ok(reread);
-  const link = reread.getCell('B1').value;
-  assert.ok(link !== null && typeof link === 'object' && 'hyperlink' in link, 'B1 is still a link');
-  assert.equal(link.hyperlink, 'https://example.com');
+  assert.equal(reread.getCell('B1').value, 'link');
+  assert.equal(reread.hyperlinkAt('B1')?.target, 'https://example.com');
   assert.equal(reread.getCell('C1').note, 'a note');
 });
 

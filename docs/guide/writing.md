@@ -71,12 +71,27 @@ sheet.getCell('A4').value = new Date('2026-03-04');
 sheet.getCell('A5').value = null; // an empty cell
 sheet.getCell('A6').value = {formula: 'SUM(A1:A1)', result: 42};
 sheet.getCell('A7').value = {error: '#N/A'};
-sheet.getCell('A8').value = {hyperlink: 'https://example.com', text: 'example'};
-sheet.getCell('A9').value = {
+sheet.getCell('A8').value = {
   richText: [{text: 'half ', font: {bold: true}}, {text: 'and half'}],
 };
 
 console.log(sheet.getCell('A4').type); // 'date'
+```
+
+A hyperlink is not one of those kinds. It sits on the sheet, over one cell or a range, and the cells
+beneath it keep whatever values they hold, so a total or a date can carry a link as readily as a label:
+
+```ts
+import {Workbook} from '@shbernal/ts-xlsx';
+
+const sheet = new Workbook().addWorksheet('Links');
+
+sheet.getCell('A1').value = 'example';
+sheet.getCell('A2').value = 1250;
+sheet.addHyperlink({ref: 'A1', target: 'https://example.com'});
+sheet.addHyperlink({ref: 'A2', target: '#Links!A1', tooltip: 'Back to the top'});
+
+console.log(sheet.hyperlinkAt('A2')?.target); // '#Links!A1'
 ```
 
 Two things are worth knowing about formulas. A formula carries an optional cached `result`,

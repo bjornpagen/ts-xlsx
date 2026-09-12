@@ -1,7 +1,7 @@
 // Structural-edit machinery: the splice arithmetic that inserts or deletes whole rows and columns
 // and keeps everything anchored to the grid moving in step: line metadata and page breaks, merged
 // ranges, tables, anchored images, the coordinates a cell's value carries, and the range-bound
-// overlays (data validations, conditional formats, comment threads, the autofilter). It is isolated
+// overlays (data validations, conditional formats, hyperlinks, comment threads, the autofilter). It is isolated
 // from Worksheet because it is pure grid mechanics: it holds the sheet's storage containers by
 // reference and mutates them in place, and touches none of the public cell API. Worksheet builds the cells an insert introduces, then hands
 // the pre-built rows (or the raw column values) here for the shift.
@@ -22,6 +22,7 @@ import {replaceContents} from './containers.ts';
 import type {DataValidationOverlay} from './data-validation-overlay.ts';
 import {type SheetSplice, spliceFormula, translateFormula} from './formula-references.ts';
 import {type AxisSplice, isDeletedSpan, shiftIndex, shiftPoint, shiftRect} from './grid-shift.ts';
+import type {HyperlinkOverlay} from './hyperlink.ts';
 import {type AnchoredImage, type AnchorPoint, type ImageAnchor, isOneCellAnchor} from './image.ts';
 import {INTERNAL} from './internal.ts';
 import type {MergeRect} from './merge.ts';
@@ -33,7 +34,6 @@ import {
   type CellValue,
   isDataTableFormulaValue,
   isFormulaValue,
-  isHyperlinkValue,
   isSharedFormulaValue,
 } from './value.ts';
 import type {WorksheetComments} from './worksheet-comments.ts';
@@ -62,6 +62,7 @@ interface GridStorage {
   readonly images: AnchoredImage[];
   readonly dataValidations: DataValidationOverlay;
   readonly conditionalFormattings: ConditionalFormattingOverlay;
+  readonly hyperlinks: HyperlinkOverlay;
   /** The sheet's name, which an unqualified reference in one of its formulas means. */
   readonly sheetName: () => string;
   /**
@@ -86,6 +87,7 @@ export class GridEdits {
   readonly #images: AnchoredImage[];
   readonly #dataValidations: DataValidationOverlay;
   readonly #conditionalFormattings: ConditionalFormattingOverlay;
+  readonly #hyperlinks: HyperlinkOverlay;
   readonly #comments: WorksheetComments;
   readonly #rowBreaks: PageBreak[];
   readonly #columnBreaks: PageBreak[];
@@ -104,6 +106,7 @@ export class GridEdits {
     this.#images = storage.images;
     this.#dataValidations = storage.dataValidations;
     this.#conditionalFormattings = storage.conditionalFormattings;
+    this.#hyperlinks = storage.hyperlinks;
     this.#comments = storage.comments;
     this.#rowBreaks = storage.rowBreaks;
     this.#columnBreaks = storage.columnBreaks;
@@ -319,14 +322,15 @@ export class GridEdits {
     this.#shiftRangeBoundOverlays(splice);
   }
 
-  // Re-anchor the four things bound to a range that live outside the cell grid: data validations,
-  // conditional formats, comment threads, and the sheet's autofilter. Each owns its own arithmetic:
-  // an overlay knows whether it holds a rectangle or a point, and the autofilter knows that its
-  // criteria are addressed relative to its own left edge. This pass only routes the splice to them
+  // Re-anchor the five things bound to a range that live outside the cell grid: data validations,
+  // conditional formats, hyperlinks, comment threads, and the sheet's autofilter. Each owns its own
+  // arithmetic: an overlay knows whether it holds a rectangle or a point, and the autofilter knows that
+  // its criteria are addressed relative to its own left edge. This pass only routes the splice to them
   // and lets a deleted anchor take its entry with it.
   #shiftRangeBoundOverlays(splice: AxisSplice): void {
     this.#dataValidations.shift(splice);
     this.#conditionalFormattings.shift(splice);
+    this.#hyperlinks.shift(splice);
     this.#comments.shift(splice);
     const filter = this.#autoFilter.get();
     if (filter !== undefined) this.#autoFilter.set(shiftAutoFilter(filter, splice));
@@ -466,17 +470,6 @@ function reanchoredValue(value: CellValue, splice: AxisSplice): CellValue {
         ? encodeAddress(master.col, shiftIndex(master.row, splice))
         : encodeAddress(shiftIndex(master.col, splice), master.row);
     return anchored === value.sharedFormula ? value : {...value, sharedFormula: anchored};
-  }
-  if (isHyperlinkValue(value) && value.range !== undefined) {
-    const range = shiftedRange(value.range, splice);
-    if (range === value.range) return value;
-    // A range the delete took whole, around a cell that survived, describes nothing any more: the link
-    // stays on its cell as an ordinary single-cell one.
-    if (range === undefined) {
-      const {hyperlink, text, tooltip} = value;
-      return tooltip === undefined ? {hyperlink, text} : {hyperlink, text, tooltip};
-    }
-    return {...value, range};
   }
   if (isDataTableFormulaValue(value)) {
     // The filled range holds the table's own cell, so a cell that survived keeps a range that did.

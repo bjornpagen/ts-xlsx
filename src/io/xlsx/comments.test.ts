@@ -5,8 +5,7 @@ import type {CommentThread} from '../../core/comment-thread.ts';
 import {INTERNAL} from '../../core/internal.ts';
 import {Workbook} from '../../core/workbook.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
-import {collectComments, commentsXml, vmlDrawingXml} from './comments.ts';
-import {liveCells} from './hyperlinks.ts';
+import {collectComments, commentsXml, liveCells, vmlDrawingXml} from './comments.ts';
 import {
   captureIn,
   partsOf,

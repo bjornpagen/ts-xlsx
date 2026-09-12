@@ -238,6 +238,10 @@ class Worksheet {
   addConditionalFormatting(formatting: ConditionalFormatting): void;
   get conditionalFormattings(): readonly ConditionalFormatting[];
   dataValidationAt(reference: string): DataValidation | undefined;
+  addHyperlink(link: Hyperlink): void;
+  removeHyperlink(ref: string): boolean;
+  get hyperlinks(): readonly Hyperlink[];
+  hyperlinkAt(reference: string): Hyperlink | undefined;
   spliceRows(start: number, count: number, ...inserts: RowInput[]): void;
   insertRow(pos: number, values: RowInput): void;
   addRow(values: RowInput): Cell[];
@@ -857,6 +861,53 @@ dataValidationAt(reference: string): DataValidation | undefined;
 The validation covering a cell, or `undefined` when none does. The first added rule whose range
 contains the cell wins, mirroring how a spreadsheet resolves overlapping validations.
 
+#### `Worksheet.addHyperlink`
+
+```ts
+addHyperlink(link: Hyperlink): void;
+```
+
+Put a hyperlink on a cell or a rectangle of cells: `{ref: 'B2', target: 'https://example.com'}`,
+or `{ref: 'D1:H1', target: '#Summary!A1', tooltip: 'Back to the summary'}`. A `#`-prefixed target
+is a place in this workbook; any other is a URL or a path, written as given.
+
+A link is not part of a cell's value, so it goes on a number, a date, a formula or an empty cell as
+readily as on text, and the value stays whatever it is. A link over the same `ref` as one already
+on the sheet replaces it. One over a different range is added beside it: where two cover a cell,
+[`hyperlinkAt`](./worksheet.md#worksheethyperlinkat) reports the later, and Excel keeps both.
+
+A row or column splice moves a link with the cells it covers, growing it when lines are inserted
+inside it and shrinking it when some of its lines are deleted, as Excel does.
+
+**Throws:** `SyntaxError` if `ref` is not a reference.
+**Throws:** [`AuthoringError`](./errors.md#authoringerror) if `ref` names a whole row or column rather than cells.
+
+#### `Worksheet.removeHyperlink`
+
+```ts
+removeHyperlink(ref: string): boolean;
+```
+
+Remove the hyperlink whose `ref` is `ref`, and report whether there was one. A link over a wider
+range that merely covers `ref` stays.
+
+#### `Worksheet.hyperlinks`
+
+```ts
+get hyperlinks(): readonly Hyperlink[];
+```
+
+The hyperlinks on this sheet, in the order they were added.
+
+#### `Worksheet.hyperlinkAt`
+
+```ts
+hyperlinkAt(reference: string): Hyperlink | undefined;
+```
+
+The hyperlink a cell opens, or `undefined` when none covers it. Of two links covering the cell, the
+one added later.
+
 #### `Worksheet.spliceRows`
 
 ```ts
@@ -1116,6 +1167,7 @@ interface WorksheetModel {
   rows: {number: number; properties: RowProperties}[];
   cells: CellModel[];
   merges: string[];
+  hyperlinks: Hyperlink[];
   dataValidations: DataValidationEntry[];
   conditionalFormattings: ConditionalFormatting[];
   tables: TableOptions[];

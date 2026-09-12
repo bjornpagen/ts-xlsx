@@ -107,7 +107,7 @@ type ImageEditAs = 'oneCell' | 'twoCell' | 'absolute';
 <sub>interface</sub>
 
 Where clicking a picture goes: a URL, or a `#`-prefixed place in this workbook (`#Sheet1!C3`), as a
-cell's [`HyperlinkValue.hyperlink`](./cell-values.md#hyperlinkvalue) spells one.
+sheet hyperlink's `target` spells one.
 
 ```ts
 interface ImageHyperlink {

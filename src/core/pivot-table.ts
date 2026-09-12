@@ -20,7 +20,6 @@ import {
   type CellValue,
   isErrorValue,
   isFormulaValue,
-  isHyperlinkValue,
   isRichTextValue,
   isSharedFormulaValue,
   REF_ERROR,
@@ -505,12 +504,6 @@ function scalarOf(value: CellValue): PivotItem {
   }
   if (value instanceof Date) return {kind: 'string', value: value.toISOString()};
   if (isRichTextValue(value)) return {kind: 'string', value: richTextToPlain(value)};
-  if (isHyperlinkValue(value)) {
-    return {
-      kind: 'string',
-      value: typeof value.text === 'string' ? value.text : richTextToPlain(value.text),
-    };
-  }
   if (isErrorValue(value)) return {kind: 'string', value: value.error};
   if (isFormulaValue(value) || isSharedFormulaValue(value)) {
     return value.result === undefined ? BLANK : scalarOf(value.result);

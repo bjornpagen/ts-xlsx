@@ -113,11 +113,12 @@ async function writeBufferedWorkbook(file: string): Promise<void> {
       },
     ],
   });
-  sheet.getCell('A5').value = {
-    text: 'link',
-    hyperlink: 'https://example.invalid/',
+  sheet.getCell('A5').value = 'link';
+  sheet.addHyperlink({
+    ref: 'A5',
+    target: 'https://example.invalid/',
     tooltip: 'a tooltip & an ampersand',
-  };
+  });
   workbook.addWorksheet('Hidden', {state: 'veryHidden'});
   workbook.view.visibility = 'hidden';
   await writeFile(file, writeXlsx(workbook));

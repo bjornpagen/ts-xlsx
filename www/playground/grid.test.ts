@@ -94,6 +94,7 @@ test('the type of each cell is the kind the library reports, not one the grid gu
   assert.equal(byAddress.get('B5')?.type, 'date');
   assert.equal(byAddress.get('B6')?.type, 'formula');
   assert.equal(byAddress.get('B7')?.type, 'error');
-  assert.equal(byAddress.get('B8')?.type, 'hyperlink');
+  // The sample's link sits on the sheet over B8; the cell itself holds its label.
+  assert.equal(byAddress.get('B8')?.type, 'string');
   assert.equal(byAddress.get('B9')?.type, 'richText');
 });

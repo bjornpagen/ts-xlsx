@@ -46,7 +46,8 @@ function buildValues(): Workbook {
   sheet.getCell('A7').value = 'error';
   sheet.getCell('B7').value = {error: '#DIV/0!'};
   sheet.getCell('A8').value = 'hyperlink';
-  sheet.getCell('B8').value = {hyperlink: 'https://github.com/shbernal/ts-xlsx', text: 'ts-xlsx'};
+  sheet.getCell('B8').value = 'ts-xlsx';
+  sheet.addHyperlink({ref: 'B8', target: 'https://github.com/shbernal/ts-xlsx'});
   sheet.getCell('A9').value = 'rich text';
   sheet.getCell('B9').value = {
     richText: [

@@ -61,6 +61,7 @@ import type {ConditionalFormatting} from '../../core/conditional-formatting.ts';
 import type {DataValidation} from '../../core/data-validation.ts';
 import type {DateEpoch} from '../../core/date.ts';
 import {formulaNamesInScope} from '../../core/formula.ts';
+import type {Hyperlink} from '../../core/hyperlink.ts';
 import type {AnchorPoint} from '../../core/image.ts';
 import {INTERNAL} from '../../core/internal.ts';
 import type {SheetProtectionOptions} from '../../core/protection.ts';
@@ -75,7 +76,6 @@ import type {ColumnProperties, Worksheet} from '../../core/worksheet.ts';
 import {AuthoringError, quoted} from '../../errors.ts';
 import {FIXED_ENTRY_MTIME} from '../opc/zip-mtime.ts';
 import {type CommentCell, collectNotes} from './comments.ts';
-import {type CollectedHyperlink, collectHyperlinks} from './hyperlinks.ts';
 import {
   buildColumnDefaults,
   Extent,
@@ -212,7 +212,6 @@ export class WorksheetStreamWriter {
   readonly #extent = new Extent();
   readonly #rowOutline = new Map<number, {outlineLevel: number; hidden: boolean}>();
   // What a flushed row carried that is serialised outside its `<row>`, taken before eviction.
-  readonly #hyperlinks: CollectedHyperlink[] = [];
   readonly #notes: CommentCell[] = [];
 
   readonly #dateEpoch: DateEpoch;
@@ -322,11 +321,9 @@ export class WorksheetStreamWriter {
       outlineLevel: properties?.outlineLevel ?? 0,
       hidden: properties?.hidden ?? false,
     });
-    // A hyperlink and a note are serialised outside the `<row>`, into the sheet's `<hyperlinks>`
-    // element and into the comments/VML parts, and the buffered pass gathers both by walking the
-    // sheet's rows at commit. Eviction is about to make that walk find nothing, so they are taken
-    // here for the same reason the outline level is.
-    this.#hyperlinks.push(...collectHyperlinks(cells));
+    // A note is serialised outside the `<row>`, into the comments/VML parts, and the buffered pass
+    // gathers notes by walking the sheet's rows at commit. Eviction is about to make that walk find
+    // nothing, so they are taken here for the same reason the outline level is.
     this.#notes.push(...collectNotes(cells));
     const {xml, attrs, minCol, maxCol} = renderRow(
       {number, cells, properties},
@@ -354,7 +351,6 @@ export class WorksheetStreamWriter {
       rows: this.#flushedRows,
       extent: this.#extent,
       rowOutline: this.#rowOutline,
-      hyperlinks: this.#hyperlinks,
       notes: this.#notes,
     };
   }
@@ -388,6 +384,16 @@ export class WorksheetStreamWriter {
   addDataValidation(sqref: string, rule: DataValidation, options: {extended?: boolean} = {}): void {
     this.#assertOpen();
     this.#sheet.addDataValidation(sqref, rule, options);
+  }
+
+  /**
+   * Put a hyperlink on a cell or a rectangle of cells before the sheet is committed; mirrors
+   * {@link Worksheet.addHyperlink}. A link lives beside the grid rather than in a row, so it may cover
+   * cells of a row that is already committed.
+   */
+  addHyperlink(link: Hyperlink): void {
+    this.#assertOpen();
+    this.#sheet.addHyperlink(link);
   }
 
   /**

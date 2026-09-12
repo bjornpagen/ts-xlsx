@@ -66,6 +66,7 @@ export {
   isConditionalFormattingType,
   isIconSetType,
 } from '../core/conditional-formatting.ts';
+export {type Hyperlink} from '../core/hyperlink.ts';
 export {
   type DataValidation,
   type DataValidationEntry,
@@ -233,12 +234,10 @@ export {
   type ErrorValue,
   type FormulaResult,
   type FormulaValue,
-  type HyperlinkValue,
   isDataTableFormulaValue,
   isErrorCode,
   isErrorValue,
   isFormulaValue,
-  isHyperlinkValue,
   isRichTextValue,
   isSharedFormulaValue,
   type RichTextRun,

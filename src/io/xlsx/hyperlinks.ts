@@ -1,18 +1,16 @@
-// Cell hyperlinks: the sheet-level `<hyperlinks>` element, its external relationships, and the
-// reader that folds a link back onto its cell's value.
+// Worksheet hyperlinks: the sheet-level `<hyperlinks>` element, the relationships an external link
+// needs, and the reader that puts each link back on the sheet.
 //
-// A hyperlink is not stored inside the cell in OOXML: the `<c>` holds only the visible label (a
-// normal string value), while a separate `<hyperlink>` child of `<worksheet>` ties an A1 reference
-// to a destination. An EXTERNAL destination (a URL) is reached indirectly, through a sheet
-// relationship carrying `TargetMode="External"` that the `<hyperlink>` names by `r:id`. An INTERNAL
-// destination (a location inside the same workbook, which the author writes as a `#`-prefixed value)
-// is held directly in a `location` attribute with NO relationship. Emitting an internal target as an
-// external relationship makes a strict consumer resolve both the rel and the location and render the
-// destination doubled.
+// A hyperlink is not stored in a cell. The `<hyperlink>` element names the cells it covers by `ref`,
+// and the model holds it the same way, beside the grid. An EXTERNAL destination (a URL) is reached
+// indirectly, through a sheet relationship carrying `TargetMode="External"` that the `<hyperlink>`
+// names by `r:id`. An INTERNAL destination (a place in the same workbook, which the author writes as a
+// `#`-prefixed target) is held directly in a `location` attribute with NO relationship. Emitting an
+// internal target as an external relationship makes a strict consumer resolve both the rel and the
+// location and render the destination doubled.
 
-import {tryDecodeRange} from '../../core/address.ts';
-import type {Cell} from '../../core/cell.ts';
-import {type HyperlinkValue, isHyperlinkValue, isRichTextValue} from '../../core/value.ts';
+import {boundedRect, tryDecodeRange} from '../../core/address.ts';
+import type {Hyperlink} from '../../core/hyperlink.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
 import {type CollectingPass} from '../../xml/xml-read.ts';
 import {localName} from '../../xml/xml-scan.ts';
@@ -20,21 +18,6 @@ import {escapeAttr, textAttr} from '../../xml/xml.ts';
 import {relAttr} from '../opc/namespaces.ts';
 import type {RelationshipLedger} from './package-plan.ts';
 import {REL} from './relationships.ts';
-
-/** A hyperlink gathered from a sheet for serialisation: the cell it sits on, its target, and an
- * optional tooltip. The visible label is the cell's own value and is serialised as that value.
- *
- * `row`/`col` are the anchor's position, kept so links gathered from separate passes (the sheet's live
- * rows, and the rows the streaming writer already flushed and evicted) can be merged back into the
- * row-major order Excel writes them in. They are not serialised; `ref` is.
- */
-export interface CollectedHyperlink {
-  readonly ref: string;
-  readonly row: number;
-  readonly col: number;
-  readonly target: string;
-  readonly tooltip?: string;
-}
 
 /** A hyperlink resolved for serialisation. An external target carries a `relId` (the sheet
  * relationship holding the URL); an internal target carries a `location` (the in-workbook
@@ -47,49 +30,20 @@ export interface HyperlinkPlan {
 }
 
 /**
- * Gather every hyperlink among a run of cells.
+ * Split a sheet's links into internal (location, no rel) and external (relationship) forms, recording
+ * each external link's URL in the sheet's ledger so its relationship follows every other sheet-local
+ * relationship in canonical order. An internal (`#`-prefixed) link records nothing.
  *
- * Takes the cells rather than the sheet, because the streaming writer has to ask this question of a
- * row at the moment it commits: after that the row's cells are evicted, and a post-hoc walk of
- * `sheet.rows()` finds nothing. Both writers therefore ask the same function, over whatever cells
- * they still hold.
+ * The links keep the order the sheet holds them in. That order is what decides which of two links over
+ * one cell `Worksheet.hyperlinkAt` reports, and a re-read adds them in document order, so writing them
+ * any other way would change the answer across a save.
  */
-export function collectHyperlinks(cells: Iterable<Cell>): CollectedHyperlink[] {
-  const links: CollectedHyperlink[] = [];
-  for (const cell of cells) {
-    const value = cell.value;
-    if (isHyperlinkValue(value)) {
-      // A link that spans a range carries its extent in `range`; the anchor cell (this one) is the
-      // range's top-left. Emit that extent as `ref` so the clickable area survives, falling back to
-      // the single cell for an ordinary link.
-      links.push({
-        ref: value.range ?? cell.address,
-        row: cell.row,
-        col: cell.col,
-        target: value.hyperlink,
-        ...(value.tooltip !== undefined ? {tooltip: value.tooltip} : {}),
-      });
-    }
-  }
-  return links;
-}
-
-/** Every cell a sheet still holds, row-major: the live half of what a writer must gather. */
-export function* liveCells(sheet: Worksheet): Generator<Cell, void, undefined> {
-  for (const {cells} of sheet.rows()) yield* cells;
-}
-
-/** Split collected links into internal (location, no rel) and external (relationship) forms,
- * recording each external link's URL in the sheet's ledger so its relationship follows every other
- * sheet-local relationship in canonical order. An internal ('#'-prefixed) link records nothing. */
 export function planHyperlinks(
-  links: readonly CollectedHyperlink[],
+  links: readonly Hyperlink[],
   rels: RelationshipLedger,
 ): HyperlinkPlan[] {
   return links.map((link) => {
     const tooltip = link.tooltip !== undefined ? {tooltip: link.tooltip} : {};
-    // A '#'-prefixed target is an internal document location: held verbatim in `location`, with no
-    // relationship. Everything else is an external URL reached through a relationship.
     if (link.target.startsWith('#')) {
       return {ref: link.ref, location: link.target.slice(1), ...tooltip};
     }
@@ -144,11 +98,11 @@ export function sheetHyperlinkPass(): CollectingPass<ParsedHyperlink[]> {
   };
 }
 
-/** Fold parsed hyperlinks onto a sheet's cells, wrapping each cell's existing value (its visible
- * label) into a {@link HyperlinkValue}. A link over a cell whose value is not text (a number, a date, a
- * boolean, a formula) is dropped and the value kept. `targetOf` resolves a relationship id to its raw
- * Target: a URL for the external links hyperlinks almost always are, so it must stay unresolved against
- * the package rather than being handed over as a part path. */
+/**
+ * Put parsed hyperlinks on a sheet, in document order, whatever the cells they cover hold. `targetOf`
+ * resolves a relationship id to its raw Target: a URL for the external links hyperlinks almost always
+ * are, so it must stay unresolved against the package rather than being handed over as a part path.
+ */
 export function applyHyperlinks(
   sheet: Worksheet,
   links: readonly ParsedHyperlink[],
@@ -157,34 +111,16 @@ export function applyHyperlinks(
   for (const link of links) {
     const target = resolveTarget(link, targetOf);
     if (target === undefined) continue;
-    // A hyperlink may span a range (`ref="D1:H1"`); Excel anchors the link at the range's top-left
-    // cell. Decode once so a multi-cell link folds onto that anchor rather than asking the sheet for
-    // a range address it cannot resolve. A ref that does not name a cell is skipped, not fatal.
+    // A ref that names no cell, or a whole row or column (`A:A`), gives the link nothing to cover. It is
+    // dropped here, at the reader's boundary, so the guard behind `addHyperlink` stays a guard rather
+    // than a control-flow path.
     const decoded = tryDecodeRange(link.ref);
-    // An unbounded ref (`A:A`) decodes but names no anchor, so it is dropped alongside the garbage:
-    // there is no single cell to hang the link on.
-    if (decoded === undefined || decoded.tl.col === undefined || decoded.tl.row === undefined)
-      continue;
-    const cell = sheet.getCell(decoded.tl.address);
-    // The visible label is the cell's own value: a plain string, or rich text when the label carried
-    // per-run formatting, and an empty cell labels its link with nothing. Any other value (a number, a
-    // date, a boolean, a formula, or a link already folded onto the cell) cannot become a label without
-    // being destroyed, and the model has nowhere to put a link beside it, so the value stays and the
-    // link goes: losing an attribute beats losing content.
-    const cellValue = cell.value;
-    if (cellValue !== null && typeof cellValue !== 'string' && !isRichTextValue(cellValue))
-      continue;
-    const text = cellValue ?? '';
-    // Record the extent only when the link genuinely spans more than the anchor, so an ordinary
-    // single-cell link stays a plain value and the range survives verbatim for a multi-cell one.
-    const spansRange = decoded.tl.address !== decoded.br.address;
-    const value: HyperlinkValue = {
-      hyperlink: target,
-      text,
+    if (decoded === undefined || boundedRect(decoded) === undefined) continue;
+    sheet.addHyperlink({
+      ref: link.ref,
+      target,
       ...(link.tooltip !== undefined ? {tooltip: link.tooltip} : {}),
-      ...(spansRange ? {range: link.ref} : {}),
-    };
-    cell.value = value;
+    });
   }
 }
 

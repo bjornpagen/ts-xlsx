@@ -137,7 +137,8 @@ about a thousand lines that is no longer a class you can read: the fields are sc
 file, and there is no point at which you can see what the object _is_.
 
 Both push cohesive slices of state into their own objects and keep the public accessors in front of
-them. `Worksheet` holds `DataValidationOverlay`, `ConditionalFormattingOverlay`, `GridEdits`,
+them. `Worksheet` holds `DataValidationOverlay`, `ConditionalFormattingOverlay`, `HyperlinkOverlay`
+(`core/hyperlink.ts`, ADR-0042), `GridEdits`,
 `UsedExtent` (`core/used-extent.ts`), `WorksheetMerges` (`core/worksheet-merges.ts`, which owns the
 `MergeIndex` in turn), `WorksheetPictures` (`core/worksheet-pictures.ts`) and `WorksheetComments`
 (`core/worksheet-comments.ts`); `Workbook` holds `WorkbookVbaProject` (`core/workbook-vba.ts`),
@@ -240,9 +241,9 @@ to its region's master rides the same index, which takes that scan off `getCell`
 
 `GridEdits` owns that splice arithmetic for _everything_ anchored to the grid, which is a wider set
 than the cell rows: line metadata, merges, tables, anchored images and the coordinates a cell's value
-carries (a shared-formula master, a hyperlink's clickable range, a data table's ranges) move with the
-cells, and so do the four things bound to a range that live outside the cell grid entirely:
-data validations, conditional formats, comment threads and the sheet's autofilter. The invariant
+carries (a shared-formula master, a data table's ranges) move with the cells, and so do the five
+things bound to a range that live outside the cell grid entirely: data validations, conditional
+formats, hyperlinks, comment threads and the sheet's autofilter. The invariant
 is the general one, not a list that happened to be complete once: an overlay left behind re-points a
 dropdown or a highlight rule at cells nobody chose, and the writer emits that without complaint. The
 single coordinate rule they all share is `core/grid-shift.ts`. The edit is one value there,

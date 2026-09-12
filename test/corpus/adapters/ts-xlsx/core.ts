@@ -66,7 +66,8 @@ export const core = {
     const other = workbook.addWorksheet('Other');
     other.getCell('A1').value = 'listed';
     const sheet = workbook.addWorksheet('S');
-    sheet.getCell('A1').value = {text: 'go', hyperlink: 'https://example.com/'};
+    sheet.getCell('A1').value = 'go';
+    sheet.addHyperlink({ref: 'A1', target: 'https://example.com/'});
     for (let row = 1; row <= 3; row++) sheet.getCell(`D${row}`).value = row / 3;
     sheet.addDataValidation('B1:B5', {type: 'list', formulae: ['"one,two,three"']});
     sheet.addDataValidation(
@@ -103,8 +104,8 @@ export const core = {
     );
     const dataBar = rules.find((rule: Untyped) => rule.type === 'dataBar');
     return {
-      hyperlink: value?.hyperlink ?? null,
-      cellText: value?.text ?? null,
+      hyperlink: back.hyperlinkAt('A1')?.target ?? null,
+      cellText: value ?? null,
       standardValidation:
         validations.find((entry) => entry.sqref === 'B1:B5' && entry.extended !== true)?.rule
           ?.formulae?.[0] ?? null,
@@ -724,7 +725,9 @@ export const core = {
         continue;
       }
       const cells: Record<string, Untyped> = {};
-      for (const c of s.cells || []) cells[c.ref] = normalizeRewriteCell(sheet.getCell(c.ref));
+      for (const c of s.cells || []) {
+        cells[c.ref] = normalizeRewriteCell(sheet.getCell(c.ref), sheet);
+      }
       const columns: Record<string, Untyped> = {};
       for (const col of s.columns || []) {
         const p = sheet.getColumn(col.index);
@@ -999,7 +1002,8 @@ export const core = {
     const sheet = wb.addWorksheet('S');
     sheet.getCell('A1').value = 'keep';
     sheet.getCell('B2').value = 'target';
-    sheet.getCell('D1').value = {text: 'go', hyperlink: 'https://example.com/'};
+    sheet.getCell('D1').value = 'go';
+    sheet.addHyperlink({ref: 'D1', target: 'https://example.com/'});
     sheet.getCell('H1').note = 'a note';
     sheet.addDataValidation('E1:E5', {type: 'list', allowBlank: true, formulae: ['"a,b"']});
     sheet.addTable({name: 'T', ref: 'J1', columns: [{name: 'H'}], rowCount: 1});
@@ -1070,7 +1074,7 @@ export const core = {
             validations: s.dataValidations.length,
             tables: s.tables.length,
             autoFilter: s.autoFilter?.ref ?? null,
-            hyperlink: (s.getCell('D1').value as {hyperlink?: string} | null)?.hyperlink ?? null,
+            hyperlink: s.hyperlinkAt('D1')?.target ?? null,
             note: s.getCell('H1').note ?? null,
           },
         };

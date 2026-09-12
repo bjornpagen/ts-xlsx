@@ -105,20 +105,18 @@ test('a run whose font is an empty object reads back with no font', () => {
   assert.equal(run?.font, undefined, 'a font with no facets is not materialised');
 });
 
-test('a rich-text hyperlink label round-trips as rich text with its target', () => {
+test('a rich-text label under a hyperlink round-trips as rich text beside its link', () => {
   const wb = new Workbook();
-  wb.addWorksheet('S').getCell('A1').value = {
-    hyperlink: 'https://example.org',
-    text: {richText: [{text: 'bold', font: {bold: true}}, {text: 'plain'}]},
-  };
+  const sheet = wb.addWorksheet('S');
+  sheet.getCell('A1').value = {richText: [{text: 'bold', font: {bold: true}}, {text: 'plain'}]};
+  sheet.addHyperlink({ref: 'A1', target: 'https://example.org'});
 
-  const cell = roundtrip(wb).getWorksheet('S')?.getCell('A1').value;
-  assert.ok(cell !== undefined && cell !== null && typeof cell === 'object' && 'hyperlink' in cell);
-  assert.equal(cell.hyperlink, 'https://example.org', 'the target survives');
-  assert.ok(isRichTextValue(cell.text), 'the display label is rich text, not flattened');
-  assert.equal(cell.text.richText[0]?.text, 'bold');
-  assert.equal(cell.text.richText[0]?.font?.bold, true);
-  assert.equal(cell.text.richText[1]?.text, 'plain');
+  const back = roundtrip(wb);
+  assert.equal(back.getWorksheet('S')?.hyperlinkAt('A1')?.target, 'https://example.org');
+  const label = richTextOf(back, 'S', 'A1');
+  assert.equal(label.richText[0]?.text, 'bold');
+  assert.equal(label.richText[0]?.font?.bold, true);
+  assert.equal(label.richText[1]?.text, 'plain');
 });
 
 test('rich text with markup-significant characters and edge whitespace round-trips exactly', () => {

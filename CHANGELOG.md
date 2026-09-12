@@ -47,6 +47,18 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ### Changed
 
+- **BREAKING: a hyperlink sits on the sheet, beside the value of the cells it covers.** A link used to be
+  a cell value, `{hyperlink, text, tooltip?, range?}`, so a link over a number, a date or a formula had
+  no value to be and was dropped on read, and a link over a range was pinned to its top-left cell. It is
+  now `Worksheet.addHyperlink({ref, target, tooltip?})`, read back through `hyperlinks` and
+  `hyperlinkAt(reference)` and removed with `removeHyperlink(ref)`, and the cell holds its label as an
+  ordinary string or rich-text value: `cell.value = {text: 'Docs', hyperlink: url}` becomes
+  `cell.value = 'Docs'` and `sheet.addHyperlink({ref: 'A1', target: url})`. A read keeps the link over
+  any cell. A row or column splice moves a link as Excel does, growing it when lines are inserted inside
+  it and shrinking it when some of its lines are deleted, and `duplicateRow` copies a row's links.
+  `HyperlinkValue`, `isHyperlinkValue` and `ValueType.Hyperlink` are gone; the streaming writer gains
+  `addHyperlink`. See ADR-0042.
+
 - **BREAKING: a function passed as a value is read and written as Excel spells it.** A formula that
   hands a built-in function to a LAMBDA helper by name, like `=BYROW(A1:A3,SUM)` or
   `=LET(f,MAX,f(A1:A3))`, was written with a bare `SUM`, which Excel reads as a defined name and shows

@@ -30,28 +30,57 @@ const anchors = (sheet: Worksheet) => ({
   threads: sheet.commentThreads.map((thread) => thread.ref),
 });
 
-// A cell's value can carry grid coordinates of its own: a hyperlink's clickable range, a data table's
-// filled range and input cells. A splice moved the cell and left those behind, so the writer emitted a
-// hyperlink over the cells the link had moved away from.
-test('a hyperlink range moves with its cell through a row insert and a column delete', () => {
+test('a hyperlink moves with the cells it covers through a row insert and a column delete', () => {
   const sheet = new Workbook().addWorksheet('S');
-  sheet.getCell('D1').value = {text: 'go', hyperlink: 'https://example.com/', range: 'D1:H1'};
+  sheet.getCell('D1').value = 'go';
+  sheet.addHyperlink({ref: 'D1:H1', target: 'https://example.com/'});
   sheet.mergeCells('D1:H1');
 
   sheet.insertRow(1, ['header']);
-  assert.deepEqual(sheet.getCell('D2').value, {
-    text: 'go',
-    hyperlink: 'https://example.com/',
-    range: 'D2:H2',
-  });
+  assert.deepEqual(sheet.hyperlinks, [{ref: 'D2:H2', target: 'https://example.com/'}]);
 
   sheet.spliceColumns(1, 2);
   assert.deepEqual(sheet.merges, ['B2:F2']);
-  assert.deepEqual(sheet.getCell('B2').value, {
-    text: 'go',
-    hyperlink: 'https://example.com/',
-    range: 'B2:F2',
-  });
+  assert.deepEqual(sheet.hyperlinks, [{ref: 'B2:F2', target: 'https://example.com/'}]);
+});
+
+// As Excel 16.0 (build 20326) moved a link over A2:A4 through the same edits, recorded in
+// test/corpus/fixtures/excel-oracle/hyperlinks-through-edits.json.
+test('a hyperlink grows with a row inserted inside it, shrinks with its first row deleted, and goes with all of them', () => {
+  const sheet = new Workbook().addWorksheet('S');
+  sheet.addHyperlink({ref: 'A2:A4', target: 'https://range.example/'});
+
+  sheet.spliceRows(3, 0, []);
+  assert.deepEqual(
+    sheet.hyperlinks.map((link) => link.ref),
+    ['A2:A5'],
+  );
+  sheet.spliceRows(2, 1);
+  assert.deepEqual(
+    sheet.hyperlinks.map((link) => link.ref),
+    ['A2:A4'],
+  );
+  sheet.spliceRows(2, 3);
+  assert.deepEqual(sheet.hyperlinks, []);
+});
+
+test('a duplicated row carries its links, and a column insert moves every link', () => {
+  const sheet = new Workbook().addWorksheet('S');
+  sheet.getCell('A1').value = 7;
+  sheet.addHyperlink({ref: 'A1', target: 'https://copy.example/', tooltip: 'c'});
+
+  sheet.duplicateRow(1, {count: 2});
+  assert.deepEqual(
+    sheet.hyperlinks.map((link) => link.ref),
+    ['A1', 'A2', 'A3'],
+  );
+  assert.equal(sheet.hyperlinkAt('A3')?.tooltip, 'c');
+
+  sheet.spliceColumns(1, 0, []);
+  assert.deepEqual(
+    sheet.hyperlinks.map((link) => link.ref),
+    ['B1', 'B2', 'B3'],
+  );
 });
 
 test("a data table's filled range and input cells move with inserts above and to the left", () => {

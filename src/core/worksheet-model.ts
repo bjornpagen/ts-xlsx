@@ -156,6 +156,14 @@ export const WORKSHEET_MODEL_FACETS = [
     },
   ),
   facet(
+    'hyperlinks',
+    // A link's fields are strings, so a spread is a whole copy.
+    (sheet) => sheet.hyperlinks.map((link) => ({...link})),
+    (sheet, value) => {
+      for (const link of value) sheet.addHyperlink(link);
+    },
+  ),
+  facet(
     'dataValidations',
     (sheet) =>
       sheet.dataValidations.map(({sqref, rule, extended}) => ({

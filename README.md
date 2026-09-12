@@ -98,8 +98,10 @@ const wb2 = readXlsx(readFileSync('people.xlsx')); // a Buffer is a Uint8Array
   `column.width = 12`, `column.key = 'name'`), and cells are reachable from it:
   `row.getCell('B')`, `row.cells`, `row.values`.
 - **`Cell`** — one cell. `cell.value` is the whole story: a `number`, `string`,
-  `boolean`, `Date`, `null` (empty), a formula (`{formula, result}`), rich text, a
-  hyperlink, or an error — all precisely typed as [`CellValue`](docs/api/cell-values.md).
+  `boolean`, `Date`, `null` (empty), a formula (`{formula, result}`), rich text, or an
+  error — all precisely typed as [`CellValue`](docs/api/cell-values.md). A hyperlink is not
+  a value: it sits on the sheet, over any cell, through
+  `sheet.addHyperlink({ref: 'B2', target: 'https://example.com'})`.
 
 ```ts
 sheet.getRow(1).height = 20;

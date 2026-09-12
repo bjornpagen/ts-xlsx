@@ -10,7 +10,6 @@ import {
   isErrorCode,
   isErrorValue,
   isFormulaValue,
-  isHyperlinkValue,
   isRichTextValue,
   isSharedFormulaValue,
   richTextToPlain,
@@ -40,12 +39,13 @@ test('detectValueType classifies structural values', () => {
   assert.equal(detectValueType({formula: 'A1', result: 3}), ValueType.Formula);
   assert.equal(detectValueType({sharedFormula: 'A1', result: 3}), ValueType.Formula);
   assert.equal(detectValueType({richText: [{text: 'a'}]}), ValueType.RichText);
-  assert.equal(detectValueType({hyperlink: 'https://x', text: 'x'}), ValueType.Hyperlink);
 });
 
-test('a hyperlink whose text is rich still classifies as Hyperlink, not RichText', () => {
-  const value: CellValue = {hyperlink: 'https://x', text: {richText: [{text: 'x'}]}};
-  assert.equal(detectValueType(value), ValueType.Hyperlink);
+// A hyperlink lives on the sheet, beside the cell it covers, so the old `{hyperlink, text}` value is
+// refused like any other shape the model does not know rather than stored as a label.
+test('a hyperlink-shaped object is not a cell value', () => {
+  const link = {hyperlink: 'https://x', text: 'x'} as unknown as CellValue;
+  assert.throws(() => detectValueType(link), TypeError);
 });
 
 test('detectValueType throws on an unrecognised object shape', () => {
@@ -57,7 +57,6 @@ test('type guards discriminate the structural shapes', () => {
   assert.ok(!isFormulaValue({sharedFormula: 'A1'}));
   assert.ok(isSharedFormulaValue({sharedFormula: 'A1'}));
   assert.ok(isRichTextValue({richText: []}));
-  assert.ok(isHyperlinkValue({hyperlink: 'u', text: 't'}));
   assert.ok(isErrorValue({error: '#REF!'}));
   assert.ok(isDataTableFormulaValue({shareType: 'dataTable', ref: 'B2:B5'}));
 });
@@ -70,13 +69,12 @@ test('type guards reject the primitive leaves and each other', () => {
     isSharedFormulaValue,
     isDataTableFormulaValue,
     isRichTextValue,
-    isHyperlinkValue,
   ]) {
     for (const value of primitives)
       assert.ok(!guard(value), `${guard.name} accepted ${JSON.stringify(value)}`);
   }
   assert.ok(!isErrorValue({richText: []}));
-  assert.ok(!isRichTextValue({hyperlink: 'u', text: 't'}));
+  assert.ok(!isRichTextValue({error: '#REF!'}));
   assert.ok(!isDataTableFormulaValue({sharedFormula: 'A1'}));
 });
 
@@ -97,12 +95,6 @@ test('cellValueToText gives an invalid Date no text rather than throwing', () =>
 test('cellValueToText renders the structural kinds', () => {
   assert.equal(cellValueToText({error: '#REF!'}), '#REF!');
   assert.equal(cellValueToText({richText: [{text: 'foo'}, {text: 'bar'}]}), 'foobar');
-  assert.equal(cellValueToText({hyperlink: 'https://x', text: 'label'}), 'label');
-  assert.equal(
-    cellValueToText({hyperlink: 'https://x', text: {richText: [{text: 'rich label'}]}}),
-    'rich label',
-    'the outer shape wins: a hyperlink renders as its label',
-  );
 });
 
 test('cellValueToText renders a formula as its cached result, or nothing', () => {
