@@ -28,8 +28,10 @@
 // catches exactly the three types a model method raises about its own input. Anything else goes
 // straight through: an `XlsxError` from a layer below, an `InternalError` of ours.
 
-import {arrayRangeRepair, formulaPlacement} from '../../core/array-formula-ranges.ts';
+import {type GridRect, tryDecodeAnchoredRange} from '../../core/address.ts';
+import {type FormulaPlacement, formulaPlacement} from '../../core/array-formula-ranges.ts';
 import {INVALID_SHEET_NAME_CHARS, MAX_SHEET_NAME_LENGTH} from '../../core/limits.ts';
+import {MergeIndex} from '../../core/merge-index.ts';
 import {type CellValue, isFormulaValue, isSharedFormulaValue} from '../../core/value.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
 import {AuthoringError} from '../../errors.ts';
@@ -135,6 +137,56 @@ export function admitArrayRanges(sheet: Worksheet): void {
       }
     }
   }
+}
+
+/** What Excel's repair takes from a sheet whose array formulas cannot stand. */
+export interface ArrayRangeRepair {
+  /** Formulas whose cell lies in the range of an array formula kept: each loses its whole cell. */
+  readonly cellsRemoved: FormulaPlacement[];
+  /**
+   * Array formulas whose own cell lies in no range kept but whose range shares a cell with one: each loses
+   * its formula and keeps the value it cached.
+   */
+  readonly formulasRemoved: FormulaPlacement[];
+}
+
+/**
+ * What Excel's repair takes from the sheet, deciding in reading order: an array formula keeps its range
+ * unless that range shares a cell with a range kept before it. A formula of any kind whose cell lies in a
+ * kept range loses the cell; an array formula whose range shares a cell with a kept range, its own cell
+ * outside it, loses its formula and keeps its value. What is left holds no conflict.
+ *
+ * Excel 16.0 (build 20326) repaired B1:B3 holding a plain formula, or an array formula of its own, in B2
+ * by keeping B1's range and removing B2's "cell information", and B1:C2 beside A2:B3 by keeping B1's range
+ * and removing A2's "formula", its value left (`test/corpus/fixtures/excel-oracle/array-formula-ranges.json`).
+ * An array formula's own cell is the first of its range in reading order, so a range is always decided
+ * before any cell it holds, and a range whose formula was taken claims none.
+ */
+export function arrayRangeRepair(placements: Iterable<FormulaPlacement>): ArrayRangeRepair {
+  const ordered = [...placements].sort((a, b) => a.row - b.row || a.col - b.col);
+  const keptRanges: GridRect[] = [];
+  const kept = new MergeIndex(keptRanges);
+  const cellsRemoved: FormulaPlacement[] = [];
+  const formulasRemoved: FormulaPlacement[] = [];
+  for (const placement of ordered) {
+    const {col, row} = placement;
+    if (kept.overlapping({top: row, left: col, bottom: row, right: col}) !== undefined) {
+      cellsRemoved.push(placement);
+      continue;
+    }
+    const range =
+      placement.arrayRef === undefined
+        ? undefined
+        : tryDecodeAnchoredRange(placement.arrayRef, col, row);
+    if (range === undefined) continue;
+    if (kept.overlapping(range) !== undefined) {
+      formulasRemoved.push(placement);
+      continue;
+    }
+    keptRanges.push(range);
+    kept.note(range);
+  }
+  return {cellsRemoved, formulasRemoved};
 }
 
 // The value a formula cell cached, standing in for the formula a repair took; empty when it cached none.
