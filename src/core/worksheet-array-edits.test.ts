@@ -78,6 +78,36 @@ test('a column edit cutting through a Ctrl+Shift+Enter range is refused, and one
   assert.equal(removed.getCell('B1').value, null);
 });
 
+const blocked = (formula: string): CellValue => ({
+  shareType: 'array',
+  formula,
+  ref: 'B1',
+  dynamic: true,
+  result: {error: '#SPILL!'},
+});
+
+test('an edit bringing a formula into a dynamic array range blocks its spill, as Excel blocks it', () => {
+  const inserted = sheetWithArray('B1:B3', true);
+  inserted.insertRow(2, [null, {formula: 'A2*10'}]);
+  assert.deepEqual(inserted.getCell('B1').value, blocked('A1:A4*2'));
+  assert.deepEqual(inserted.getCell('B2').value, {formula: 'A2*10'});
+
+  // Excel 16.0, inserting row 1 copied at row 2: B1 shows #SPILL! and B2 spills over B2:B5.
+  const copied = sheetWithArray('B1:B3', true);
+  copied.duplicateRow(1);
+  assert.deepEqual(copied.getCell('B1').value, blocked('A1:A4*2'));
+  assert.deepEqual(copied.getCell('B2').value, {
+    shareType: 'array',
+    formula: 'A2:A5*2',
+    ref: 'B2:B5',
+    dynamic: true,
+  } satisfies CellValue);
+
+  const column = sheetWithArray('B1:C3', true);
+  column.insertColumn(3, [{formula: 'A1'}]);
+  assert.deepEqual(column.getCell('B1').value, blocked('A1:A3*2'));
+});
+
 test('an edit through a dynamic array goes ahead, as Excel lets it', () => {
   const sheet = sheetWithArray('B1:B3', true);
   sheet.insertRow(2, []);

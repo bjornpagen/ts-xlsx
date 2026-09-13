@@ -22,7 +22,8 @@ export default {
   description:
     'An array formula range holding another formula, or sharing a cell with another array formula range, ' +
     'is refused at write and read from a file as Excel repairs it; an edit cutting through a ' +
-    'Ctrl+Shift+Enter range is refused, and one moving or removing it whole goes ahead, as in Excel.',
+    'Ctrl+Shift+Enter range is refused, one moving or removing it whole goes ahead, and one bringing a ' +
+    'formula into a dynamic array range blocks its spill, as in Excel.',
 
   behavior: [
     {
@@ -83,6 +84,31 @@ export default {
             dynamicInsertInside: {refused: false, ref: 'B1:B4'},
           },
         );
+      },
+    },
+    {
+      name: 'an edit bringing a formula into a dynamic array range blocks its spill, and the sheet writes',
+      expect(api: CorpusApi, assert: Assert) {
+        // Excel stored the blocked formula over its own cell alone, caching #SPILL!.
+        const blocked = {
+          kind: 'array',
+          ref: 'B1',
+          dynamic: true,
+          formula: 'A1:A4*2',
+          result: {error: '#SPILL!'},
+        };
+        assert.deepStrictEqual(api.arrayRangeReport().spills, {
+          formulaInserted: {
+            B1: blocked,
+            B2: {kind: 'formula', ref: null, dynamic: false, formula: 'A2*10', result: null},
+            written: true,
+          },
+          rowCopied: {
+            B1: blocked,
+            B2: {kind: 'array', ref: 'B2:B5', dynamic: true, formula: 'A2:A5*2', result: null},
+            written: true,
+          },
+        });
       },
     },
     {

@@ -18,6 +18,11 @@ import {
   tryDecodeCellRef,
   tryDecodeRange,
 } from './address.ts';
+import {
+  arrayRangeConflicts,
+  type FormulaPlacement,
+  formulaPlacement,
+} from './array-formula-ranges.ts';
 import {type AutoFilter, canonicalizeAutoFilter} from './autofilter.ts';
 import {applyCellStyle, Cell, copyCellContent} from './cell.ts';
 import {Column} from './column.ts';
@@ -940,7 +945,8 @@ export class Worksheet {
    * a defined name, a data validation, a conditional format or a table's column formulas, follows the
    * row it names, and one to a deleted row becomes `#REF!`. An authored pivot drawing from this sheet
    * has its source range moved the same way. What the inserted rows carry is written against the sheet after the
-   * edit and is not moved.
+   * edit and is not moved. A dynamic array whose range the edit leaves holding another formula has its
+   * spill blocked, as Excel blocks it: the array formula keeps its own cell alone and caches `#SPILL!`.
    *
    * @throws {RangeError} if `start` is not a positive integer or `count` is negative.
    * @throws {RangeError} if an inserted row would land past the last row of the grid. The sheet is
@@ -1061,7 +1067,8 @@ export class Worksheet {
    * row properties (height, hidden, outline level, row fill). It carries no merge of its own, so a
    * range can be merged onto a duplicated row afterwards. A formula is copied as Excel copies a row,
    * its relative references moved down with it and its cached result dropped, since that was computed
-   * over the source's cells; an inserted copy is taken from the source as the insert left it.
+   * over the source's cells; an inserted copy is taken from the source as the insert left it. A copy
+   * landing in a dynamic array's range blocks its spill, as {@link spliceRows} says.
    *
    * @throws {RangeError} if `start` is not a positive integer or `count` is negative, or if a copy
    *   would land past the last row. The sheet is left untouched.
@@ -1214,6 +1221,31 @@ export class Worksheet {
   // call: a splice replaces its rectangles through `replaceAll`, which resets it.
   #afterStructuralEdit(): void {
     this.#extent.invalidate();
+    this.#blockObstructedSpills();
+  }
+
+  // Block the spill of every dynamic array an edit left over another formula, as Excel blocks it. A
+  // dynamic array's range is where its last calculation spilled, and Excel 16.0 let a row inserted with a
+  // formula, or a row copied, land inside one; the spilling formula then showed `#SPILL!`
+  // (`test/corpus/fixtures/excel-oracle/array-formula-ranges.json`) and Excel stored its range as its own
+  // cell. Moved as a Ctrl+Shift+Enter range moves, the range would hold that formula, which the writer
+  // refuses. A Ctrl+Shift+Enter range such an edit would cut is refused before anything moves.
+  #blockObstructedSpills(): void {
+    const cells = [...this.#rows.values()].flatMap((cols) => [...cols.values()]);
+    if (!cells.some(({value}) => isArrayFormulaValue(value) && value.dynamic === true)) return;
+    const placements: FormulaPlacement[] = [];
+    for (const cell of cells) {
+      if (typeof cell.value !== 'object' || cell.value === null) continue;
+      const placement = formulaPlacement(cell.address, cell.col, cell.row, cell.value);
+      if (placement !== undefined) placements.push(placement);
+    }
+    for (const {array} of arrayRangeConflicts(placements)) {
+      const cell = this.#rows.get(array.row)?.get(array.col);
+      if (cell === undefined) continue;
+      const value = cell.value;
+      if (!isArrayFormulaValue(value) || value.dynamic !== true) continue;
+      cell.value = {...value, ref: cell.address, result: {error: '#SPILL!'}};
+    }
   }
 
   // Refuse, before anything moves, an edit cutting through a Ctrl+Shift+Enter array formula's range on

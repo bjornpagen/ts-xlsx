@@ -22,7 +22,8 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   naming both cells. `spliceRows`, `spliceColumns`, `insertRow`, `insertColumn` and `duplicateRow` throw
   `AuthoringError` for an edit cutting through a Ctrl+Shift+Enter range, an insert strictly inside it or a
   delete taking part of it, and leave the sheet untouched; an edit moving or deleting the whole range
-  goes ahead, as does any edit through a dynamic array. `readXlsx` and `readXlsb` read a file carrying either
+  goes ahead, as does any edit through a dynamic array; one bringing a formula into a dynamic array's
+  range blocks its spill as Excel does, leaving the array formula over its own cell caching `#SPILL!`. `readXlsx` and `readXlsb` read a file carrying either
   shape as Excel repairs it: the array formula first in reading order keeps its range, a formula inside
   that range loses its formula and value but keeps its style, a shared formula whose master that was
   keeps only its value, and an array formula whose range merely overlaps it keeps only its value.

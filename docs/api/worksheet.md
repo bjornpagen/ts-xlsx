@@ -931,7 +931,8 @@ Formulas move with the rows as Excel moves them: a reference to this sheet, in a
 a defined name, a data validation, a conditional format or a table's column formulas, follows the
 row it names, and one to a deleted row becomes `#REF!`. An authored pivot drawing from this sheet
 has its source range moved the same way. What the inserted rows carry is written against the sheet after the
-edit and is not moved.
+edit and is not moved. A dynamic array whose range the edit leaves holding another formula has its
+spill blocked, as Excel blocks it: the array formula keeps its own cell alone and caches `#SPILL!`.
 
 **Throws:** `RangeError` if `start` is not a positive integer or `count` is negative.
 **Throws:** `RangeError` if an inserted row would land past the last row of the grid. The sheet is
@@ -1019,7 +1020,8 @@ Each copy is a faithful duplicate of the source: its cell values, its per-cell s
 row properties (height, hidden, outline level, row fill). It carries no merge of its own, so a
 range can be merged onto a duplicated row afterwards. A formula is copied as Excel copies a row,
 its relative references moved down with it and its cached result dropped, since that was computed
-over the source's cells; an inserted copy is taken from the source as the insert left it.
+over the source's cells; an inserted copy is taken from the source as the insert left it. A copy
+landing in a dynamic array's range blocks its spill, as [`spliceRows`](./worksheet.md#worksheetsplicerows) says.
 
 **Throws:** `RangeError` if `start` is not a positive integer or `count` is negative, or if a copy
 would land past the last row. The sheet is left untouched.

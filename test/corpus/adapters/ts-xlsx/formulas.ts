@@ -110,7 +110,9 @@ export const formulas = {
     return storedFormulas(writeXlsx(workbook));
   },
 
-  // Excel's rules for an array formula's range, asked of the library → {authored, edits, foreign}.
+  // Excel's rules for an array formula's range, asked of the library → {spills, authored, edits, foreign}.
+  // `spills` maps each edit bringing a formula into a dynamic array filling B1:B3 to {B1, B2, written}:
+  // both cells as `arrayFormulaReport` reports a formula, and whether the sheet then writes.
   // `authored` maps each shape to the writer's refusal message, or null when it writes it. `edits` maps
   // each edit of a sheet holding one array formula (B1:B3, or B1:C3 for the column edits) to {refused,
   // ref}: whether the edit threw, and the range the array formula holds after it, null when it is gone.
@@ -169,7 +171,29 @@ export const formulas = {
     } catch {
       rewrites = false;
     }
+    const spill = (perform: (sheet: Untyped) => void) => {
+      const workbook = new Workbook();
+      const sheet: Untyped = workbook.addWorksheet('S');
+      for (let row = 1; row <= 3; row++) sheet.getCell(`A${row}`).value = row;
+      sheet.getCell('B1').value = array('B1:B3', true);
+      perform(sheet);
+      let written = true;
+      try {
+        writeXlsx(workbook);
+      } catch {
+        written = false;
+      }
+      return {
+        B1: formulaFacts(sheet.getCell('B1').value),
+        B2: formulaFacts(sheet.getCell('B2').value),
+        written,
+      };
+    };
     return {
+      spills: {
+        formulaInserted: spill((sheet) => sheet.insertRow(2, [null, {formula: 'A2*10'}])),
+        rowCopied: spill((sheet) => sheet.duplicateRow(1)),
+      },
       authored: {
         formulaInsideLegacy: refusal({B1: array('B1:B3'), B2: {formula: 'A2*10'}}),
         formulaInsideDynamic: refusal({B1: array('B1:B3', true), B2: {formula: 'A2*10'}}),
