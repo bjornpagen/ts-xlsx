@@ -12,6 +12,63 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 
 ## [Unreleased]
 
+## [3.2.0] — 2026-09-13
+
+Most of this release replaces a plausible answer with the one Excel gives. A row or column splice now
+moves the references in formula text, so `=SUM(A1:A10)` grows to `A1:A11` when a row goes in inside
+it, where it used to keep summing cells that had moved. An array formula keeps its range and a dynamic
+array keeps its spill. A `#SPILL!` read from a file stays `#SPILL!` instead of turning into `#VALUE!`.
+A hyperlink over a number keeps the number and the link both.
+
+Several packages the writer used to produce opened with Excel's repair prompt. A pivot with a numeric
+field on an axis, a table named `T1`, a threaded comment with no author and an array formula whose
+range holds another formula were among them. Each is now written the way Excel writes it or refused at
+the call that would make it. Three more hostile-input paths are bounded. The worst was the attribute
+scan, where one junk token in an open tag cost the square of its length. A 64,000-character token that
+zips to 4 KB took `readXlsx` 4.9 s, and a megabyte token now reads in 77 ms.
+
+**Read the twenty breaks listed below before upgrading.** They land under a minor version number,
+which [ADR-0015](docs/decisions/0015-publishing-name-semver-and-first-version.md) §2 does not
+authorise, since each is a public API change and the policy calls for a major. The project made the
+same call for 2.1.0 and 3.1.0, and this release goes further than either. Moving hyperlinks out of the
+cell value is a redesign, where every earlier break removed an API that was wrong. The version number
+will not warn you, so this list has to.
+
+- **A hyperlink is sheet state, not a cell value.** `HyperlinkValue`, `isHyperlinkValue` and
+  `ValueType.Hyperlink` are gone. `cell.value = {text: 'Docs', hyperlink: url}` becomes
+  `cell.value = 'Docs'` and `sheet.addHyperlink({ref: 'A1', target: url})`. See ADR-0042.
+- **A row or column splice rewrites formula text** in cells, defined names, data validations,
+  conditional formats, table formulas and an authored pivot's `sourceRef`.
+- **`duplicateRow` moves a copy's relative references** and drops its cached result.
+- **A function passed by name reads back without `_xleta.`**, so a formula says `BYROW(A1:A3,SUM)`
+  where it used to say `BYROW(A1:A3,_xleta.SUM)`. `readXlsb` no longer lists `_xleta.` and `_xlpm.`
+  names as defined names.
+- **`ErrorCode` gains `#BUSY!`, `#CONNECT!`, `#BLOCKED!`, `#UNKNOWN!` and `#FIELD!`.** An exhaustive
+  switch over it needs five more arms.
+- **`isFormulaValue` no longer matches an array formula.** Test `isArrayFormulaValue` for those.
+- **An edit cutting through a Ctrl+Shift+Enter array formula's range throws `AuthoringError`** from
+  `spliceRows`, `spliceColumns`, `insertRow`, `insertColumn` and `duplicateRow`, and the writer refuses
+  a formula inside another array formula's range.
+- **`readCsv` keeps a number with more than 15 significant digits as text**, and throws
+  `CsvParseError` for a file that does not fit a worksheet.
+- **`writeCsv` and `writeCsvText` put row N on line N**, so an empty row before the last populated one
+  is an empty line.
+- **The CSV codec refuses a delimiter of `"`, CR or LF**, and the writer refuses a `rowDelimiter` that
+  is empty or holds the field delimiter or a quote.
+- **`Workbook.tableStyles.styles` holds `{name, xml}` definitions.** Read `.xml` where a fragment
+  string was read before.
+- **`StreamedRow` cannot be constructed.** `addRow` and `addRows` return one.
+- **A conditional-format or data-validation number the schema cannot hold makes `writeXlsx` throw**,
+  and `addConditionalFormatting` refuses a range that names no cells.
+- **`sheet.merges` holds canonical ranges**, and `mergeCells` refuses a sheet-qualified one with
+  `SyntaxError`.
+- **A streamed inline rich string is a `RichTextValue`**, including rich text this library's own
+  writer stored.
+- **`addPivotTable` refuses a field named twice and a source whose header row repeats a name.**
+- **A table name that reads as a reference, such as `T1` or `R1C1`, throws `SyntaxError`.**
+- **`TableOptions.displayName` and `Table.displayName` are gone.** A table has one name.
+- **A threaded comment's author must be added with `Workbook.addPerson`** before `writeXlsx`.
+
 ### Added
 
 - **An array formula's range holds no other formula.** Excel offers to repair a package whose array
@@ -23,20 +80,23 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   `AuthoringError` for an edit cutting through a Ctrl+Shift+Enter range, an insert strictly inside it or a
   delete taking part of it, and leave the sheet untouched; an edit moving or deleting the whole range
   goes ahead, as does any edit through a dynamic array; one bringing a formula into a dynamic array's
-  range blocks its spill as Excel does, leaving the array formula over its own cell caching `#SPILL!`. `readXlsx` and `readXlsb` read a file carrying either
-  shape as Excel repairs it: the array formula first in reading order keeps its range, a formula inside
-  that range loses its formula and value but keeps its style, a shared formula whose master that was
-  keeps only its value, and an array formula whose range merely overlaps it keeps only its value.
+  range blocks its spill as Excel does, leaving the array formula over its own cell caching `#SPILL!`.
+  `readXlsx` and `readXlsb` read a file carrying either shape as Excel repairs it: the array formula
+  first in reading order keeps its range, a formula inside that range loses its formula and value but
+  keeps its style, a shared formula whose master that was keeps only its value, and an array formula
+  whose range merely overlaps it keeps only its value.
 
-- **Errors Excel has no literal for keep their kind.** `ErrorCode` gains `#SPILL!`, `#CONNECT!`,
-  `#BLOCKED!`, `#UNKNOWN!`, `#FIELD!` and `#CALC!`, so an exhaustive switch over it needs six more arms.
-  Excel stores each of them as `<v>#VALUE!</v>` with a `vm` pointing through `xl/metadata.xml` at a rich
-  value whose `errorType` names the real error. A read used to take such a cell for `#VALUE!` and a save
-  dropped the rich value, so a spill error or an empty FILTER came back as `#VALUE!`; the writer refused
-  the six outright. `readXlsx` and `readSheetRows` now read the error the rich value names, whether the
-  cell holds it or a formula cached it, and both writers store each of the six as Excel does, beside the
-  value metadata and the rich-value parts. A `t="e"` cell spelling one of them literally reads as that
-  error too, and `readXlsb` reads them from the binary form's value metadata.
+- **Errors Excel has no literal for keep their kind.** `ErrorCode` gains `#BUSY!`, `#CONNECT!`,
+  `#BLOCKED!`, `#UNKNOWN!` and `#FIELD!`, so an exhaustive switch over it needs five more arms. Excel
+  stores `#SPILL!`, `#CALC!` and the last four of those as `<v>#VALUE!</v>` with a `vm` pointing through
+  `xl/metadata.xml` at a rich value whose `errorType` names the real error. A read used to take such a
+  cell for `#VALUE!`, so a spill error or an empty FILTER came back as `#VALUE!`, and the writer stored
+  `#SPILL!` and `#CALC!` literally, which Excel opens with its repair prompt. `readXlsx` and
+  `readSheetRows` now read the error the rich value names, whether the cell holds it or a formula cached
+  it, and both writers store each of the six as Excel does, beside the value metadata and the rich-value
+  parts. A `t="e"` cell spelling one of them literally reads as that error too, and `readXlsb` reads them
+  from the binary form's value metadata. `#BUSY!` has a literal, and is written and read back like
+  `#N/A`.
 
 - **Array formulas keep their range and their kind.** `ArrayFormulaValue`
   (`{shareType: 'array', formula, ref, dynamic?, result?}`, guarded by `isArrayFormulaValue`) is a cell
@@ -104,15 +164,17 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
 ### Changed
 
 - **A picture added beside a kept drawing joins it.** A sheet read from a file keeps its drawing whole
-  when the drawing holds a chart, a shape or other content the library does not model, and anchoring a
-  picture on such a sheet used to be refused, since a worksheet references one drawing. The picture is
-  now written into the kept drawing, beside the chart or shape, with relationship and shape ids past
-  the ones the drawing holds, so a report template can take a logo beside its chart. Read back, the
-  picture is part of the kept drawing rather than one of `Worksheet.images`.
+  when the drawing holds a chart, a shape or other content the library does not model. A worksheet
+  references one drawing, so the writer used to plan a second drawing for a picture added to such a
+  sheet and reference only that, dropping the chart or shape. The picture is now written into the kept
+  drawing, beside the chart or shape, with relationship and shape ids past the ones the drawing holds,
+  so a report template can take a logo beside its chart. Read back, the picture is part of the kept
+  drawing rather than one of `Worksheet.images`.
 
 - **BREAKING: a hyperlink sits on the sheet, beside the value of the cells it covers.** A link used to be
-  a cell value, `{hyperlink, text, tooltip?, range?}`, so a link over a number, a date or a formula had
-  no value to be and was dropped on read, and a link over a range was pinned to its top-left cell. It is
+  a cell value, `{hyperlink, text, tooltip?, range?}`, so reading a link over a number, a date or a
+  formula replaced the value with an empty label, and a link over a range was pinned to its top-left
+  cell. It is
   now `Worksheet.addHyperlink({ref, target, tooltip?})`, read back through `hyperlinks` and
   `hyperlinkAt(reference)` and removed with `removeHyperlink(ref)`, and the cell holds its label as an
   ordinary string or rich-text value: `cell.value = {text: 'Docs', hyperlink: url}` becomes
@@ -242,12 +304,6 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   `SUM(Shown[h])` and makes `SUM(Internal[h])` a `#REF!`. `name` is now written as both attributes, and
   a file's table reads under its `displayName`, falling back to `name` when that is absent.
 
-- **BREAKING: `ERROR_CODES` holds the error literals Excel reads, which drops `#SPILL!` and `#CALC!`
-  and adds `#BUSY!`.** A cell written with `{error: '#SPILL!'}` or `{error: '#CALC!'}` opened with
-  Excel's repair prompt: Excel stores those errors as `#VALUE!` beside a rich value, never literally.
-  Both now fail the type and are refused by the writer with `AuthoringError`. `#BUSY!` is written and
-  read back like `#N/A`. A file's cell carrying one of the refused spellings literally reads as text.
-
 - **BREAKING: a threaded comment's author must be registered by the time the workbook is written.** A
   message whose `personId` names no person added with `Workbook.addPerson` now makes `writeXlsx` throw
   `AuthoringError`; Excel opened such a package with its repair prompt. A message with no `personId` was
@@ -309,7 +365,7 @@ ExcelJS-to-`ts-xlsx` rewrite — is recorded in `git log` and the [ADR series](d
   holds a number.
 
 - **A Strict workbook could not be written back out.** `writeXlsx` threw `InternalError: two package
-parts claim the path "docProps/app.xml"` for any workbook read from an ISO/IEC 29500 Strict
+  parts claim the path "docProps/app.xml"` for any workbook read from an ISO/IEC 29500 Strict
   package, because Strict names the app-properties relationship `extendedProperties` and the reader
   kept it as an unmodelled part. It is now recognised, and the workbook is written as Transitional.
 
@@ -380,7 +436,7 @@ parts claim the path "docProps/app.xml"` for any workbook read from an ISO/IEC 2
   Inserting empty rows at row 1048576 (`spliceRows(1048576, 0, [], [])`) or duplicating a
   height-only last row left a line past the grid behind with the same result, a replacing
   `duplicateRow` near the bottom wrote some copies before throwing, and `spliceColumns(16384, 0, [],
-[])` reported success for columns that cannot exist.
+  [])` reported success for columns that cannot exist.
 
 - **`freeze`, `addRows` and `addColumns` no longer apply half of a refused call.** A `freeze` with
   nothing left to scroll set the frozen state before throwing, and a row wider than the grid wrote
@@ -398,12 +454,6 @@ parts claim the path "docProps/app.xml"` for any workbook read from an ISO/IEC 2
   wrote that back. Phonetic runs are now skipped wherever a string is read; the reading itself is
   dropped rather than modelled.
 
-- **A hyperlink over a number, date, boolean or formula erased the value.** A link folds into its
-  cell as a `HyperlinkValue` whose label is text, so reading a linked non-text cell replaced `42` with
-  an empty label, and a save wrote an empty string where the number was. The value is now kept and
-  the link dropped. Keeping both needs hyperlinks modelled beside cells rather than inside their
-  values, which is a separate change.
-
 - **A sheet protected by the legacy password hash was saved unguarded, and a sheet with no `sheet`
   attribute was saved locked.** The 16-bit hash had no field, so a `<sheetProtection>` carrying
   `password="CC3D"` was rewritten without it and anyone could unprotect the sheet. And `sheet`
@@ -413,12 +463,7 @@ parts claim the path "docProps/app.xml"` for any workbook read from an ISO/IEC 2
 - **A cell added to an open streamed row through `getCell` was dropped when the row committed.** The
   streaming writer rendered the cells `addRow` had returned and then evicted the whole row from the
   model, so `addRow(['a', 'b'])` followed by `getCell('D1').value = 'x'` wrote A1 and B1 only, and a
-  hyperlink or note set that way went with it. A commit now renders the row as the model holds it.
-
-- **Adding a picture to a sheet whose drawing holds a chart or shape dropped the chart or shape.** Such
-  a drawing is kept byte for byte with none of its anchors modelled, and a worksheet references one
-  drawing, so the writer planned a second one for the picture and referenced only that. `addImage`,
-  `addImageAnchor`, `importImages` and the writer now refuse with an `AuthoringError` naming the sheet.
+  note set that way went with it. A commit now renders the row as the model holds it.
 
 - **`readSheetRows` and `readWorkbookStream` decoded a cell with no format under no format at all.**
   Every cell falls back to the workbook's default format, xf 0, and `readXlsx` applied it, so in a
@@ -452,11 +497,10 @@ parts claim the path "docProps/app.xml"` for any workbook read from an ISO/IEC 2
   applied. The model is now applied to a scratch sheet first; an assignment that fails throws and
   leaves the destination as it was.
 
-- **A row or column splice left a hyperlink's clickable range and a data table's ranges behind.** A
-  splice moved a cell but not the coordinates inside its value: a link over merged `D1:H1` moved to
-  `D2` with its `range` still `D1:H1`, so the writer emitted the hyperlink over the old cells and a
-  re-read put an empty link on `D1`. A hyperlink's `range` and a data table's `ref`, `r1` and `r2` now
-  move with the cell, as a shared-formula clone's master address already did.
+- **A row or column splice left a data table's ranges behind.** A splice moved a cell but not the
+  coordinates inside its value, so a data table formula moved to its new cell still naming its old
+  `ref`, `r1` and `r2`. All three now move with the cell, as a shared-formula clone's master address
+  already did.
 
 - **An automatic page break was saved as a manual one, and page breaks stayed put through a splice.**
   The writer marked every `<brk>` `man="1"` and counted all of them as manual, and the reader dropped
@@ -554,6 +598,38 @@ parts claim the path "docProps/app.xml"` for any workbook read from an ISO/IEC 2
   two bodies took two slots, a stray body directly under `<fills>` took one, and a self-closing
   `<fill/>` took none. Each later `fillId` then resolved to a neighbouring fill. Exactly one slot is
   now committed per `<fill>`, from its first body; a body outside any `<fill>` is ignored.
+
+- **A saved custom view overwrote the sheet's own settings on read.** Excel stores a view saved from
+  View > Custom Views as a `<customSheetView>` holding its own pane, selection, page breaks, margins,
+  print options, page setup, header, footer and autofilter, under the element names the sheet itself
+  uses. The reader matched those names wherever they sat, so a saved view replaced the sheet's pane and
+  filter, added its page breaks to the sheet's, and filled in margins and a header the sheet did not
+  have. The reader now skips custom views. The library neither models nor preserves them, so a save
+  drops them as it did before. A whole-column or whole-row autofilter such as `ref="A:C"` also aborted
+  the read with `AuthoringError`, and now leaves the sheet without a filter while its cells read.
+
+- **An attribute token in an open tag cost the square of its length to read.** The attribute scan was
+  a regular expression that backtracked over a run of name characters with no `=` after it, once from
+  every start position inside the run. A file chooses what sits in its tags, and a worksheet whose
+  `<c>` carried a 64,000-character token, 4 KB zipped, took `readXlsx` 4.9 s. The scan is linear now,
+  and that token reads in 46 ms and a megabyte token in 77 ms, through `readXlsx`, `readSheetRows` and
+  `parseCustomUi` alike.
+
+- **An `.xlsb` formula citing a long defined name could fail the whole read, and an undefined token
+  read as a cell reference.** A five-byte BIFF12 token stands for a name or sheet of any length, so a
+  3,599-byte formula citing a 1 MiB defined name 600 times threw a native `RangeError` out of
+  `readXlsb`. Decoded formula text is now capped at four times Excel's 8,192-character limit, and a
+  formula past the cap is dropped while its cached value is kept. Token bytes `0x80` to `0xFF` decoded
+  as real operands, so `0xA4` read as `A1`. They are unknown tokens now, which cost the formula and keep
+  the cached value.
+
+- **`readXlsb` failed on shapes `readXlsx` repairs, and bounded no work across column records.** Sheets
+  named `S` and `s`, a 40-character sheet name, an overlapping merge and an empty defined name each
+  raised the `AuthoringError` meant for a caller's mistake and failed the read, through `readXlsx` on
+  an `.xlsb` as well. The binary reader now repairs or drops them as the XML reader does, and resolves
+  3-D references and scoped names against the repaired sheet names. Its `BrtColInfo` runs also go
+  through the column budget `<col>` already had, so 800 full-width hidden runs in 16 KB no longer take
+  most of a second.
 
 ## [3.1.0] — 2026-09-04
 
@@ -1936,7 +2012,8 @@ author a new one ([ADR-0014](docs/decisions/0014-charts-shapes-slicers-are-round
   table is re-emitted at its original indices, and the namespace prefixes Excel stamps on a table style
   (`xr9:uid`) are re-declared on the stylesheet root rather than left dangling.
 
-[Unreleased]: https://github.com/shbernal/ts-xlsx/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/shbernal/ts-xlsx/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/shbernal/ts-xlsx/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/shbernal/ts-xlsx/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/shbernal/ts-xlsx/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/shbernal/ts-xlsx/compare/v2.0.0...v2.1.0
