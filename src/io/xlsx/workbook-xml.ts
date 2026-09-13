@@ -423,6 +423,13 @@ const EXCEL_CALC_ID = '171027';
 // Today the model exposes a single one: `fullCalcOnLoad`, which tells the consumer to recalculate
 // every formula on open instead of trusting the cached results. Emitted only when set, so an
 // unmarked workbook keeps the element (and its `calcId`) out of the file entirely.
+//
+// Nor is the calculation declared any other way. Under manual calculation Excel 16.0 shows a formula's
+// cached rich-value error, `#SPILL!` or `#CALC!`, only in a workbook part carrying Excel's own
+// `<fileVersion>`, the `microsoft.com:RD` calculation feature and the `calcId` of the very engine opening
+// it, and `#VALUE!` otherwise until recalculated (`test/corpus/fixtures/excel-oracle/rich-value-errors.json`).
+// Declaring them claims a calculation by a named Excel build the library never ran, true only until the
+// next engine, and under automatic calculation Excel recalculates the package on open whatever it declares.
 function calcPrXml(workbook: Workbook): string {
   return workbook.fullCalcOnLoad ? `<calcPr calcId="${EXCEL_CALC_ID}" fullCalcOnLoad="1"/>` : '';
 }
