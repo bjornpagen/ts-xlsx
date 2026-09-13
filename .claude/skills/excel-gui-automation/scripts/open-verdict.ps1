@@ -20,16 +20,17 @@
 
   By default it is READ-ONLY: on a repair/mismatch prompt it clicks the safe
   negative ('No') so nothing is rewritten. Pass -AcceptRepair to click 'Yes',
-  capture the post-repair notification + any repair log Excel writes, and
-  (with -SaveRepairedTo) persist Excel's recovered canonical output as a fixture.
+  dismiss the Repairs dialog Excel then holds modal, report the repair log it
+  writes, and (with -SaveRepairedTo) persist Excel's recovered output as a fixture.
 
 .PARAMETER Path
   The .xlsx to open.
 
 .PARAMETER AcceptRepair
-  Click 'Yes' on a repair/format-mismatch prompt instead of 'No'. Captures the
-  [Repaired] workbook title, the post-repair notification text, and scans for a
-  repair-log file. Off by default (read-only).
+  Click 'Yes' on a repair/format-mismatch prompt instead of 'No'. Reports the
+  repaired workbook title and the repair log Excel writes to %TEMP%, whose
+  <removedRecord> and <repairedRecord> entries say what the repair changed.
+  Off by default (read-only).
 
 .PARAMETER SaveRepairedTo
   With -AcceptRepair, save the recovered workbook to this path so you can commit
@@ -64,10 +65,10 @@ param(
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\xl-window-lib.ps1"
 . "$PSScriptRoot\uia-lib.ps1"
+. "$PSScriptRoot\rot-lib.ps1"
 
 $Path = (Resolve-Path -LiteralPath $Path).Path
 $stem = [IO.Path]::GetFileNameWithoutExtension($Path)
-$fileDir = [IO.Path]::GetDirectoryName($Path)
 
 # Classification patterns (case-insensitive substring on a window's combined
 # visible text). These are Excel's English-locale strings; on first real run,
@@ -75,16 +76,23 @@ $fileDir = [IO.Path]::GetDirectoryName($Path)
 $reRepairPrompt = 'we found a problem with some content|recover as much as we can'
 $reMismatch     = "file format and extension of.*don't match|format and extension .* don't match"
 $reRejected     = 'cannot open the file|file format or file extension is not valid|is corrupt and cannot be opened|unable to read (the )?file'
-$rePostRepair   = 'repaired or removed the unreadable content|repaired records|excel was able to open the file'
+# Build 20326 titles a repaired workbook's frame '<file>  -  Repaired - Excel'; older builds wrote '[Repaired]'.
+$reRepairedTitle = '\[Repaired\]|\s-\s+Repaired\s+-'
+# The dialog Excel holds modal after a repair: an SDM dialog titled "Repairs to '<file>'", whose list
+# and buttons UI Automation does not expose, so it is found by title and closed with WM_CLOSE.
+$reRepairsDialog = "^Repairs to '"
+$WM_CLOSE = 0x0010
 
-# Only ever touch an EXCEL.EXE this run spawned.
-$preExisting = @(Get-Process -Name EXCEL -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
-if ($preExisting.Count -gt 0) {
-  Write-Host "WARN: $($preExisting.Count) EXCEL.EXE already running; using /x to spawn an isolated instance."
+# Only ever touch the EXCEL.EXE this run spawned: the process Start-Process returns, never "every Excel
+# that appeared since", which also caught the instances PowerPoint starts for its charts, so -CloseAfter
+# killed them.
+$others = @(Get-Process -Name EXCEL -ErrorAction SilentlyContinue).Count
+if ($others -gt 0) {
+  Write-Host "WARN: $others EXCEL.EXE already running; using /x to spawn an isolated instance."
 }
 
 # /x = separate process (clean PID isolation). Quote the path as one argument.
-Start-Process -FilePath 'excel.exe' -ArgumentList '/x', "`"$Path`"" | Out-Null
+$spawned = Start-Process -FilePath 'excel.exe' -ArgumentList '/x', "`"$Path`"" -PassThru
 
 $verdict = [ordered]@{
   path         = $Path
@@ -99,8 +107,7 @@ $verdict = [ordered]@{
 }
 
 function Get-SpawnedExcelPids {
-  @(Get-Process -Name EXCEL -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id) |
-    Where-Object { $preExisting -notcontains $_ }
+  @(Get-Process -Id $spawned.Id -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
 }
 
 # Poll for the first decisive window state.
@@ -131,7 +138,7 @@ while ((Get-Date) -lt $deadline -and -not $decided) {
       # dialog. Require it to persist a couple of polls so a transient splash
       # doesn't read as 'clean'.
       if ($title -and $title -like "*$stem*") {
-        if ($title -match '\[Repaired\]') {
+        if ($title -match $reRepairedTitle) {
           $verdict.verdict = 'repaired'; $verdict.windowTitle = $title; $decided = $true; break
         }
         $cleanStreak++
@@ -166,35 +173,50 @@ if ($verdict.verdict -in @('repair-prompt', 'format-mismatch')) {
   if ($scope) {
     $btn = if ($AcceptRepair) { 'Yes' } else { 'No' }
     Invoke-UiaElement -Name $btn -ControlType $script:CT::Button -Scope $scope | Out-Null
-    Start-Sleep -Milliseconds 1500
 
     if ($AcceptRepair) {
-      # Post-repair notification (if any) + [Repaired] title.
-      $before = @(Get-ChildItem -Path $fileDir -Filter 'error*.xml' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
-      foreach ($xlPid in (Get-SpawnedExcelPids)) {
-        foreach ($w in (Find-UiaWindowsByPid -ProcessId $xlPid)) {
-          $t = Get-UiaVisibleText -Scope $w
-          if ($t -imatch $rePostRepair) { $verdict.dialogText = $t }
-          if ($w.Current.Name -match '\[Repaired\]') { $verdict.windowTitle = $w.Current.Name; $verdict.verdict = 'repaired' }
-          # Dismiss the notification if it has a Close/OK.
-          Invoke-UiaElement -Name 'Close' -ControlType $script:CT::Button -Scope $w | Out-Null
-          Invoke-UiaElement -Name 'OK' -ControlType $script:CT::Button -Scope $w | Out-Null
+      # The Repairs dialog comes up a moment after 'Yes' and holds Excel modal: every COM call is
+      # rejected with RPC_E_CALL_REJECTED until it closes. Only that window is closed. Clicking 'Close'
+      # in every window of the instance hit the workbook frame's own close button instead.
+      $noticeDeadline = (Get-Date).AddSeconds(20)
+      $dismissed = $false
+      while (-not $dismissed -and (Get-Date) -lt $noticeDeadline) {
+        Start-Sleep -Milliseconds 600
+        foreach ($xlPid in (Get-SpawnedExcelPids)) {
+          foreach ($w in (Find-UiaWindowsByPid -ProcessId $xlPid)) {
+            $title = $w.Current.Name
+            # The verdict stays what the open did; the title records that the accepted repair ran.
+            if ($title -match $reRepairedTitle) { $verdict.windowTitle = $title }
+            if ($title -notmatch $reRepairsDialog) { continue }
+            $verdict.dialogText = $title
+            [Win32Gui]::PostMessage([IntPtr]$w.Current.NativeWindowHandle, $WM_CLOSE, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+            $dismissed = $true
+          }
         }
       }
+      if (-not $dismissed) { Write-Host 'REPAIRS DIALOG NOT FOUND: Excel may still be modal' }
+
       if ($SaveRepairedTo) {
         try {
-          $xl = [Runtime.InteropServices.Marshal]::GetActiveObject('Excel.Application')
-          $wb = $null
-          for ($i = 1; $i -le $xl.Workbooks.Count; $i++) {
-            if ($xl.Workbooks.Item($i).Name -like "*$stem*") { $wb = $xl.Workbooks.Item($i); break }
+          # Through the ROT, which reaches the /x instance this run spawned rather than whichever Excel
+          # registered itself first, and works under pwsh 7 (see rot-lib.ps1).
+          $wb = Invoke-WhenExcelAccepts { Get-RunningWorkbook -NameLike "*$stem*" }
+          if ($null -eq $wb) {
+            Write-Host "SAVE-REPAIRED SKIPPED: no running workbook matches *$stem*; the ROT holds: $((Get-RunningObjectNames) -join ' | ')"
+          } else {
+            $SaveRepairedTo = [IO.Path]::GetFullPath($SaveRepairedTo)
+            Invoke-WhenExcelAccepts { $wb.SaveAs($SaveRepairedTo, 51) }
+            $verdict.repairedPath = $SaveRepairedTo
+            Write-Host "SAVED REPAIRED: $SaveRepairedTo"
           }
-          if ($wb) { $wb.SaveAs($SaveRepairedTo, 51); $verdict.repairedPath = $SaveRepairedTo; Write-Host "SAVED REPAIRED: $SaveRepairedTo" }
         } catch { Write-Host "SAVE-REPAIRED SKIPPED: $($_.Exception.Message)" }
       }
-      # Excel writes error*.xml (the repair log) next to the file when the
-      # repaired copy is materialized; report any that appeared.
-      $after = @(Get-ChildItem -Path $fileDir -Filter 'error*.xml' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
-      $verdict.repairLog = @($after | Where-Object { $before -notcontains $_ })
+      # Excel writes the repair log to %TEMP% as error<pid><n>_01.xml, named for the instance that
+      # repaired, when it repairs; a later repair by a process reusing the PID overwrites it.
+      if ($verdict.spawnedPid) {
+        $verdict.repairLog = @(Get-ChildItem -Path $env:TEMP -Filter "error$($verdict.spawnedPid)*.xml" -ErrorAction SilentlyContinue |
+          Select-Object -ExpandProperty FullName)
+      }
     }
   }
 }

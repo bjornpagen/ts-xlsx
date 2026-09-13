@@ -81,7 +81,7 @@ prompt with the safe negative, rewriting nothing).
        -Path .\test\corpus\fixtures\suspect.xlsx -Shot .tmp\verdict.png -CloseAfter
    ```
    `verdict` is one of: `clean`, `repaired` (Excel silently fixed it - title
-   carries `[Repaired]`), `repair-prompt` (the modal "We found a problem with
+   carries `Repaired`), `repair-prompt` (the modal "We found a problem with
    some content..." - the case COM hides), `format-mismatch`, `rejected`
    (Excel refuses the file), or `timeout`. Read the PNG to confirm the classifier
    matched reality.
@@ -91,9 +91,11 @@ prompt with the safe negative, rewriting nothing).
    & open-verdict.ps1 -Path .\broken.xlsx -AcceptRepair `
        -SaveRepairedTo .\test\corpus\fixtures\broken.recovered.xlsx -CloseAfter
    ```
-   `repairLog` in the JSON lists any `error*.xml` Excel wrote next to the file;
-   `repairedPath` is Excel's canonicalized recovery of your content - gold for a
-   regression fixture. Read both.
+   `repairLog` lists the log Excel wrote to `%TEMP%` (`error<pid><n>_01.xml`),
+   whose `<removedRecord>` entries name what the repair dropped, by part only;
+   `repairedPath` is Excel's recovery of your content, reached through the ROT
+   (`rot-lib.ps1`) and saved - gold for a regression fixture. Read both: only the
+   recovered package says which cells went and what Excel kept.
 3. **Seed a corpus case** from the recorded verdict (see the `write-corpus-case`
    skill): the fixture + the expected `verdict` become the durable, CI-runnable
    artifact; the GUI run does not repeat in CI.
@@ -213,6 +215,14 @@ tree directly and bypass it - that is the only reliable path (`uia-lib.ps1`).
   screenshot): ~700ms after foregrounding before input; ~700-900ms between
   sequential KeyTips (600ms sometimes too short for a submenu to arm);
   ~1200-1500ms settle after a menu-opening Invoke; ~600ms per verdict poll.
+- **An accepted repair leaves Excel modal** behind a `Repairs to '<file>'` dialog
+  (class `bosa_sdm_XL9`) whose list and buttons UIA does not expose; every COM call
+  is rejected (`RPC_E_CALL_REJECTED`) until it closes. `open-verdict.ps1` finds it
+  by title and posts `WM_CLOSE`. Never click `Close` across an instance's windows:
+  the workbook frame has one too, and its save prompt is a modal of its own.
+- **PowerPoint starts Excel instances for its charts** at any moment. Track the
+  process a script launched (`Start-Process -PassThru`), never "every EXCEL.EXE
+  that appeared since", or cleanup kills a chart someone is editing.
 - The sandbox's `Remove-Item` false-positive guard (trips when the command text
   also holds regex-like substrings such as `r:` or `\w+`, easy to hit near
   quoted XML rels) applies here; `save-and-extract.ps1` extracts to a fresh
@@ -240,5 +250,10 @@ tree directly and bypass it - that is the only reliable path (`uia-lib.ps1`).
 - `scripts/foreground-and-shoot.ps1` - sanity check / "just look at current state".
 - `scripts/drive-ribbon.ps1` - ribbon driver: KeyTips -> UIA menu invoke ->
   optional dump/toggle/button-invoke -> screenshot. See its comment-based help.
-- `scripts/save-and-extract.ps1` - save the driven workbook via its running COM
-  instance and extract the package, to read the real OOXML the GUI produced.
+- `scripts/save-and-extract.ps1` - save the driven workbook, reached through the
+  ROT, and extract the package, to read the real OOXML the GUI produced.
+- `scripts/rot-lib.ps1` - dot-source library: `Get-RunningWorkbook` (an open
+  workbook by path, in whichever Excel holds it), `Invoke-WhenExcelAccepts`
+  (retry a COM call Excel rejects as busy), `Get-RunningObjectNames`. Replaces
+  `Marshal.GetActiveObject`, which pwsh 7 does not have and which named the first
+  Excel registered rather than the one a script spawned.

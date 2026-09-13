@@ -8,8 +8,8 @@
   the parts this script extracts.
 
 .PARAMETER NameLike
-  Wildcard to find the right open Workbooks item by its .Name (useful when more
-  than one workbook is open).
+  Wildcard matched against each open workbook's full path and its file name, in
+  whichever running Excel holds it (useful when more than one is open).
 
 .PARAMETER DestDir
   Extraction target. If it already exists, a fresh "<DestDir>-<random>" is used
@@ -24,13 +24,12 @@ param(
   [Parameter(Mandatory)][string]$DestDir
 )
 $ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\rot-lib.ps1"
 
-$xl = [Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")
-$wb = $null
-for ($i = 1; $i -le $xl.Workbooks.Count; $i++) {
-  if ($xl.Workbooks.Item($i).Name -like $NameLike) { $wb = $xl.Workbooks.Item($i); break }
+$wb = Get-RunningWorkbook -NameLike $NameLike
+if ($null -eq $wb) {
+  throw "No open workbook matching '$NameLike'; the ROT holds: $((Get-RunningObjectNames) -join ' | ')"
 }
-if ($null -eq $wb) { throw "No open workbook matching Name -like '$NameLike'" }
 
 $xlsxPath = $wb.FullName
 $wb.Save()
