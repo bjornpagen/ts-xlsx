@@ -236,7 +236,7 @@ export function parseWorksheet(part: Uint8Array, context: WorksheetReadContext):
             member.dynamic,
           );
   }
-  // As the XML reader does, an array formula the sheet cannot hold reads as its plain formula.
+  // As the XML reader does, array formulas the sheet cannot hold read as Excel repairs them.
   admitArrayRanges(sheet);
 }
 

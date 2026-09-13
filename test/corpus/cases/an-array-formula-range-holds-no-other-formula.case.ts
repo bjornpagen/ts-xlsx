@@ -21,7 +21,7 @@ export default {
   cluster: 'formulas',
   description:
     'An array formula range holding another formula, or sharing a cell with another array formula range, ' +
-    'is refused at write and read as a plain formula from a file; an edit cutting through a ' +
+    'is refused at write and read from a file as Excel repairs it; an edit cutting through a ' +
     'Ctrl+Shift+Enter range is refused, and one moving or removing it whole goes ahead, as in Excel.',
 
   behavior: [
@@ -86,10 +86,12 @@ export default {
       },
     },
     {
-      name: 'a file whose range holds another formula reads that array formula as a plain one',
+      name: 'a file whose range holds another formula reads as Excel repairs it, keeping the array formula',
       expect(api: CorpusApi, assert: Assert) {
+        // Excel kept B1:B3 and removed B2's cell information.
         assert.deepStrictEqual(api.arrayRangeReport().foreign, {
-          B1: {kind: 'formula', ref: null, dynamic: false, formula: 'A1:A3*2', result: null},
+          B1: {kind: 'array', ref: 'B1:B3', dynamic: false, formula: 'A1:A3*2', result: null},
+          B2: null,
           rewrites: true,
         });
       },

@@ -48,6 +48,14 @@
       "insert row 1 copied at row 2": "allowed; B1 shows #SPILL!, B2 spills over B2:B5"
     }
   },
-  "repairs": "open-verdict.ps1 accepted each repair but could not save Excel's recovery: under pwsh 7 it has no Marshal.GetActiveObject, so what Excel recovers from these packages is unobserved",
-  "verdict": "An array formula's range, legacy or dynamic, may hold no other formula and share no cell with another array formula's range; a member cell holding a value is what the formula produced. Excel refuses any edit cutting through a legacy range: an insert strictly inside it, a delete taking part of it, a row copied onto or into it. It allows an edit that moves the whole range or removes it whole. It allows the same edits through a dynamic array, whose spill it then blocks. Locked by the corpus case an-array-formula-range-holds-no-other-formula."
+  "repairs": {
+    "probe": "open-verdict.ps1 -AcceptRepair -SaveRepairedTo on packages ts-xlsx wrote and then patched, each recovery saved and its sheet part read, beside the recovery log Excel wrote to %TEMP%. Excel recalculated each recovery, so a cell it emptied inside a range kept shows what the array formula computes there.",
+    "legacy B1:B3 with a plain formula in B2 caching 20": "log: Cell information removed. B1:B3 kept; B2 <v>4</v>, no formula",
+    "legacy B1:B3 with a bold plain formula in B2 caching 20": "log: Cell information removed. B1:B3 kept; B2 keeps its s and holds <v>4</v>, no formula",
+    "dynamic B1:B3 with a plain formula in B2 caching 20": "log: Cell information removed. B1:B3 kept with its cm; B2 <v>4</v>, no formula",
+    "legacy B1:B3 beside legacy B2:B4, B2 caching 6": "log: Cell information removed. B1:B3 kept; B2 <v>4</v>, no formula",
+    "legacy B1:B3 holding in B2 the master of a shared formula over B2:C2, caching 20 and 200": "log: Cell information and Shared formula removed. B1:B3 kept; B2 <v>4</v>, C2 <v>200</v>, neither a formula",
+    "legacy B1:C2 beside legacy A2:B3, A2 caching 3": "log: Formula removed. B1:C2 kept; A2 <v>3</v>, no formula"
+  },
+  "verdict": "An array formula's range, legacy or dynamic, may hold no other formula and share no cell with another array formula's range; a member cell holding a value is what the formula produced. Excel repairs a package breaking either rule by keeping the array formula first in reading order: a formula inside its range loses its formula and its value, keeping its style, a shared formula whose master that was loses its formula and keeps its value, and an array formula whose range only shares cells with it loses its formula and keeps its value. Excel refuses any edit cutting through a legacy range: an insert strictly inside it, a delete taking part of it, a row copied onto or into it. It allows an edit that moves the whole range or removes it whole. It allows the same edits through a dynamic array, whose spill it then blocks. Locked by the corpus case an-array-formula-range-holds-no-other-formula."
 }

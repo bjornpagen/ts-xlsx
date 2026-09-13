@@ -114,8 +114,8 @@ export const formulas = {
   // `authored` maps each shape to the writer's refusal message, or null when it writes it. `edits` maps
   // each edit of a sheet holding one array formula (B1:B3, or B1:C3 for the column edits) to {refused,
   // ref}: whether the edit threw, and the range the array formula holds after it, null when it is gone.
-  // `foreign` is a written package patched so B1:B3 holds a formula in B2, read → {B1, rewrites}: B1 as
-  // `arrayFormulaReport` reports a formula, and whether the reading writes back.
+  // `foreign` is a written package patched so B1:B3 holds a formula in B2, read → {B1, B2, rewrites}: each
+  // cell as `arrayFormulaReport` reports a formula, and whether the reading writes back.
   arrayRangeReport() {
     const array = (ref: string, dynamic = false): Untyped => ({
       shareType: 'array',
@@ -189,7 +189,11 @@ export const formulas = {
         deleteColumnPart: edit(array('B1:C3'), (sheet) => sheet.spliceColumns(3, 1)),
         dynamicInsertInside: edit(array('B1:B3', true), (sheet) => sheet.insertRow(2, [])),
       },
-      foreign: {B1: formulaFacts(read.worksheets[0]?.getCell('B1').value), rewrites},
+      foreign: {
+        B1: formulaFacts(read.worksheets[0]?.getCell('B1').value),
+        B2: formulaFacts(read.worksheets[0]?.getCell('B2').value),
+        rewrites,
+      },
     };
   },
 

@@ -28,10 +28,9 @@
 // catches exactly the three types a model method raises about its own input. Anything else goes
 // straight through: an `XlsxError` from a layer below, an `InternalError` of ours.
 
-import {encodeAddress} from '../../core/address.ts';
-import {arrayRangeConflicts, formulaPlacement} from '../../core/array-formula-ranges.ts';
+import {arrayRangeRepair, formulaPlacement} from '../../core/array-formula-ranges.ts';
 import {INVALID_SHEET_NAME_CHARS, MAX_SHEET_NAME_LENGTH} from '../../core/limits.ts';
-import {isArrayFormulaValue} from '../../core/value.ts';
+import {type CellValue, isFormulaValue, isSharedFormulaValue} from '../../core/value.ts';
 import type {Worksheet} from '../../core/worksheet.ts';
 import {AuthoringError} from '../../errors.ts';
 
@@ -97,13 +96,15 @@ function withSuffix(base: string, suffix: string): string {
 }
 
 /**
- * Read every array formula a sheet cannot hold as the plain formula its text is: one whose range holds
- * another formula, or shares a cell with the range of an array formula kept (`core/array-formula-ranges.ts`).
+ * Read a sheet whose array formulas cannot stand as Excel repairs it (`core/array-formula-ranges.ts`). A
+ * file is free to carry an array formula whose range holds another formula, or shares a cell with another
+ * array formula's range, and the writer refuses both, since Excel offers to repair such a package.
  *
- * A file is free to carry either, and the writer refuses both, since Excel offers to repair a package
- * carrying them. What Excel recovers from one is not known, so nothing is invented: the formula keeps its
- * text and its cached result, and loses only the range it could not stand over. Every other cell of that
- * range already holds what it held.
+ * Excel 16.0 keeps the array formula decided first. A formula inside its range loses its formula and its
+ * value, keeping its style, and a shared formula whose master that was loses its formula too, keeping its
+ * value; an array formula whose range only shares cells with it loses its formula, keeping its value. The
+ * value Excel then shows in a cell it emptied is what the kept array formula computes there, which the
+ * library does not compute, so the cell is left empty.
  */
 export function admitArrayRanges(sheet: Worksheet): void {
   const placements = [];
@@ -113,15 +114,37 @@ export function admitArrayRanges(sheet: Worksheet): void {
       if (placement !== undefined) placements.push(placement);
     }
   }
-  for (const {array} of arrayRangeConflicts(placements)) {
-    const cell = sheet.getCell(encodeAddress(array.col, array.row));
-    const value = cell.value;
-    if (!isArrayFormulaValue(value)) continue;
-    cell.value =
-      value.result === undefined
-        ? {formula: value.formula}
-        : {formula: value.formula, result: value.result};
+  const {cellsRemoved, formulasRemoved} = arrayRangeRepair(placements);
+  if (cellsRemoved.length === 0 && formulasRemoved.length === 0) return;
+  const mastersRemoved = new Set<string>();
+  for (const {address} of cellsRemoved) {
+    const cell = sheet.getCell(address);
+    if (isFormulaValue(cell.value)) mastersRemoved.add(address);
+    cell.value = null;
   }
+  for (const {address} of formulasRemoved) {
+    const cell = sheet.getCell(address);
+    cell.value = cachedResult(cell.value);
+  }
+  if (mastersRemoved.size === 0) return;
+  for (const {cells} of sheet.rows()) {
+    for (const cell of cells) {
+      const value = cell.value;
+      if (isSharedFormulaValue(value) && mastersRemoved.has(value.sharedFormula)) {
+        cell.value = cachedResult(value);
+      }
+    }
+  }
+}
+
+// The value a formula cell cached, standing in for the formula a repair took; empty when it cached none.
+function cachedResult(value: CellValue): CellValue {
+  return typeof value === 'object' &&
+    value !== null &&
+    'result' in value &&
+    value.result !== undefined
+    ? value.result
+    : null;
 }
 
 /**
