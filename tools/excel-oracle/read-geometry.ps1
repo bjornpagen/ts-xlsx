@@ -15,8 +15,8 @@
 #
 # Every guardrail of observe.ps1 applies verbatim and for the same reason, since a stray modal here
 # deadlocks the agent forever: DisplayAlerts=$false + AutomationSecurity=ForceDisable +
-# AskToUpdateLinks=$false, the COM work inside a background job under a wall-clock watchdog, an
-# orphan sweep scoped to EXCEL.EXE PIDs THIS run spawned, and a finally that always Quit()s.
+# AskToUpdateLinks=$false, the COM work inside a background job under a wall-clock watchdog
+# (../excel-com-job.ps1) that kills only the EXCEL.EXE THIS run started, and a finally that always Quit()s.
 #
 # Automation-open is not interactive-open. Those same suppressed modals mean this probe can detect
 # that a repair happened (Open threw / the name carries "[Repaired]") but never reports the
@@ -58,8 +58,7 @@ if ($resave) {
   $SaveAsPath = [IO.Path]::GetFullPath((Join-Path (Get-Location).Path $SaveAsPath))
 }
 
-# Snapshot pre-existing EXCEL.EXE PIDs so the watchdog only ever kills a process THIS run spawned.
-$preExisting = @(Get-Process -Name EXCEL -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
+. "$PSScriptRoot/../excel-com-job.ps1"
 
 $work = {
   param($Path, $Rows, $Cols, $SaveAsPath, $Resave)
@@ -88,6 +87,7 @@ $work = {
   $wb = $null
   try {
     $excel = New-Object -ComObject Excel.Application
+    Register-ExcelProcess $excel  # first, before any call that can hang: the watchdog kills only this
     $excel.Visible = $false
     $excel.DisplayAlerts = $false
     $excel.AutomationSecurity = $msoAutomationSecurityForceDisable
@@ -146,24 +146,4 @@ $work = {
   $result | ConvertTo-Json -Depth 6 -Compress
 }
 
-$job = Start-Job -ScriptBlock $work -ArgumentList $Path, $Rows, $Cols, $SaveAsPath, $resave
-$done = Wait-Job -Job $job -Timeout $TimeoutSec
-
-try {
-  if ($null -eq $done) {
-    # Hung inside COM (a modal that slipped past the guards). Force-kill and fail loudly, never silently.
-    Stop-Job -Job $job -ErrorAction SilentlyContinue
-    $orphans = @(Get-Process -Name EXCEL -ErrorAction SilentlyContinue |
-      Where-Object { $preExisting -notcontains $_.Id })
-    $orphans | Stop-Process -Force -ErrorAction SilentlyContinue
-    Write-Error "read-geometry.ps1: Excel COM timed out after ${TimeoutSec}s; killed $($orphans.Count) orphaned EXCEL.EXE"
-    exit 2
-  }
-  Receive-Job -Job $job
-} finally {
-  Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-  # Belt-and-braces orphan sweep: anything spawned this run that outlived the job.
-  @(Get-Process -Name EXCEL -ErrorAction SilentlyContinue |
-    Where-Object { $preExisting -notcontains $_.Id }) |
-    Stop-Process -Force -ErrorAction SilentlyContinue
-}
+Invoke-ExcelComJob -Work $work -ArgumentList $Path, $Rows, $Cols, $SaveAsPath, $resave -TimeoutSec $TimeoutSec

@@ -83,9 +83,11 @@ harness lowers the _cost_ of a Tier-3 seed; it does not move Tier 3 into the CI 
    it. Record `version` and `build` in every sidecar; a different build may behave differently.
 3. **A stray modal deadlocks the agent forever.** Mandatory guardrails, all owned by
    `observe.ps1`: `DisplayAlerts=$false`, `AutomationSecurity=msoAutomationSecurityForceDisable`,
-   `AskToUpdateLinks=$false`, a wall-clock watchdog (`Wait-Job -Timeout`) that force-kills a
-   hung `EXCEL.EXE`, and guaranteed teardown (`Quit`, `ReleaseComObject`, `GC`, and an orphan
-   sweep scoped to PIDs this run spawned).
+   `AskToUpdateLinks=$false`, a wall-clock watchdog (the shared `tools/excel-com-job.ps1`) that
+   force-kills a hung `EXCEL.EXE`, and guaranteed teardown (`Quit`, `ReleaseComObject`, `GC`, and a
+   kill of an Excel that outlived the job). Both kills reach only the process the run's own
+   `Excel.Application` names through its `Hwnd`, never every Excel that appeared since the run
+   began: PowerPoint starts Excel instances for its charts, and parallel runs start each other's.
 4. **Provenance is the deliverable.** The point of a run is a durable, auditable sidecar
    (`test/corpus/fixtures/excel-oracle/<invariant>.json`), not console output. It carries
    `{excel:{version,build}, capturedAt, probeSpecRef, cells, resave, verdict}`.

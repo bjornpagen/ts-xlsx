@@ -9,8 +9,8 @@
 # Contract mirrors tools/excel-oracle/observe.ps1: it owns EVERY guardrail, because a stray modal here
 # deadlocks the caller forever:
 #   - Visible=$false + DisplayAlerts=$false + AutomationSecurity=Low (macros MUST load so they compile);
-#   - the COM work runs inside a background job wrapped by a wall-clock watchdog (Wait-Job -Timeout);
-#   - on timeout the job is stopped and any EXCEL.EXE THIS run spawned is force-killed;
+#   - the COM work runs inside a background job wrapped by a wall-clock watchdog (../excel-com-job.ps1);
+#   - on timeout the job is stopped and the EXCEL.EXE THIS run started, and no other, is force-killed;
 #   - the job's own finally always Quit()s, ReleaseComObject()s, and GCs, whether or not it threw.
 #
 # PROBE/build tool, NEVER in CI: needs a licensed Excel and Trust access to the VBA project object model
@@ -30,8 +30,7 @@ $base = if ($specObj.PSObject.Properties.Name -contains 'base' -and $specObj.bas
   (Resolve-Path -LiteralPath $specObj.base).Path
 } else { '' }
 
-# Snapshot pre-existing EXCEL.EXE PIDs so the watchdog only ever kills a process THIS run spawned.
-$preExisting = @(Get-Process -Name EXCEL -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
+. "$PSScriptRoot/../excel-com-job.ps1"
 
 $work = {
   param($Modules, $Base, $Out)
@@ -53,6 +52,7 @@ $work = {
   $wb = $null
   try {
     $excel = New-Object -ComObject Excel.Application
+    Register-ExcelProcess $excel  # first, before any call that can hang: the watchdog kills only this
     $excel.Visible = $false
     $excel.DisplayAlerts = $false
     $excel.AutomationSecurity = $msoAutomationSecurityLow
@@ -128,19 +128,4 @@ $work = {
   $result | ConvertTo-Json -Depth 6 -Compress
 }
 
-$job = Start-Job -ScriptBlock $work -ArgumentList $specObj.modules, $base, $Out
-$done = Wait-Job -Job $job -Timeout $TimeoutSec
-try {
-  if ($null -eq $done) {
-    Stop-Job -Job $job -ErrorAction SilentlyContinue
-    $orphans = @(Get-Process -Name EXCEL -ErrorAction SilentlyContinue | Where-Object { $preExisting -notcontains $_.Id })
-    $orphans | Stop-Process -Force -ErrorAction SilentlyContinue
-    Write-Error "compile.ps1: Excel COM timed out after ${TimeoutSec}s; killed $($orphans.Count) orphaned EXCEL.EXE"
-    exit 2
-  }
-  Receive-Job -Job $job
-} finally {
-  Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-  @(Get-Process -Name EXCEL -ErrorAction SilentlyContinue | Where-Object { $preExisting -notcontains $_.Id }) |
-    Stop-Process -Force -ErrorAction SilentlyContinue
-}
+Invoke-ExcelComJob -Work $work -ArgumentList $specObj.modules, $base, $Out -TimeoutSec $TimeoutSec
